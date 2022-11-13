@@ -1,5 +1,6 @@
 import dataclasses
 import numpy as np
+from lincom import LinearCombination
 
 # helper functions
 def gcf(mylist):
@@ -28,7 +29,7 @@ def lcm(a, b):
 
 
 @dataclasses.dataclass
-class Polynome:
+class Polynome(LinearCombination):
     """
     express a polynomial
     a*x^{n} + b*x^{n-1} + c*x^{n-2} + ...
@@ -84,36 +85,6 @@ class Polynome:
                 string = string + f"{operator}{value}"
         return string
 
-    def zero():
-        return Polynome({0: 0})
-
-    def __add__(self, other):
-        """
-        Polynomial + Polynomial --> Polynomial
-        """
-        coeffs_sum = {}
-        for i in self.coeffs.keys():
-            if i in other.coeffs.keys():
-                coeffs_sum[i] = self.coeffs[i] + other.coeffs[i]
-            else:
-                coeffs_sum[i] = self.coeffs[i]
-        for i in other.coeffs.keys():
-            if i not in self.coeffs.keys():
-                coeffs_sum[i] = other.coeffs[i]
-        return self.__class__(coeffs_sum)
-
-    def __neg__(self):
-        """
-        -Polynomial --> Polynomial
-        """
-        return self.__class__(dict([(i, -j) for i, j in self.coeffs.items()]))
-
-    def __sub__(self, other):
-        """
-        Polynomial - Polynomial --> Polynomial
-        """
-        return self + -other
-
     def one():
         return Polynome({0: 1})
 
@@ -148,16 +119,14 @@ class Polynome:
         quotient_coeffs = {}
         if isinstance(other, int):
             if other == 0:
-                raise BaseException(f"Cannot divide a " + \
-                f"{self.__class__.__name__} by 0.")
-            return self.__class__(dict([(i, j // other) for i, j in \
-            self.coeffs.items()]))
-        raise TypeError(f"Cannot divide a {self.__class__.__name__} by a " + \
-        f"{type(other)}")
+                raise BaseException(f"Cannot divide a {self.__class__.__name__} by 0.")
+            return self.__class__(dict([(i, j // other) for i, j in self.coeffs.items()]))
+        else:
+            raise TypeError(f"Cannot divide a {self.__class__.__name__} by a {type(other)}")
 
     def prime(self):
         """
-        d/dx{Polynomial} --> Polynomial
+        returns the first derivative of a polynomial
         """
         derivative_coeffs = {}
         for deg, coeff in self.coeffs.items():
@@ -167,7 +136,7 @@ class Polynome:
 
     def eval(self, x):
         """
-        Polynomial(int/float) = int/float
+        returns p(x) as an int/float
         """
         return sum([coeff * x**deg for deg, coeff in self.coeffs.items()])
 
@@ -282,3 +251,10 @@ class Lagrange:
         else:
             factor = gcf(quotient)
         return (quotient[0] // factor, quotient[1] // factor)
+
+
+a = LinearCombination({0: 5, -5: 10, 5: 100})
+b = LinearCombination({0: 5, -5: 10, 5: 100})
+print(a)
+print(b)
+print(a + b)
