@@ -1,10 +1,9 @@
 import pytest  # run > pytest -s -q -rA
 import numpy as np
 import math
-import sys
-from src.fvscheme import Kernel
+from util.fvscheme import Kernel
 
-n_tests = 5
+n_tests = 100
 max_left_cells = 20
 max_right_cells = 20
 
@@ -17,8 +16,8 @@ def kern():
     """
     l = np.random.randint(max_left_cells + 1)
     r = np.random.randint(max_right_cells + 1)
-    u_index_at_center = np.random.randint(-l - 1, r + 1)
-    return Kernel(l, r, u_index_at_center)
+    adj_index_at_center = np.random.randint(-l - 1, r + 1)
+    return Kernel(l, r, adj_index_at_center)
 
 
 # tests
@@ -38,12 +37,3 @@ def test_kernel_setup_random(unused_parameter, kern):
     """
     assert kern.size == len(kern.x_cell_centers)
     assert kern.size == len(kern.x_cell_faces) - 1
-
-
-@pytest.mark.parametrize("unused_parameter", range(n_tests))  # test n_tests times
-def test_unity_sum(unused_parameter, kern):
-    """
-    test that the weights for u add up to 1 (approximately)
-    """
-    scheme_right = kern.solve_u_at_interface("r")
-    assert sum([j for i, j in scheme_right.items()]) == pytest.approx(1)

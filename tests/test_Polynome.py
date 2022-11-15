@@ -1,10 +1,10 @@
 import pytest
 from random import sample, randint, random
 import numpy as np
-from src.polynome import Polynome
+from util.polynome import Polynome
 
 
-n_tests = 100
+n_tests = 50
 max_degree = 10
 max_coeff = 10
 

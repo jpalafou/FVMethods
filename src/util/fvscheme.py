@@ -1,5 +1,7 @@
 import dataclasses
-from src.polynome import Lagrange
+import numpy as np
+from util.lincom import lcm, Fraction, LinearCombinationOfFractions
+from util.polynome import Lagrange
 
 
 class Kernel:
@@ -33,8 +35,7 @@ class Kernel:
         self.x_cell_faces = x_cell_faces
 
         # true indices
-        self.indices = [i - self.index_at_center + adj_index_at_center for i \
-        in range(self.size)]
+        self.indices = [i - self.index_at_center + adj_index_at_center for i in range(self.size)]
 
     def __str__(self):
         string = "|"
@@ -44,22 +45,27 @@ class Kernel:
 
 
 @dataclasses.dataclass
-class Interpolation:
+class Interpolation(LinearCombinationOfFractions):
     """
     find the interpolation scheme of a kernel at the right or left face
     enable addition and subtraction of interface interpolation schemes
     """
 
-    def __init__(self, kernel, face="right"):
+    coeffs: dict # {int: Fraction((int, int))}
+
+    @classmethod
+    def construct(cls, kernel: Kernel, face = "right"):
         """
         kernel: object
         face:   which face of the central cell is the scheme evaluating
         """
         x = kernel.x_cell_faces
-        if face == "right" or face == "r":
+        if face == 'right' or face == "r":
             x_eval = x[kernel.index_at_center + 1]
         elif face == "left" or face == "l":
             x_eval = x[kernel.index_at_center]
+        elif face == "center" or face == 'c':
+            x_eval = kernel.x_cell_centers[kernel.index_at_center]
         else:
             fprintf("ERROR! No interface x-value provided.")
             return
@@ -69,28 +75,24 @@ class Interpolation:
 
         # skip first cell wall (coming from the left) because the cumulative
         # quantity is 0 there
-        for i in range(1, len(kern.x_cell_faces)):
-            for j in kern.indices[:i]:
-                if polynomial_weights[j]:
-                    polynomial_weights[j] = polynomial_weights[j] + \
-                    Lagrange.Lagrange_i(kern.x_cell_faces, i)
+        for i in range(1, len(kernel.x_cell_faces)):
+            for j in kernel.indices[:i]:
+                if j in polynomial_weights.keys():
+                    polynomial_weights[j] = polynomial_weights[j] + Lagrange.Lagrange_i(kernel.x_cell_faces, i)
                 else:
-                    polynomial_weights[j] = \
-                    Lagrange.Lagrange_i(kern.x_cell_faces, i)
+                    polynomial_weights[j] = Lagrange.Lagrange_i(kernel.x_cell_faces, i)
 
         # take the derivative of the polynomials
-        polynomial_weights_prime = dict([(i, polynome.prime()) for i, polynome \
-        in polynomial_weights.items()])
+        polynomial_weights_prime = dict([(i, polynome.prime()) for i, polynome in polynomial_weights.items()])
 
         # evaluate them at the cell face, multiply by h
-        weights = dict([(i, polynome.tuple_eval(x_eval)) for i, polynome in \
-        polynomial_weights_prime])
+        coeffs = (kernel.h*LinearCombinationOfFractions(dict([(i, polynome.eval(x_eval, div = 'fraction')) for i, polynome in polynomial_weights_prime.items()]))).coeffs
 
-        # the Polynome class should actually be a subclass of expressions that
-        # are linear combinations of terms. the Lagrange class should be a
-        # subclass of expressions that are linear combinations of terms divided
-        # by a common integer. finally, Interpolation should be a subclass of
-        # FractionLinearCombination
+        return cls(coeffs)
 
-        # IntegerLinearCombination
-        # FractionalLinearCombination
+    def nparray(self):
+        denoms = [frac.fraction[1] for frac in self.coeffs.values()]
+        denom_lcm = 1
+        for i in denoms:
+            denom_lcm = lcm(denom_lcm, i)
+        return np.array([frac.fraction[0] * (denom_lcm // frac.fraction[1]) for frac in self.coeffs.values()])

@@ -1,13 +1,13 @@
 import pytest
 from random import sample, randint, random
 import numpy as np
-from src.fvscheme2 import Kernel
-from src.polynome import Lagrange
+from util.fvscheme import Kernel
+from util.polynome import Lagrange
 
 
-n_tests = 10
-l_max = 3
-r_max = 3
+n_tests = 50
+l_max = 4
+r_max = 4
 
 
 # helper functions
@@ -76,7 +76,7 @@ def test_sum(unused_parameter):
 
 
 @pytest.mark.parametrize("unused_parameter", range(n_tests))
-def test_sum(unused_parameter):
+def test_zero_sum(unused_parameter):
     """
     adding zero to an instance should return the same instance
     """

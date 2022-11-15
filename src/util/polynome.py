@@ -1,31 +1,6 @@
 import dataclasses
 import numpy as np
-from lincom import LinearCombination
-
-# helper functions
-def gcf(mylist):
-    """
-    returns gcf of an absolute value list as an int
-    """
-    if all(isinstance(i, int) for i in mylist):
-        if 0 in mylist:
-            raise BaseException("0 has no greatest factor.")
-        else:
-            cf = 1
-            for i in range(2, min(abs(j) for j in mylist) + 1):
-                if all(abs(k) % i == 0 for k in mylist):
-                    cf = i
-            return cf
-    raise TypeError(f"Input is not a list of integers.")
-
-
-def lcm(a, b):
-    """
-    returns signed lcm of two integers a and b as an int
-    """
-    if all(isinstance(i, int) for i in [a, b]):
-        return a * b // gcf([a, b])
-    raise TypeError(f"Input is not a pair of integers.")
+from util.lincom import gcf, lcm, LinearCombination, Fraction
 
 
 @dataclasses.dataclass
@@ -41,21 +16,22 @@ class Polynome(LinearCombination):
 
     def __post_init__(self):
         """
-        Polynomial dictionaries should be reverse sorted and should not contain
-        coefficients of 0 unless they are the zero polynomial {0: 0}
+        linear combinations should be sorted and should not contain
+        coefficients of 0 unless they are the zero instance {0: 0}
         """
-        # if coeffs is empty or if all its values are zero and 0 is not the only
-        # index
-        if self.coeffs == {} or (all(j == 0 for j in self.coeffs.values()) and \
-        list(self.coeffs.keys()) != [0]):
+        if self.coeffs == {0: 0}:
+            # self is the zero instance, do nothing
+            pass
+        elif self.coeffs == {} or (all(j == 0 for j in self.coeffs.values()) and list(self.coeffs.keys()) != [0]):
+            # if coeffs is empty or if all its values are zero and 0 is not the only index
             object.__setattr__(self, "coeffs", {0: 0})
         else: # coeffs is nonempty and contains at least one nonzero item
             # sort by degree
-            sorted_coeffs = dict(sorted(self.coeffs.items(), reverse=True))
+            sorted_coeffs = dict(sorted(self.coeffs.items(), reverse = True))
             # remove 0 coefficients if they unless 0x^0 is the only term
             new_coeffs = {}
             for deg, coeff in sorted_coeffs.items():
-                if coeff != 0 or (deg == 0 and len(new_coeffs) == 0):
+                if coeff != 0:
                     new_coeffs[deg] = sorted_coeffs[deg]
             object.__setattr__(self, "coeffs", new_coeffs)
 
@@ -142,44 +118,37 @@ class Polynome(LinearCombination):
 
 
 @dataclasses.dataclass
-class Lagrange:
+class Lagrange(Polynome):
     """
     Lagrange() := Polynome()/int
     allow addition/subtraction between Lagrange polynomials
     """
-    numerator: Polynome
-    denominator: int
 
-    @classmethod
-    def Lagrange_i(cls, x_values, i):
-        """
-        find the ith Lagrange polynomial from a set of x points
-        depends on Polynome class
-        """
-        numerator = Polynome.one()
-        denominator = 1
-        for j in range(len(x_values)):
-            if j != i:
-                numerator *= Polynome({1: 1, 0: -x_values[j]})
-                denominator *= x_values[i] - x_values[j]
-        return cls(numerator, denominator)
+    # def __init__(self, coeffs: dict, denominator: int):
+    #     self.numerator = Polynome(coeffs)
+    #     self.coeffs = self.numerator.coeffs
+    #     self.denominator = denominator
+
+    coeffs: dict
+    denominator: int
 
     def __post_init__(self):
         """
         denominator should not be negative or zero. gcf of numerator and
         denominator should be factored out of both when applicable
         """
-        # check if types are correct
-        if not isinstance(self.numerator, Polynome) or \
-        not isinstance(self.denominator, int):
-            raise BaseException("Invalid numerator or denominator type. " + \
-            "Did you mean to use Lagrange.Lagrange_i()?")
+
+        # make sure there is a new_numerator
+        self.numerator = Polynome(self.coeffs)
+
+        # check if denominator type is correct
+        if not isinstance(self.denominator, int):
+            raise BaseException("Invalid denominator type.")
         # denominator cannot be zero
         if self.denominator == 0:
             raise BaseException('Lagrange instance with 0 denominator.')
         # reformat lagrange
-        if self.denominator != 1 and self.numerator != \
-        self.numerator.__class__.zero():
+        if self.denominator != 1 and self.numerator != self.numerator.__class__.zero():
             # redistribute negative sign if denominator is negative
             if self.denominator < 0:
                 new_numerator = -self.numerator
@@ -188,73 +157,63 @@ class Lagrange:
                 new_numerator = self.numerator
                 new_denominator = self.denominator
             # factor gcf out of numerator and denominator if it is > 1
-            gcf_fraction = gcf(list(new_numerator.coeffs.values()) + \
-            [new_denominator])
+            gcf_fraction = gcf(list(new_numerator.coeffs.values()) + [new_denominator])
             if gcf_fraction > 1:
                 new_numerator = new_numerator // gcf_fraction
                 new_denominator = new_denominator // gcf_fraction
             assert new_denominator > 0
+            new_coeffs = new_numerator.coeffs
             object.__setattr__(self, "numerator", new_numerator)
+            object.__setattr__(self, "coeffs", new_coeffs)
             object.__setattr__(self, "denominator", new_denominator)
 
     def __str__(self):
         return f"({self.numerator})/{self.denominator}"
 
+    @classmethod
+    def Lagrange_i(cls, x_values, i):
+        """
+        find the ith Lagrange polynomial from a set of x points
+        """
+        numerator = Polynome.one()
+        denominator = 1
+        for j in range(len(x_values)):
+            if j != i:
+                numerator *= Polynome({1: 1, 0: -x_values[j]})
+                denominator *= x_values[i] - x_values[j]
+        return cls(numerator.coeffs, denominator)
+
     def zero(self):
-        return self.__class__(self.numerator.__class__.zero(), self.denominator)
+        return self.__class__(self.numerator.__class__.zero().coeffs, self.denominator)
 
     def __add__(self, other):
-        """
-        Lagrange + Lagrange --> Lagrange
-        """
         denominator = lcm(self.denominator, other.denominator)
-        numerator = self.numerator * (denominator // self.denominator) \
-        + other.numerator * (denominator // other.denominator)
-        return self.__class__(numerator, denominator)
+        numerator = (self.numerator * (denominator // self.denominator)) + (other.numerator * (denominator // other.denominator))
+        return self.__class__(numerator.coeffs, denominator)
 
     def __neg__(self):
-        """
-        -Lagrange --> Lagrange
-        """
-        return self.__class__(-self.numerator, self.denominator)
+        return self.__class__((-self.numerator).coeffs, self.denominator)
 
     def __sub__(self, other):
-        """
-        Lagrange - Lagrange --> Lagrange
-        """
         return self + -other
 
     def prime(self):
-        """
-        d/dx{Lagrange} --> Lagrange
-        """
-        return self.__class__(self.numerator.prime(), self.denominator)
+        return self.__class__(self.numerator.prime().coeffs, self.denominator)
 
     def eval(self, x, div = 'true'):
         """
-        Lagrange(int/float) --> int/float
+        div = 'true'
+        returns int/float of the polynomial fraction evaluated at x
+        div = 'floor'
+        returns int
+        div = 'fraction'
+        returns Fraction
         """
         if div == 'true':
             return self.numerator.eval(x) / self.denominator
         elif div == 'floor':
             return self.numerator.eval(x) // self.denominator
+        elif div == 'fraction':
+            return Fraction((self.numerator.eval(x), self.denominator))
         else:
             raise BaseException('Invalid division type.')
-
-    def tuple_eval(self, x):
-        """
-        Lagrange(int) --> tuple (numerator int, denominator int)
-        """
-        quotient = (self.numerator.eval(x), self.denominator)
-        if quotient[0] == 0:
-            factor = 1
-        else:
-            factor = gcf(quotient)
-        return (quotient[0] // factor, quotient[1] // factor)
-
-
-a = LinearCombination({0: 5, -5: 10, 5: 100})
-b = LinearCombination({0: 5, -5: 10, 5: 100})
-print(a)
-print(b)
-print(a + b)
