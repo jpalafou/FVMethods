@@ -54,21 +54,20 @@ class Interpolation(LinearCombinationOfFractions):
     coeffs: dict # {int: Fraction((int, int))}
 
     @classmethod
-    def construct(cls, kernel: Kernel, face = "right"):
+    def construct(cls, kernel: Kernel, reconstruct_here = "right"):
         """
         kernel: object
         face:   which face of the central cell is the scheme evaluating
         """
         x = kernel.x_cell_faces
-        if face == 'right' or face == "r":
+        if reconstruct_here == 'right' or reconstruct_here == "r":
             x_eval = x[kernel.index_at_center + 1]
-        elif face == "left" or face == "l":
+        elif reconstruct_here == "left" or reconstruct_here == "l":
             x_eval = x[kernel.index_at_center]
-        elif face == "center" or face == 'c':
+        elif reconstruct_here == "center" or reconstruct_here == 'c':
             x_eval = kernel.x_cell_centers[kernel.index_at_center]
         else:
-            fprintf("ERROR! No interface x-value provided.")
-            return
+            BaseException("Must provide an x value for polynomial reconstruction.")
 
         # find the polynomial expression being multiplied to each cell value
         polynomial_weights = {}

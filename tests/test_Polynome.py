@@ -4,7 +4,7 @@ import numpy as np
 from util.polynome import Polynome
 
 
-n_tests = 50
+n_tests = 5
 max_degree = 10
 max_coeff = 10
 

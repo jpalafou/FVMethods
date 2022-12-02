@@ -121,7 +121,7 @@ class Kernel:
         elif face == "left" or face == "l":
             x_eval = x[c]
         else:
-            fprintf("ERROR! No interface x-value provided.")
+            print("ERROR! No interface x-value provided.")
             return
 
         u_weights_polynomes = np.zeros([n - 1, n])  # each row contains a polynome

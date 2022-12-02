@@ -5,7 +5,7 @@ from util.fvscheme import Kernel
 from util.polynome import Lagrange
 
 
-n_tests = 50
+n_tests = 5
 l_max = 4
 r_max = 4
 

@@ -2,7 +2,7 @@ import pytest  # run > pytest -s -q -rAd
 import numpy as np
 from util.lincom import Fraction
 
-n_tests = 10
+n_tests = 5
 max_int = 20
 
 # helper functions

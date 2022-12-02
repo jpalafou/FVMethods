@@ -3,7 +3,7 @@ import numpy as np
 import math
 from util.fvscheme import Kernel
 
-n_tests = 100
+n_tests = 5
 max_left_cells = 20
 max_right_cells = 20
 
