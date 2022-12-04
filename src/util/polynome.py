@@ -1,6 +1,7 @@
 import dataclasses
 import numpy as np
-from util.lincom import gcf, lcm, LinearCombination, Fraction
+from util.mathbasic import gcf, lcm, Fraction
+from util.lincom import LinearCombination
 
 
 @dataclasses.dataclass
@@ -214,6 +215,6 @@ class Lagrange(Polynome):
         elif div == 'floor':
             return self.numerator.eval(x) // self.denominator
         elif div == 'fraction':
-            return Fraction((self.numerator.eval(x), self.denominator))
+            return Fraction(self.numerator.eval(x), self.denominator)
         else:
             raise BaseException('Invalid division type.')

@@ -1,6 +1,7 @@
 import dataclasses
 import numpy as np
-from util.lincom import lcm, Fraction, LinearCombinationOfFractions
+from util.mathbasic import lcm, Fraction
+from util.lincom import LinearCombinationOfFractions
 from util.polynome import Lagrange
 
 
@@ -51,7 +52,7 @@ class Interpolation(LinearCombinationOfFractions):
     enable addition and subtraction of interface interpolation schemes
     """
 
-    coeffs: dict # {int: Fraction((int, int))}
+    coeffs: dict # {int: Fraction}
 
     @classmethod
     def construct(cls, kernel: Kernel, reconstruct_here = "right"):
@@ -90,8 +91,14 @@ class Interpolation(LinearCombinationOfFractions):
         return cls(coeffs)
 
     def nparray(self):
-        denoms = [frac.fraction[1] for frac in self.coeffs.values()]
+        denoms = [frac.denominator for frac in self.coeffs.values()]
         denom_lcm = 1
         for i in denoms:
             denom_lcm = lcm(denom_lcm, i)
-        return np.array([frac.fraction[0] * (denom_lcm // frac.fraction[1]) for frac in self.coeffs.values()])
+        mylist = []
+        for i in range(min(self.coeffs.keys()), max(self.coeffs.keys()) + 1):
+            if i in self.coeffs.keys():
+                mylist.append(self.coeffs[i].numerator * denom_lcm // self.coeffs[i].denominator)
+            else:
+                mylist.append(0)
+        return np.array(mylist)

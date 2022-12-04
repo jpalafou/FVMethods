@@ -1,3 +1,0 @@
-Interpolation.nparray()
-	array will not have 0 element placeholders for indices with coeff 
-of 0

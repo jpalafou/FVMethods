@@ -1,30 +1,5 @@
 import dataclasses
-
-
-# helper functions
-def gcf(mylist):
-    """
-    returns gcf of an absolute value list as an int
-    """
-    if all(isinstance(i, int) for i in mylist):
-        if 0 in mylist:
-            raise BaseException("0 has no greatest factor.")
-        else:
-            cf = 1
-            for i in range(2, min(abs(j) for j in mylist) + 1):
-                if all(abs(k) % i == 0 for k in mylist):
-                    cf = i
-            return cf
-    raise TypeError(f"Input is not a list of integers.")
-
-
-def lcm(a, b):
-    """
-    returns signed lcm of two integers a and b as an int
-    """
-    if all(isinstance(i, int) for i in [a, b]):
-        return a * b // gcf([a, b])
-    raise TypeError(f"Input is not a pair of integers.")
+from util.mathbasic import gcf, lcm, Fraction
 
 
 @dataclasses.dataclass
@@ -95,71 +70,6 @@ class LinearCombination:
 
 
 @dataclasses.dataclass
-class Fraction:
-    fraction: tuple
-
-    def __post_init__(self):
-        fraction = self.fraction
-        if not isinstance(fraction[0], int) or not isinstance(fraction[1], int):
-            raise TypeError(f"Input is not an int tuple.")
-        if fraction[1] == 0:
-            raise BaseException(f"Invalid case: zero denominator.")
-        if fraction == (0, 1): # zero instance, do nothing
-            pass
-        elif fraction[0] == 0 and fraction[1] != 1:
-            # if the numerator is zero, assign the zero instance
-            object.__setattr__(self, "fraction", (0, 1))
-        else: # reduce fraction if possible
-            factor = gcf([fraction[0], fraction[1]])
-            if factor > 1:
-                fraction = (fraction[0] // factor, fraction[1] // factor)
-            # move negative sign from denominator
-            if fraction[1] < 0:
-                fraction = (-fraction[0], abs(fraction[1]))
-            object.__setattr__(self, "fraction", fraction)
-
-    def __str__(self):
-        if self.fraction[0] == 1 and self.fraction[1] == 1:
-            return "1"
-        elif self.fraction[0] == -1 and self.fraction[1] == 1:
-            return "-1"
-        else:
-            return str(f"{self.fraction[0]}/{self.fraction[1]}")
-
-    @classmethod
-    def zero(cls):
-        return cls((0, 1))
-
-    def __add__(self, other):
-        denominator = lcm(self.fraction[1], other.fraction[1])
-        numerator = (self.fraction[0] * (denominator // self.fraction[1])) + (other.fraction[0] * (denominator // other.fraction[1]))
-        return self.__class__((numerator, denominator))
-
-    def __neg__(self):
-        return self.__class__((-self.fraction[0], self.fraction[1]))
-
-    def __sub__(self, other):
-        return self + -other
-
-    def __mul__(self, other):
-        if isinstance(other, Fraction):
-            return self.__class__((self.fraction[0] * other.fraction[0], self.fraction[1] * other.fraction[1]))
-        elif isinstance(other, int):
-            return self.__class__((other * self.fraction[0], self.fraction[1]))
-        else:
-            TypeError(f"Illegal multiplication between types {self.__class__.__name__} and {other.__class__.__name__}.")
-
-    __rmul__ = __mul__
-
-    def __truediv__(self, other):
-        if isinstance(other, Fraction):
-            return self.__class__((self.fraction[0] * other.fraction[1], self.fraction[1] * other.fraction[0]))
-        elif isinstance(other, int):
-            return self.__class__((self.fraction[0], other * self.fraction[1]))
-        else:
-            TypeError(f"Illegal division between types {self.__class__.__name__} and {other.__class__.__name__}.")
-
-@dataclasses.dataclass
 class LinearCombinationOfFractions(LinearCombination):
     """
     a class that describes linear combinations of terms
@@ -169,7 +79,7 @@ class LinearCombinationOfFractions(LinearCombination):
     enables addition and subtraction between linear combinations
     """
 
-    coeffs: dict # {int: Fraction((int, int))}
+    coeffs: dict # {int: Fraction}
 
     def __post_init__(self):
         """
