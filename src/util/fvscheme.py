@@ -55,7 +55,7 @@ class Interpolation(LinearCombinationOfFractions):
     coeffs: dict # {int: Fraction}
 
     @classmethod
-    def construct(cls, kernel: Kernel, reconstruct_here = "right"):
+    def construct(cls, kernel: Kernel, reconstruct_here = 'right'):
         """
         kernel: object
         face:   which face of the central cell is the scheme evaluating
