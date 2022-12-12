@@ -1,5 +1,5 @@
 import dataclasses
-from util.mathbasic import gcf, lcm, Fraction
+from util.mathbasic import Fraction
 
 
 @dataclasses.dataclass
@@ -12,7 +12,7 @@ class LinearCombination:
     enables addition and subtraction between linear combinations
     """
 
-    coeffs: dict # {int: int}
+    coeffs: dict[int:int]  # {int: int}
 
     def __post_init__(self):
         """
@@ -22,10 +22,14 @@ class LinearCombination:
         if self.coeffs == {0: 0}:
             # self is the zero instance, do nothing
             pass
-        elif self.coeffs == {} or (all(j == 0 for j in self.coeffs.values()) and list(self.coeffs.keys()) != [0]):
-            # if coeffs is empty or if all its values are zero and 0 is not the only index
+        elif self.coeffs == {} or (
+            all(j == 0 for j in self.coeffs.values())
+            and list(self.coeffs.keys()) != [0]
+        ):
+            # if coeffs is empty or if all its values are zero and 0 is not
+            # the only index
             object.__setattr__(self, "coeffs", {0: 0})
-        else: # coeffs is nonempty and contains at least one nonzero item
+        else:  # coeffs is nonempty and contains at least one nonzero item
             # sort by degree
             sorted_coeffs = dict(sorted(self.coeffs.items()))
             # remove 0 coefficients if they unless 0x^0 is the only term
@@ -62,9 +66,14 @@ class LinearCombination:
         return self + -other
 
     def __mul__(self, other):
-        if not instance(other, int):
-            raise TypeError(f"Cannot multiply type {self.__class__.__name__} with type {other.__class__.__name__}.")
-        return self.__class__(dict([(i, other * j) for i, j in self.coeffs.items()]))
+        if type(other) != int:
+            raise TypeError(
+                f"Cannot multiply type {self.__class__.__name__} with type"
+                f" {other.__class__.__name__}."
+            )
+        return self.__class__(
+            dict([(i, other * j) for i, j in self.coeffs.items()])
+        )
 
     __rmul__ = __mul__
 
@@ -79,7 +88,7 @@ class LinearCombinationOfFractions(LinearCombination):
     enables addition and subtraction between linear combinations
     """
 
-    coeffs: dict # {int: Fraction}
+    coeffs: dict[int:Fraction]
 
     def __post_init__(self):
         """
@@ -90,10 +99,14 @@ class LinearCombinationOfFractions(LinearCombination):
         if self.coeffs == {0: Fraction.zero()}:
             # self is the zero instance, do nothing
             pass
-        elif self.coeffs == {} or (all(j == 0 for j in self.coeffs.values()) and list(self.coeffs.keys()) != [0]):
-            # if coeffs is empty or if all its values are zero and 0 is not the only index
+        elif self.coeffs == {} or (
+            all(j == 0 for j in self.coeffs.values())
+            and list(self.coeffs.keys()) != [0]
+        ):
+            # if coeffs is empty or if all its values are zero and 0 is not
+            # the only index
             object.__setattr__(self, "coeffs", {0: Fraction.zero()})
-        else: # coeffs is nonempty and contains at least one nonzero item
+        else:  # coeffs is nonempty and contains at least one nonzero item
             # sort by degree
             sorted_coeffs = dict(sorted(self.coeffs.items()))
             # remove 0 coefficients if they unless 0x^0 is the only term
@@ -116,12 +129,22 @@ class LinearCombinationOfFractions(LinearCombination):
 
     def __mul__(self, other):
         if not isinstance(other, int):
-            raise TypeError(f"Cannot multiply type {self.__class__.__name__} with type {other.__class__.__name__}.")
-        return self.__class__(dict([(i, other * j) for i, j in self.coeffs.items()]))
+            raise TypeError(
+                f"Cannot multiply type {self.__class__.__name__} with type"
+                f" {other.__class__.__name__}."
+            )
+        return self.__class__(
+            dict([(i, other * j) for i, j in self.coeffs.items()])
+        )
 
     __rmul__ = __mul__
 
     def __truediv__(self, other):
         if not isinstance(other, int):
-            raise TypeError(f"Cannot divide type {self.__class__.__name__} by type {other.__class__.__name__}.")
-        return self.__class__(dict([(i, j / other) for i, j in self.coeffs.items()]))
+            raise TypeError(
+                f"Cannot divide type {self.__class__.__name__} by type"
+                f" {other.__class__.__name__}."
+            )
+        return self.__class__(
+            dict([(i, j / other) for i, j in self.coeffs.items()])
+        )

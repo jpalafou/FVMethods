@@ -1,6 +1,6 @@
+# test Polynome class, which also tests the LinearCombination class
 import pytest
-from random import sample, randint, random
-import numpy as np
+from random import sample, randint
 from util.fvscheme import Kernel
 from util.polynome import Lagrange
 
@@ -70,9 +70,10 @@ def test_sum(unused_parameter):
     """
     lagrange1 = random_Lagrange()
     lagrange2 = random_Lagrange()
-    x = randint(-l_max,r_max)
-    assert (lagrange1 + lagrange2).eval(x) == lagrange1.eval(x) + \
-    lagrange2.eval(x)
+    x = randint(-l_max, r_max)
+    assert (lagrange1 + lagrange2).eval(x) == lagrange1.eval(
+        x
+    ) + lagrange2.eval(x)
 
 
 @pytest.mark.parametrize("unused_parameter", range(n_tests))

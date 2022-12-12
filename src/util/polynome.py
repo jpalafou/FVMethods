@@ -1,5 +1,4 @@
 import dataclasses
-import numpy as np
 from util.mathbasic import gcf, lcm, Fraction
 from util.lincom import LinearCombination
 
@@ -13,7 +12,7 @@ class Polynome(LinearCombination):
     {n: a, n-1: b, n-2: c, ...}
     """
 
-    coeffs: dict
+    coeffs: dict[int:int]
 
     def __post_init__(self):
         """
@@ -23,12 +22,16 @@ class Polynome(LinearCombination):
         if self.coeffs == {0: 0}:
             # self is the zero instance, do nothing
             pass
-        elif self.coeffs == {} or (all(j == 0 for j in self.coeffs.values()) and list(self.coeffs.keys()) != [0]):
-            # if coeffs is empty or if all its values are zero and 0 is not the only index
+        elif self.coeffs == {} or (
+            all(j == 0 for j in self.coeffs.values())
+            and list(self.coeffs.keys()) != [0]
+        ):
+            # if coeffs is empty or if all its values are zero and 0 is not
+            # the only index
             object.__setattr__(self, "coeffs", {0: 0})
-        else: # coeffs is nonempty and contains at least one nonzero item
+        else:  # coeffs is nonempty and contains at least one nonzero item
             # sort by degree
-            sorted_coeffs = dict(sorted(self.coeffs.items(), reverse = True))
+            sorted_coeffs = dict(sorted(self.coeffs.items(), reverse=True))
             # remove 0 coefficients if they unless 0x^0 is the only term
             new_coeffs = {}
             for deg, coeff in sorted_coeffs.items():
@@ -66,11 +69,6 @@ class Polynome(LinearCombination):
         return Polynome({0: 1})
 
     def __mul__(self, other):
-        """
-        Polynomial * Polynomial --> Polynomial
-        or
-        Polynomial * int --> Polynomial
-        """
         if isinstance(other, self.__class__):
             product_coeffs = {}
             for i in self.coeffs.keys():
@@ -82,24 +80,29 @@ class Polynome(LinearCombination):
                         product_coeffs[i + j] = product_coeffs[i + j] + coeff
             return self.__class__(product_coeffs)
         elif isinstance(other, int):
-            return self.__class__(dict([(i, other * j) for i, j in \
-            self.coeffs.items()]))
-        raise TypeError(f"Cannot multiply a {self.__class__.__name__} with" + \
-        f"a {type(other)}")
+            return self.__class__(
+                dict([(i, other * j) for i, j in self.coeffs.items()])
+            )
+        raise TypeError(
+            f"Cannot multiply a {self.__class__.__name__} with"
+            + f"a {type(other)}"
+        )
 
     __rmul__ = __mul__
 
-    def __floordiv__(self, other):
-        """
-        Polynomial // int --> Polynomial
-        """
-        quotient_coeffs = {}
+    def __floordiv__(self, other: int):
         if isinstance(other, int):
             if other == 0:
-                raise BaseException(f"Cannot divide a {self.__class__.__name__} by 0.")
-            return self.__class__(dict([(i, j // other) for i, j in self.coeffs.items()]))
+                raise BaseException(
+                    f"Cannot divide a {self.__class__.__name__} by 0."
+                )
+            return self.__class__(
+                dict([(i, j // other) for i, j in self.coeffs.items()])
+            )
         else:
-            raise TypeError(f"Cannot divide a {self.__class__.__name__} by a {type(other)}")
+            raise TypeError(
+                f"Cannot divide a {self.__class__.__name__} by a {type(other)}"
+            )
 
     def prime(self):
         """
@@ -111,7 +114,7 @@ class Polynome(LinearCombination):
                 derivative_coeffs[deg - 1] = deg * coeff
         return self.__class__(derivative_coeffs)
 
-    def eval(self, x):
+    def eval(self, x: float) -> float:
         """
         returns p(x) as an int/float
         """
@@ -130,7 +133,7 @@ class Lagrange(Polynome):
     #     self.coeffs = self.numerator.coeffs
     #     self.denominator = denominator
 
-    coeffs: dict
+    coeffs: dict[int:int]
     denominator: int
 
     def __post_init__(self):
@@ -147,9 +150,12 @@ class Lagrange(Polynome):
             raise BaseException("Invalid denominator type.")
         # denominator cannot be zero
         if self.denominator == 0:
-            raise BaseException('Lagrange instance with 0 denominator.')
+            raise BaseException("Lagrange instance with 0 denominator.")
         # reformat lagrange
-        if self.denominator != 1 and self.numerator != self.numerator.__class__.zero():
+        if (
+            self.denominator != 1
+            and self.numerator != self.numerator.__class__.zero()
+        ):
             # redistribute negative sign if denominator is negative
             if self.denominator < 0:
                 new_numerator = -self.numerator
@@ -158,7 +164,9 @@ class Lagrange(Polynome):
                 new_numerator = self.numerator
                 new_denominator = self.denominator
             # factor gcf out of numerator and denominator if it is > 1
-            gcf_fraction = gcf(list(new_numerator.coeffs.values()) + [new_denominator])
+            gcf_fraction = gcf(
+                list(new_numerator.coeffs.values()) + [new_denominator]
+            )
             if gcf_fraction > 1:
                 new_numerator = new_numerator // gcf_fraction
                 new_denominator = new_denominator // gcf_fraction
@@ -172,7 +180,7 @@ class Lagrange(Polynome):
         return f"({self.numerator})/{self.denominator}"
 
     @classmethod
-    def Lagrange_i(cls, x_values, i):
+    def Lagrange_i(cls, x_values: list[int], i: int):
         """
         find the ith Lagrange polynomial from a set of x points
         """
@@ -185,11 +193,15 @@ class Lagrange(Polynome):
         return cls(numerator.coeffs, denominator)
 
     def zero(self):
-        return self.__class__(self.numerator.__class__.zero().coeffs, self.denominator)
+        return self.__class__(
+            self.numerator.__class__.zero().coeffs, self.denominator
+        )
 
     def __add__(self, other):
         denominator = lcm(self.denominator, other.denominator)
-        numerator = (self.numerator * (denominator // self.denominator)) + (other.numerator * (denominator // other.denominator))
+        numerator = (self.numerator * (denominator // self.denominator)) + (
+            other.numerator * (denominator // other.denominator)
+        )
         return self.__class__(numerator.coeffs, denominator)
 
     def __neg__(self):
@@ -201,20 +213,15 @@ class Lagrange(Polynome):
     def prime(self):
         return self.__class__(self.numerator.prime().coeffs, self.denominator)
 
-    def eval(self, x, div = 'true'):
+    def eval(self, x: float, div: str = "true") -> float:
         """
-        div = 'true'
-        returns int/float of the polynomial fraction evaluated at x
-        div = 'floor'
-        returns int
-        div = 'fraction'
-        returns Fraction
+        returns the result of the polynomial fraction evaluated at x
         """
-        if div == 'true':
+        if div == "true":
             return self.numerator.eval(x) / self.denominator
-        elif div == 'floor':
+        elif div == "floor":
             return self.numerator.eval(x) // self.denominator
-        elif div == 'fraction':
+        elif div == "fraction":
             return Fraction(self.numerator.eval(x), self.denominator)
         else:
-            raise BaseException('Invalid division type.')
+            raise BaseException("Invalid division type.")
