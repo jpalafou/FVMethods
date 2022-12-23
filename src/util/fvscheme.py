@@ -137,7 +137,7 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
                 interface_scheme = cls(coeffs)
             print(
                 f"Read a {reconstruct_here} interface reconstruction scheme"
-                "of order {order} from {save_path}"
+                f"of order {order} from {save_path}"
             )
         else:
             if order % 2 != 0:  # odd order
@@ -162,7 +162,7 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
                     writer.writerow([key, val.numerator, val.denominator])
             print(
                 f"Wrote a {reconstruct_here} interface reconstruction scheme"
-                "of order {order} to {save_path}"
+                f"of order {order} to {save_path}"
             )
         return interface_scheme
 
