@@ -1,6 +1,6 @@
 from util.fvscheme import PolynomialReconstruction
 
-orders = [5, 6, 7, 8, 9, 10]
+orders = range(1, 10)
 
 for order in orders:
     PolynomialReconstruction.construct_from_order(

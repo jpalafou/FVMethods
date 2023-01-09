@@ -17,48 +17,41 @@ class AdvectionSolver(Integrator):
         )
         self.right_interface_scheme = right_interface_scheme_original.nparray()
         self.left_interface_scheme = left_interface_scheme_original.nparray()
-        self.ghost_width = (
-            max(right_interface_scheme_original.coeffs.keys()) + 1
-        )  # assumes symmetric scheme
+        # number of kernel cells from center referenced by a scheme
+        # symmetry is assumed
+        self._k = max(right_interface_scheme_original.coeffs.keys())
+        # number of ghost cells on either side of the extended state vector
+        self._gw = self._k + 1
 
-    def update_boundary(self, x_extended: np.ndarray):
-        gw = self.ghost_width
-        # periodic boundary
+    def periodic_boundary(self, x_extended: np.ndarray):
+        gw = self._gw
+        negative_gw = -gw
         left_index = -2 * gw
-        x_extended[:gw] = x_extended[left_index:-gw]
+        x_extended[:gw] = x_extended[left_index:negative_gw]
         right_index = 2 * gw
-        x_extended[-gw:] = x_extended[gw:right_index]
+        x_extended[negative_gw:] = x_extended[gw:right_index]
 
-    def xdot(self, x_i: np.ndarray, t_i: float) -> np.ndarray:
-        gw = self.ghost_width
-        # apply boundary conditions
-        x_extended = np.concatenate((np.zeros(gw), x_i, np.zeros(gw)))
-        self.update_boundary(x_extended)
-        # reconstruct polynomial at cell faces
-        n = len(x_extended)
+    def xdot(self, x: np.ndarray, t_i: float) -> np.ndarray:
+        x_extended = np.concatenate(
+            (np.zeros(self._gw), x, np.zeros(self._gw))
+        )
+        self.periodic_boundary(x_extended)
         a = []
-        for i in range(-(gw - 1), (gw - 1) + 1):
-            left_index = gw - 1 + i
-            right_index = n - gw + 1 + i
-            a.append(x_extended[left_index:right_index])
+        n = len(x)
+        for i in range(2 * self._k + 1):
+            right_ind = i + n + 2
+            a.append(x_extended[i:right_ind])
         A = np.array(a).T
-        right_interface_values = (
+        x_interface_right = (
             A @ self.right_interface_scheme / sum(self.right_interface_scheme)
         )
-        left_interface_values = (
+        x_interface_left = (
             A @ self.left_interface_scheme / sum(self.left_interface_scheme)
         )
-        # find the difference in each cell using a rudimentary reimann ssolver
-        x_difference = np.zeros(len(self.x0))
-        assert len(right_interface_values) - 2 == len(self.x0)
-        for i in range(1, A.shape[0] - 1):
-            # reimann solver
+        Delta_x = np.zeros(n)
+        for i in range(n):
             if self.a > 0:
-                x_difference[i - 1] = (
-                    right_interface_values[i] - right_interface_values[i - 1]
-                )
+                Delta_x[i] = x_interface_right[i + 1] - x_interface_right[i]
             elif self.a < 0:
-                x_difference[i - 1] = (
-                    left_interface_values[i + 1] - left_interface_values[i]
-                )
-        return -(self.a / self.h) * x_difference
+                Delta_x[i] = x_interface_left[i + 2] - x_interface_left[i + 1]
+        return -(self.a / self.h) * Delta_x

@@ -158,7 +158,7 @@ def test_4th_order_right_biased_right_face():
     }
     assert (
         PolynomialReconstruction.construct_from_kernel(
-            Kernel(1, 2), "right"
+            Kernel(1, 2), "r"
         ).coeffs
         == solution_right
     )
@@ -182,7 +182,7 @@ def test_8th_order_right_biased_left_face():
     }
     assert (
         PolynomialReconstruction.construct_from_kernel(
-            Kernel(3, 4), "left"
+            Kernel(3, 4), "l"
         ).coeffs
         == solution_left
     )

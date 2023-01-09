@@ -128,6 +128,10 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
         """
         solve for a reconstruction scheme of a given order and save to a
         """
+        if reconstruct_here == "r":
+            reconstruct_here = "right"
+        if reconstruct_here == "l":
+            reconstruct_here = "left"
         save_path = directory_path + f"order{order}_{reconstruct_here}.csv"
         if os.path.isfile(save_path):
             coeffs = {}
@@ -136,7 +140,7 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
                     coeffs[int(row[0])] = Fraction(int(row[1]), int(row[2]))
                 interface_scheme = cls(coeffs)
             print(
-                f"Read a {reconstruct_here} interface reconstruction scheme"
+                f"Read a {reconstruct_here} interface reconstruction scheme "
                 f"of order {order} from {save_path}"
             )
         else:
@@ -161,7 +165,7 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
                 for key, val in interface_scheme.coeffs.items():
                     writer.writerow([key, val.numerator, val.denominator])
             print(
-                f"Wrote a {reconstruct_here} interface reconstruction scheme"
+                f"Wrote a {reconstruct_here} interface reconstruction scheme "
                 f"of order {order} to {save_path}"
             )
         return interface_scheme

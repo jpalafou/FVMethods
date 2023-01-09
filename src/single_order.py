@@ -1,10 +1,11 @@
-# solve 1D advection using schemes of varying order, plot to compare
+# solve 1D advection with a particular order of accuracy
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 from util.solve import AdvectionSolver
 
 a = 1  # choose a positive value of the 'wind' direction
+order = 4
 
 # domain
 x_bounds = [0, 1]
@@ -25,13 +26,12 @@ u0 = np.cos(2 * math.pi * x)
 # advect for T orbits and the initial state should match the final state
 # do this for many orders
 plt.plot(x, u0, label="t = 0")
-for order in range(1, 8):
-    advection_solution = AdvectionSolver(x0=u0, t=t, h=h, a=a, order=order)
-    advection_solution.rk4()
-    u = advection_solution.x
-    plt.plot(
-        x, u[:, -1], "--", marker="o", mfc="none", label=f"order {order} + rk4"
-    )
+advection_solution = AdvectionSolver(x0=u0, t=t, h=h, a=a, order=order)
+advection_solution.rk4()
+u = advection_solution.x
+plt.plot(
+    x, u[:, -1], "--", marker="o", mfc="none", label=f"order {order} + rk4"
+)
 plt.title(f"{T} orbits of constant 1D advection" " within a periodic box")
 plt.xlabel(r"$x$")
 plt.ylabel(r"$u$")
