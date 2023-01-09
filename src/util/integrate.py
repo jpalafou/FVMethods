@@ -24,6 +24,16 @@ class Integrator:
         """
         pass
 
+    def euler(self):
+        """
+        4th order Runge-Kutta integrator
+        """
+        for i in range(len(self.t) - 1):
+            dt = self.t[i + 1] - self.t[i]
+            self.x[:, i + 1] = self.x[:, i] + dt * self.xdot(
+                self.x[:, i], self.t[i]
+            )
+
     def rk4(self):
         """
         4th order Runge-Kutta integrator
@@ -31,9 +41,9 @@ class Integrator:
         for i in range(len(self.t) - 1):
             dt = self.t[i + 1] - self.t[i]
             k0 = dt * self.xdot(self.x[:, i], self.t[i])
-            k1 = dt * self.xdot(self.x[:, i] + k0 / 2, self.t[i])
-            k2 = dt * self.xdot(self.x[:, i] + k1 / 2, self.t[i])
-            k3 = dt * self.xdot(self.x[:, i] + k2, self.t[i])
+            k1 = dt * self.xdot(self.x[:, i] + k0 / 2, self.t[i] + dt / 2)
+            k2 = dt * self.xdot(self.x[:, i] + k1 / 2, self.t[i] + dt / 2)
+            k3 = dt * self.xdot(self.x[:, i] + k2, self.t[i] + dt)
             self.x[:, i + 1] = self.x[:, i] + (1 / 6) * (
                 k0 + 2 * k1 + 2 * k2 + k3
             )
