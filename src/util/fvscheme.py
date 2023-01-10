@@ -16,7 +16,7 @@ class Kernel:
     definition
     """
 
-    def __init__(self, left, right, adj_index_at_center=0):
+    def __init__(self, left: int, right: int, adj_index_at_center: int = 0):
         """
         left:   number of cells left of center in the kernel
         right:  number of cells right of center

@@ -4,10 +4,23 @@ from util.fvscheme import PolynomialReconstruction
 
 
 class AdvectionSolver(Integrator):
-    def __init__(self, x0, t, h, a, order):
+    """
+    uses polynomial reconstruction of arbitrary order
+    no limiter
+    """
+
+    def __init__(
+        self,
+        x0: np.ndarray,
+        t: np.ndarray,
+        h: float,
+        a: float,
+        order: int = 1,
+        bc_type: str = "periodic",
+    ):
         super().__init__(x0, t)
-        self.a = a  # velocity field
         self.h = h  # mesh size
+        self.a = a  # velocity field
         # devise a scheme for reconstructed values at cell interfaces
         right_interface_scheme_original = (
             PolynomialReconstruction.construct_from_order(order, "right")
@@ -22,20 +35,22 @@ class AdvectionSolver(Integrator):
         self._k = max(right_interface_scheme_original.coeffs.keys())
         # number of ghost cells on either side of the extended state vector
         self._gw = self._k + 1
+        self.bc_type = bc_type  # type of boudnary condition
 
-    def periodic_boundary(self, x_extended: np.ndarray):
-        gw = self._gw
-        negative_gw = -gw
-        left_index = -2 * gw
-        x_extended[:gw] = x_extended[left_index:negative_gw]
-        right_index = 2 * gw
-        x_extended[negative_gw:] = x_extended[gw:right_index]
+    def apply_bc(self, x_extended: np.ndarray):
+        if self.bc_type == "periodic":
+            gw = self._gw
+            negative_gw = -gw
+            left_index = -2 * gw
+            x_extended[:gw] = x_extended[left_index:negative_gw]
+            right_index = 2 * gw
+            x_extended[negative_gw:] = x_extended[gw:right_index]
 
     def xdot(self, x: np.ndarray, t_i: float) -> np.ndarray:
         x_extended = np.concatenate(
             (np.zeros(self._gw), x, np.zeros(self._gw))
         )
-        self.periodic_boundary(x_extended)
+        self.apply_bc(x_extended)
         a = []
         n = len(x)
         for i in range(2 * self._k + 1):
@@ -48,6 +63,65 @@ class AdvectionSolver(Integrator):
         x_interface_left = (
             A @ self.left_interface_scheme / sum(self.left_interface_scheme)
         )
+        Delta_x = np.zeros(n)
+        for i in range(n):
+            if self.a > 0:
+                Delta_x[i] = x_interface_right[i + 1] - x_interface_right[i]
+            elif self.a < 0:
+                Delta_x[i] = x_interface_left[i + 2] - x_interface_left[i + 1]
+        return -(self.a / self.h) * Delta_x
+
+
+class AdvectionSolver_minmod(Integrator):
+    """
+    uses minmod limter
+    """
+
+    def __init__(
+        self,
+        x0: np.ndarray,
+        t: np.ndarray,
+        h: float,
+        a: float,
+        bc_type: str = "periodic",
+    ):
+        super().__init__(x0, t)
+        self.h = h  # mesh size
+        self.a = a  # velocity field
+        # devise a scheme for reconstructed values at cell interfaces
+        # number of ghost cells on either side of the extended state vector
+        self.bc_type = bc_type  # type of boudnary condition
+
+    def apply_bc(self, x_extended: np.ndarray):
+        if self.bc_type == "periodic":
+            x_extended[:2] = x_extended[-4:-2]
+            x_extended[-2:] = x_extended[2:4]
+
+    def xdot(self, x: np.ndarray, t_i: float) -> np.ndarray:
+        x_extended = np.concatenate((np.zeros(2), x, np.zeros(2)))
+        self.apply_bc(x_extended)
+        Delta_x_left = x_extended[1:-1] - x_extended[:-2]
+        Delta_x_right = x_extended[2:] - x_extended[1:-1]
+        n = len(x)
+        Delta_x_i = np.zeros(n + 2)  # \Delta x in the ith cell
+        for i in range(n + 2):
+            # if not Delta_x_left[i] * Delta_x_right[i] < 0:
+            #     Delta_x_i[i] = min(Delta_x_left[i], Delta_x_right[i])
+
+            # Delta_x_i[i] = min(Delta_x_left[i], Delta_x_right[i])
+
+            if not Delta_x_left[i] * Delta_x_right[i] < 0:
+                if abs(Delta_x_left[i]) < abs(Delta_x_right[i]):
+                    Delta_x_i[i] = Delta_x_left[i]
+                else:
+                    Delta_x_i[i] = Delta_x_right[i]
+
+            # if abs(Delta_x_left[i]) < abs(Delta_x_right[i]):
+            #     Delta_x_i[i] = Delta_x_left[i]
+            # else:
+            #     Delta_x_i[i] = Delta_x_right[i]
+        x_interface_right = x_extended[1:-1] + Delta_x_i / 2
+        x_interface_left = x_extended[1:-1] - Delta_x_i / 2
         Delta_x = np.zeros(n)
         for i in range(n):
             if self.a > 0:
