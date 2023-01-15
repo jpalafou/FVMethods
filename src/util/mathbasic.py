@@ -1,6 +1,20 @@
 import dataclasses
 
 
+def fact(n):
+    """
+    factorial n! of an integer n
+    """
+    if not isinstance(n, int):
+        raise TypeError("fact() only accept integers")
+    if n < 0:
+        raise BaseException("fact() is not definted for negative integers")
+    product = 1
+    for i in range(1, n + 1):
+        product *= i
+    return product
+
+
 def gcf(mylist: list[int]) -> int:
     """
     returns gcf of the absolute value of a list
@@ -28,6 +42,11 @@ def lcm(a: int, b: int) -> int:
 
 @dataclasses.dataclass
 class Fraction:
+    """
+    a real number consisiting of an integer numerator divded by an
+    integer denominator
+    """
+
     numerator: int
     denominator: int
 

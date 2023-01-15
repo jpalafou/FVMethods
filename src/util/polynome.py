@@ -1,5 +1,6 @@
 import dataclasses
-from util.mathbasic import gcf, lcm, Fraction
+import numpy as np
+from util.mathbasic import fact, gcf, lcm, Fraction
 from util.lincom import LinearCombination
 
 
@@ -79,7 +80,7 @@ class Polynome(LinearCombination):
                     else:
                         product_coeffs[i + j] = product_coeffs[i + j] + coeff
             return self.__class__(product_coeffs)
-        elif isinstance(other, int):
+        elif isinstance(other, int) or isinstance(other, float):
             return self.__class__(
                 dict([(i, other * j) for i, j in self.coeffs.items()])
             )
@@ -120,18 +121,70 @@ class Polynome(LinearCombination):
         """
         return sum([coeff * x**deg for deg, coeff in self.coeffs.items()])
 
+    @classmethod
+    def legendre(cls, n):
+        """
+        generate the nth Legendre polynomial
+        https://mathworld.wolfram.com/LegendrePolynomial.html
+        """
+        square_dif = Polynome({2: 1, 0: -1})  # x^2 - 1
+        derive_me = Polynome({0: 1})  # 1
+        for _ in range(n):
+            derive_me = derive_me * square_dif
+        for _ in range(n):
+            derive_me = derive_me.prime()
+        denom = 2**n * fact(n)
+        return (1 / denom) * derive_me
+
+    def find_zeros(
+        self, x_bounds: list[float], epsilon: float = 1e-8
+    ) -> list[float]:
+        """
+        generate a list of approximate zeros for a polynomial within a given
+        range.
+        WARNING: does NOT work for zeros with even multiplicity
+        """
+        if len(x_bounds) != 2:
+            raise BaseException("Two x boundaries are required")
+        if x_bounds[0] > x_bounds[1]:
+            raise BaseException("x values should be in increasing order")
+        h = (x_bounds[1] - x_bounds[0]) / 1000  # scanning resolution
+        x_scan = np.arange(
+            x_bounds[0], x_bounds[1] + h, h
+        )  # x values to check for sign changes
+        list_of_zeros = []
+        # don't forget to check the left bound
+        if self.eval(x_bounds[0]) == 0:
+            list_of_zeros.append(x_bounds[0])
+        # the for loop starts at x_bounds[0] + h
+        for i in range(1, len(x_scan)):
+            if self.eval(x_scan[i]) == 0:  # is the current x value a zero?
+                list_of_zeros.append(x_scan[i])
+            elif (
+                self.eval(x_scan[i]) * self.eval(x_scan[i - 1]) < 0
+            ):  # sign change indicates we skipped over a zero
+                # find a zero in a range assuming the zero exists
+                # use a simple midpoint approximation
+                a = x_scan[i - 1]
+                b = x_scan[i]
+                middle = (1 / 2) * (a + b)
+                while abs(self.eval(middle)) > epsilon:
+                    # using same sign change principle
+                    if self.eval(a) * self.eval(middle) < 0:
+                        b = middle
+                    else:
+                        a = middle
+                    middle = (1 / 2) * (a + b)
+                list_of_zeros.append(middle)
+        return list_of_zeros
+
 
 @dataclasses.dataclass
 class Lagrange(Polynome):
     """
-    Lagrange() := Polynome()/int
+    polynomial numerator with an integer denominator
     allow addition/subtraction between Lagrange polynomials
     """
-
-    # def __init__(self, coeffs: dict, denominator: int):
-    #     self.numerator = Polynome(coeffs)
-    #     self.coeffs = self.numerator.coeffs
-    #     self.denominator = denominator
 
     coeffs: dict[int:int]
     denominator: int

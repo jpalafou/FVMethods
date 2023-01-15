@@ -3,11 +3,11 @@ import numpy as np
 import csv
 import os.path
 from util.mathbasic import lcm, Fraction
-from util.lincom import LinearCombinationOfFractions
+from util.lincom import LinearCombinationOfFractions, LinearCombination
 from util.polynome import Lagrange
 
 
-directory_path = "src/util/reconstruction_schemes/"
+stensil_path = "src/util/stensils/"
 
 
 class Kernel:
@@ -28,8 +28,8 @@ class Kernel:
         self.adj_index_at_center = adj_index_at_center
 
         # kernel step size
-        h = 2  # must be an even integer
-        self.h = h
+        h = 2
+        self.h = h  # must be an even integer
 
         # generate an array of x-values for the cell centers
         x_cell_centers = list(range(-h * left, h * (right + 1), h))
@@ -54,10 +54,10 @@ class Kernel:
 
 
 @dataclasses.dataclass
-class PolynomialReconstruction(LinearCombinationOfFractions):
+class ConservativeInterpolation(LinearCombinationOfFractions):
     """
     find the polynomial reconstruction evaluated at a point from a kernel of
-    cell averages
+    cell averages which conserves u inside the kernel
     """
 
     coeffs: dict  # {int: Fraction}
@@ -67,8 +67,10 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
         cls, kernel: Kernel, reconstruct_here: str = "right"
     ):
         """
-        kernel: object
-        face:   which face of the central cell is the scheme evaluating
+        generate a stensil to evaluate a kernel at x = reconstruct_here
+        if reconstruct_here = left, right, or center, the stensil will
+        be in terms of integer fractions. otherwise, floating point
+        values will be used for weights.
         """
         x = kernel.x_cell_faces
         if reconstruct_here == "right" or reconstruct_here == "r":
@@ -77,6 +79,12 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
             x_eval = x[kernel.index_at_center]
         elif reconstruct_here == "center" or reconstruct_here == "c":
             x_eval = kernel.x_cell_centers[kernel.index_at_center]
+        elif isinstance(reconstruct_here, float):
+            if reconstruct_here < -0.5 or reconstruct_here > 0.5:
+                BaseException(
+                    "Enter an x value to evaluate between -0.5 and 0.5."
+                )
+            x_eval = kernel.h * reconstruct_here
         else:
             BaseException(
                 "Must provide an x value for polynomial reconstruction."
@@ -107,18 +115,30 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
         )
 
         # evaluate them at the cell face, multiply by h
-        coeffs = (
-            kernel.h
-            * LinearCombinationOfFractions(
-                dict(
-                    [
-                        (i, polynome.eval(x_eval, div="fraction"))
-                        for i, polynome in polynomial_weights_prime.items()
-                    ]
+        if isinstance(x_eval, int):
+            coeffs = (
+                kernel.h
+                * LinearCombinationOfFractions(
+                    dict(
+                        [
+                            (i, polynome.eval(x_eval, div="fraction"))
+                            for i, polynome in polynomial_weights_prime.items()
+                        ]
+                    )
                 )
-            )
-        ).coeffs
-
+            ).coeffs
+        elif isinstance(x_eval, float):
+            coeffs = (
+                kernel.h
+                * LinearCombination(
+                    dict(
+                        [
+                            (i, polynome.eval(x_eval, div="true"))
+                            for i, polynome in polynomial_weights_prime.items()
+                        ]
+                    )
+                )
+            ).coeffs
         return cls(coeffs)
 
     @classmethod
@@ -126,22 +146,31 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
         cls, order: int = 1, reconstruct_here: str = "right"
     ):
         """
-        solve for a reconstruction scheme of a given order and save to a
+        generate a stensil to evaluate a kernel at x = reconstruct_here
+        from a given order of accuracy. asymmetric kernels will be
+        averaged with their inverses to form a symmetric kernel
         """
-        if reconstruct_here == "r":
+        if reconstruct_here == "r" or reconstruct_here == 0.5:
             reconstruct_here = "right"
-        if reconstruct_here == "l":
+        if reconstruct_here == "l" or reconstruct_here == -0.5:
             reconstruct_here = "left"
-        save_path = directory_path + f"order{order}_{reconstruct_here}.csv"
+        if reconstruct_here == "c" or reconstruct_here == 0:
+            reconstruct_here = "center"
+        save_path = stensil_path + f"order{order}_{reconstruct_here}.csv"
         if os.path.isfile(save_path):
             coeffs = {}
             with open(save_path, mode="r") as infile:
                 for row in csv.reader(infile):
-                    coeffs[int(row[0])] = Fraction(int(row[1]), int(row[2]))
+                    if isinstance(reconstruct_here, str):
+                        coeffs[int(row[0])] = Fraction(
+                            int(row[1]), int(row[2])
+                        )
+                    elif isinstance(reconstruct_here, float):
+                        coeffs[int(row[0])] = float(row[1])
                 interface_scheme = cls(coeffs)
             print(
                 f"Read a {reconstruct_here} interface reconstruction scheme "
-                f"of order {order} from {save_path}"
+                f"of order {order} from {save_path}\n"
             )
         else:
             if order % 2 != 0:  # odd order
@@ -163,29 +192,43 @@ class PolynomialReconstruction(LinearCombinationOfFractions):
             with open(save_path, "w+") as the_file:
                 writer = csv.writer(the_file)
                 for key, val in interface_scheme.coeffs.items():
-                    writer.writerow([key, val.numerator, val.denominator])
-            print(
-                f"Wrote a {reconstruct_here} interface reconstruction scheme "
-                f"of order {order} to {save_path}"
-            )
+                    if isinstance(reconstruct_here, str):
+                        writer.writerow([key, val.numerator, val.denominator])
+                    elif isinstance(reconstruct_here, float):
+                        writer.writerow([key, val])
+            if isinstance(reconstruct_here, str):
+                print(
+                    f"Wrote a {reconstruct_here} interface reconstruction "
+                    f"scheme of order {order} to {save_path}\n"
+                )
+            else:
+                print(
+                    f"Wrote a reconstruction scheme at x = {reconstruct_here} "
+                    f"of order {order} to {save_path}\n"
+                )
         return interface_scheme
 
     def nparray(self):
         """
         convert a reconstruction scheme to an array of weights
         """
-        denoms = [frac.denominator for frac in self.coeffs.values()]
-        denom_lcm = 1
-        for i in denoms:
-            denom_lcm = lcm(denom_lcm, i)
-        mylist = []
-        for i in range(min(self.coeffs.keys()), max(self.coeffs.keys()) + 1):
-            if i in self.coeffs.keys():
-                mylist.append(
-                    self.coeffs[i].numerator
-                    * denom_lcm
-                    // self.coeffs[i].denominator
-                )
-            else:
-                mylist.append(0)
-        return np.array(mylist)
+        if all(isinstance(i, Fraction) for i in self.coeffs.values()):
+            denoms = [frac.denominator for frac in self.coeffs.values()]
+            denom_lcm = 1
+            for i in denoms:
+                denom_lcm = lcm(denom_lcm, i)
+            mylist = []
+            for i in range(
+                min(self.coeffs.keys()), max(self.coeffs.keys()) + 1
+            ):
+                if i in self.coeffs.keys():
+                    mylist.append(
+                        self.coeffs[i].numerator
+                        * denom_lcm
+                        // self.coeffs[i].denominator
+                    )
+                else:
+                    mylist.append(0)
+            return np.array(mylist)
+        elif all(isinstance(i, float) for i in self.coeffs.values()):
+            return np.array([i for i in self.coeffs.values()])

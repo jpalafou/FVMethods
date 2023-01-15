@@ -1,6 +1,9 @@
+import pytest
 import numpy as np
+from random import random
+from util.polynome import Lagrange
 from util.mathbasic import Fraction
-from util.fvscheme import Kernel, PolynomialReconstruction
+from util.fvscheme import Kernel, ConservativeInterpolation
 
 
 n_tests = 5
@@ -13,7 +16,7 @@ def test_2nd_order_right_biased_both_faces():
     """
     solution_right = {0: Fraction(1, 2), 1: Fraction(1, 2)}
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(0, 1), "right"
         ).coeffs
         == solution_right
@@ -21,7 +24,7 @@ def test_2nd_order_right_biased_both_faces():
 
     solution_left = {0: Fraction(3, 2), 1: Fraction(-1, 2)}
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(0, 1), "left"
         ).coeffs
         == solution_left
@@ -35,7 +38,7 @@ def test_2nd_order_left_biased_both_faces():
     """
     solution_right = {-1: Fraction(-1, 2), 0: Fraction(3, 2)}
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(1, 0), "right"
         ).coeffs
         == solution_right
@@ -43,7 +46,7 @@ def test_2nd_order_left_biased_both_faces():
 
     solution_left = {-1: Fraction(1, 2), 0: Fraction(1, 2)}
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(1, 0), "left"
         ).coeffs
         == solution_left
@@ -56,9 +59,9 @@ def test_2nd_order_central_difference():
     method using Teyssier's solution
     """
     Teyssier_solution = {-1: Fraction(-1, 2), 1: Fraction(1, 2)}
-    my_solution = PolynomialReconstruction.construct_from_kernel(
+    my_solution = ConservativeInterpolation.construct_from_kernel(
         Kernel(0, 1), "r"
-    ) - PolynomialReconstruction.construct_from_kernel(Kernel(1, 0), "l")
+    ) - ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "l")
     assert my_solution.coeffs == Teyssier_solution
 
 
@@ -73,15 +76,15 @@ def test_2nd_order_Fromm():
         1: Fraction(1, 4),
     }
     right_average = (
-        PolynomialReconstruction.construct_from_kernel(Kernel(0, 1), "r")
-        + PolynomialReconstruction.construct_from_kernel(Kernel(1, 0), "r")
+        ConservativeInterpolation.construct_from_kernel(Kernel(0, 1), "r")
+        + ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "r")
     ) / 2
     assert right_average.coeffs == right_solution
 
     left_solution = {-1: Fraction(1, 4), 0: Fraction(1, 1), 1: Fraction(-1, 4)}
     left_average = (
-        PolynomialReconstruction.construct_from_kernel(Kernel(0, 1), "l")
-        + PolynomialReconstruction.construct_from_kernel(Kernel(1, 0), "l")
+        ConservativeInterpolation.construct_from_kernel(Kernel(0, 1), "l")
+        + ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "l")
     ) / 2
     assert left_average.coeffs == left_solution
 
@@ -92,11 +95,13 @@ def test_2nd_order_Fromm():
         1: Fraction(1, 4),
     }
     my_du = (
-        PolynomialReconstruction.construct_from_kernel(Kernel(0, 1), "r")
-        + PolynomialReconstruction.construct_from_kernel(Kernel(1, 0), "r")
+        ConservativeInterpolation.construct_from_kernel(Kernel(0, 1), "r")
+        + ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "r")
     ) / 2 - (
-        PolynomialReconstruction.construct_from_kernel(Kernel(0, 1, -1), "r")
-        + PolynomialReconstruction.construct_from_kernel(Kernel(1, 0, -1), "r")
+        ConservativeInterpolation.construct_from_kernel(Kernel(0, 1, -1), "r")
+        + ConservativeInterpolation.construct_from_kernel(
+            Kernel(1, 0, -1), "r"
+        )
     ) / 2
     assert my_du.coeffs == du_solution
 
@@ -112,7 +117,7 @@ def test_3rd_order_both_faces():
         1: Fraction(1, 3),
     }
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(1, 1), "right"
         ).coeffs
         == solution_right
@@ -120,7 +125,7 @@ def test_3rd_order_both_faces():
 
     solution_left = {-1: Fraction(1, 3), 0: Fraction(5, 6), 1: Fraction(-1, 6)}
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(1, 1), "left"
         ).coeffs
         == solution_left
@@ -139,8 +144,10 @@ def test_3rd_order_difference():
         1: Fraction(1, 3),
     }
     my_du = (
-        PolynomialReconstruction.construct_from_kernel(Kernel(1, 1), "r")
-        - PolynomialReconstruction.construct_from_kernel(Kernel(1, 1, -1), "r")
+        ConservativeInterpolation.construct_from_kernel(Kernel(1, 1), "r")
+        - ConservativeInterpolation.construct_from_kernel(
+            Kernel(1, 1, -1), "r"
+        )
     ).coeffs
     assert my_du == du_solution
 
@@ -157,7 +164,7 @@ def test_4th_order_right_biased_right_face():
         2: Fraction(-1, 12),
     }
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(1, 2), "r"
         ).coeffs
         == solution_right
@@ -181,7 +188,7 @@ def test_8th_order_right_biased_left_face():
         4: Fraction(3, f),
     }
     assert (
-        PolynomialReconstruction.construct_from_kernel(
+        ConservativeInterpolation.construct_from_kernel(
             Kernel(3, 4), "l"
         ).coeffs
         == solution_left
@@ -192,16 +199,16 @@ def test_construct_from_order():
     """
     construct a 5th order reconstruction scheme
     """
-    assert PolynomialReconstruction.construct_from_kernel(
+    assert ConservativeInterpolation.construct_from_kernel(
         Kernel(2, 2), "r"
-    ) == PolynomialReconstruction.construct_from_order(5, "r")
+    ) == ConservativeInterpolation.construct_from_order(5, "r")
 
 
 def test_nparray():
     """
     construct a 5th order reconstruction scheme and convert it to an array
     """
-    scheme = PolynomialReconstruction.construct_from_order(5, "l")
+    scheme = ConservativeInterpolation.construct_from_order(5, "l")
     scheme_np = scheme.nparray()
     assert all(
         np.array(
@@ -209,3 +216,37 @@ def test_nparray():
         )
         == scheme_np / sum(scheme_np)
     )
+
+
+@pytest.mark.parametrize("unused_parameter", range(n_tests))
+def test_stensil_construction_for_floating_point_evalation(unused_parameter):
+    # def test_float_evalation():
+    """
+    construct a stensil for a 3 cell kernel with a known solution
+    verify that floating point evaluations hold
+    """
+    kernel = Kernel(1, 1)
+    h = kernel.h
+    # known solution
+    # u(x) = p1(x) u_i-1 + p2(x) u_i + p3(x) u_i+1
+    p1 = Lagrange({2: 3, 1: -6, 0: -1}, 48)
+    p2 = Lagrange({2: -3, 0: 13}, 24)
+    p3 = Lagrange({2: 3, 1: 6, 0: -1}, 48)
+    # fake data
+    u_bar_max = 20
+    u_bar = np.array([random() * u_bar_max for _ in range(3)])
+    # 5 reconstruction points, not necessarily inside the central cell
+    exes = [2 * (random() - 0.5) * u_bar_max for _ in range(5)]
+    # construct stensil
+    stensils = [
+        ConservativeInterpolation.construct_from_kernel(kernel, x).nparray()
+        for x in exes
+    ]
+    stensil_evaluations = [
+        u_bar @ stensil / sum(stensil) for stensil in stensils
+    ]
+    true_evaluations = [
+        h * u_bar @ np.array([p1.eval(h * x), p2.eval(h * x), p3.eval(h * x)])
+        for x in exes
+    ]
+    assert stensil_evaluations == pytest.approx(true_evaluations)

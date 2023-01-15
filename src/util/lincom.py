@@ -12,7 +12,7 @@ class LinearCombination:
     enables addition and subtraction between linear combinations
     """
 
-    coeffs: dict[int:int]  # {int: int}
+    coeffs: dict[int:float]
 
     def __post_init__(self):
         """

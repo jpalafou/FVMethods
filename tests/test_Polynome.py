@@ -4,7 +4,7 @@ from random import sample, randint, random
 from util.polynome import Polynome
 
 
-n_tests = 5
+n_tests = 10
 max_degree = 10
 max_coeff = 10
 
@@ -155,3 +155,68 @@ def test_derivative_of_a_product(unused_parameter):
         rand_poly1 * rand_poly2.prime() + rand_poly1.prime() * rand_poly2
     )
     assert derivative_of_products == product_rule
+
+
+def test_legendre():
+    """
+    test generating the nth Legendre polynomial
+    """
+    assert Polynome.legendre(0) == Polynome({0: 1})
+    assert Polynome.legendre(1) == Polynome({1: 1})
+    assert Polynome.legendre(2) == (1 / 2) * Polynome({2: 3, 0: -1})
+    assert Polynome.legendre(3) == (1 / 2) * Polynome({3: 5, 1: -3})
+    assert Polynome.legendre(4) == (1 / 8) * Polynome({4: 35, 2: -30, 0: 3})
+
+
+@pytest.mark.parametrize("unused_parameter", range(n_tests))
+def test_find_zeros_integer(unused_parameter):
+    """
+    test generating as list of zeros using integer zeros
+    """
+    # create a list of up to 5 zeros beween x = a and b
+    a = -5
+    b = 5
+    n_zeros = randint(0, 5)
+    zeros = []
+    for _ in range(n_zeros):
+        new_int = randint(a, b)
+        while new_int in zeros:
+            new_int = randint(a, b)
+        zeros.append(new_int)
+    # create a polynomial with these zeros
+    poly = Polynome({0: 1})
+    for z in zeros:
+        poly *= Polynome({1: 1, 0: -z})  # (x - z)
+    zeros.sort()  # sort the list of zeros
+
+    assert poly.find_zeros([a - 1, b + 1]) == pytest.approx(
+        zeros, rel=None, abs=1e-6
+    )
+
+
+@pytest.mark.parametrize("unused_parameter", range(n_tests))
+def test_find_zeros_float(unused_parameter):
+    """
+    test generating as list of zeros using float zeros
+    """
+    # create a list of up to 5 zeros beween x = a and b
+    a = -5
+    b = 5
+    n_zeros = randint(0, 5)
+    zeros = []
+    for _ in range(n_zeros):
+        new_int = randint(a, b) * random()
+        while any(
+            abs(existing_zero - new_int) < 0.1 for existing_zero in zeros
+        ):
+            new_int = randint(a, b) * random()
+        zeros.append(new_int)
+    # create a polynomial with these zeros
+    poly = Polynome({0: 1})
+    for z in zeros:
+        poly *= Polynome({1: 1, 0: -z})  # (x - z)
+    zeros.sort()  # sort the list of zeros
+
+    assert poly.find_zeros([a - 1, b + 1]) == pytest.approx(
+        zeros, rel=None, abs=1e-6
+    )

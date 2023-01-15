@@ -1,6 +1,7 @@
 # test Polynome class, which also tests the LinearCombination class
 import pytest
 from random import sample, randint
+from util.mathbasic import Fraction
 from util.fvscheme import Kernel
 from util.polynome import Lagrange
 
@@ -92,3 +93,33 @@ def test_zero_diff(unused_parameter):
     """
     lagrange = random_Lagrange()
     assert lagrange.zero() - lagrange == -lagrange
+
+
+def test_eval_true():
+    """
+    (-x^3 + 8x^2 - 12x) / 16 has (1, -5 / 16) and (3, 9 / 16)
+    test true division
+    """
+    polynome = Lagrange(coeffs={3: -1, 2: 8, 1: -12}, denominator=16)
+    assert polynome.eval(1, "true") == -0.3125
+    assert polynome.eval(3) == 0.5625
+
+
+def test_eval_floor():
+    """
+    (-x^3 + 8x^2 - 12x) / 16 has (1, -5 / 16) and (3, 9 / 16)
+    test floor division
+    """
+    polynome = Lagrange(coeffs={3: -1, 2: 8, 1: -12}, denominator=16)
+    assert polynome.eval(1, "floor") == -1
+    assert polynome.eval(3, "floor") == 0
+
+
+def test_eval_fraction():
+    """
+    (-x^3 + 8x^2 - 12x) / 16 has (1, -5 / 16) and (3, 9 / 16)
+    test fraction division
+    """
+    polynome = Lagrange(coeffs={3: -1, 2: 8, 1: -12}, denominator=16)
+    assert polynome.eval(1, "fraction") == -Fraction(5, 16)
+    assert polynome.eval(3, "fraction") == Fraction(9, 16)
