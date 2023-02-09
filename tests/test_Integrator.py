@@ -48,4 +48,4 @@ def test_damped_oscillator(unused_parameter):
     dho.rk4()
 
     # compare
-    assert dho.u[0, -1] == pytest.approx(analytical_solution(t[-1]))
+    assert dho.u[-1][0] == pytest.approx(analytical_solution(t[-1]))
