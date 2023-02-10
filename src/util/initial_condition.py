@@ -2,7 +2,7 @@ import numpy as np
 import math
 
 
-def initial_condition(x, ic_type):
+def initial_condition1D(x, ic_type):
     # initial values of u
     if ic_type == "sinus":
         u0 = np.cos(2 * math.pi * x)
@@ -55,3 +55,8 @@ def initial_condition(x, ic_type):
                     )
                 )
     return u0
+
+
+def initial_condition2D(x, ic_type):
+    if ic_type == "sinus":
+        return np.array([[np.cos(2 * math.pi * i) for i in x] for j in x])

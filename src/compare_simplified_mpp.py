@@ -32,7 +32,7 @@ u0 = initial_condition(x, ic_type)
 # solution
 order = 7
 C_high = 1.1
-C_low = 0.049
+C_low = 0.5  # 0.049
 
 # classic mpp, high courant
 print("classic mpp, high courant\n")
@@ -78,7 +78,7 @@ print(f"mpp lite solved in {lite_time_low} seconds\n")
 plt.plot(x, u0, label="initial condition")
 plt.plot(
     x,
-    solution_high.u[:, -1],
+    solution_high.u[-1],
     "-",
     marker="o",
     mfc="none",
@@ -89,7 +89,7 @@ plt.plot(
 )
 plt.plot(
     x,
-    solution_lite_high.u[:, -1],
+    solution_lite_high.u[-1],
     "--",
     marker="o",
     mfc="none",
@@ -100,7 +100,7 @@ plt.plot(
 )
 plt.plot(
     x,
-    solution_low.u[:, -1],
+    solution_low.u[-1],
     "-",
     marker="o",
     mfc="none",
@@ -111,7 +111,7 @@ plt.plot(
 )
 plt.plot(
     x,
-    solution_lite_low.u[:, -1],
+    solution_lite_low.u[-1],
     "--",
     marker="o",
     mfc="none",

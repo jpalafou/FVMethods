@@ -71,6 +71,23 @@ class Integrator:
                 self.u[i] + (1 / 6) * (k0 + 2 * k1 + 2 * k2 + k3) * dt
             )
 
+    def rkn(self, n):
+        """
+        euler and rk2-4 integration
+        """
+        if not isinstance(n, int) or n < 1 or n > 4:
+            raise BaseException(
+                f"runge-kutta integration of order {n} not supported"
+            )
+        if n == 1:
+            self.euler()
+        elif n == 2:
+            self.rk2()
+        elif n == 3:
+            self.rk3()
+        elif n == 4:
+            self.rk4()
+
     def ssp_rk2(self):
         """
         2nd order strong stability preserving Runge-Kutta integrator

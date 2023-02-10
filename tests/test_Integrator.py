@@ -49,3 +49,6 @@ def test_damped_oscillator(unused_parameter):
 
     # compare
     assert dho.u[-1][0] == pytest.approx(analytical_solution(t[-1]))
+
+
+# need a test for 2D space

@@ -5,11 +5,40 @@ from util.advection import (
     AdvectionSolver_minmod,
     AdvectionSolver_nOrder_MPP,
 )
+from util.initial_condition import initial_condition1D
 
 # inputs
 a = 1  # tranpsort speed
 x_bounds = [0, 1]  # spatial domain
 T = 2  # solving time
+
+
+@pytest.mark.parametrize("advection_speed", [1, -1])
+def test_periodic_solution_nolimiter(advection_speed):
+    """
+    one period of avection should match the initial condition
+    half a period shouldn't
+    do this for a and -a
+    """
+    h = 0.01
+    # x array
+    x_interface = np.arange(x_bounds[0], x_bounds[1] + h, h)
+    x = 0.5 * (x_interface[:-1] + x_interface[1:])  # x at cell centers
+    # time array
+    Dt = 0.5 * h / a
+    t = np.arange(0, 1 + Dt, Dt)
+
+    # initial conditions (square)
+    u0 = initial_condition1D(x, "sinus")
+
+    # solution
+    nolimiter_solution = AdvectionSolver(
+        u0=u0, t=t, h=h, a=advection_speed, order=4
+    )
+    nolimiter_solution.rk4()
+    nolimiter = nolimiter_solution.u
+    assert nolimiter[-1] == pytest.approx(u0, rel=1e-6, abs=1e-3)
+    assert nolimiter[int(len(t) / 2)] != pytest.approx(u0, rel=1e-6, abs=1e-3)
 
 
 def test_conservation_nolimiter():
@@ -31,10 +60,10 @@ def test_conservation_nolimiter():
     )
 
     # solution
-    nolimiter_solution = AdvectionSolver(u0=u0, t=t, h=h, a=a, order=3)
-    nolimiter_solution.rk3()
-    nolimiter = nolimiter_solution.u
-    assert np.trapz(nolimiter[:, -1], x) == pytest.approx(0.5)
+    minmod_solution = AdvectionSolver_minmod(u0=u0, t=t, h=h, a=a)
+    minmod_solution.euler()
+    minmod = minmod_solution.u
+    assert np.trapz(minmod[-1], x) == pytest.approx(0.5)
 
 
 def test_conservation_minmod():
@@ -59,7 +88,7 @@ def test_conservation_minmod():
     minmod_solution = AdvectionSolver_minmod(u0=u0, t=t, h=h, a=a)
     minmod_solution.euler()
     minmod = minmod_solution.u
-    assert np.trapz(minmod[:, -1], x) == pytest.approx(0.5)
+    assert np.trapz(minmod[-1], x) == pytest.approx(0.5)
 
 
 def test_conservation_mpp():
@@ -84,7 +113,7 @@ def test_conservation_mpp():
     mpp_solution = AdvectionSolver_nOrder_MPP(u0=u0, t=t, h=h, a=a, order=3)
     mpp_solution.ssp_rk3()
     mpp = mpp_solution.u
-    assert np.trapz(mpp[:, -1], x) == pytest.approx(0.5)
+    assert np.trapz(mpp[-1], x) == pytest.approx(0.5)
 
 
 def test_minmod_monotonicity_preservation():
@@ -117,9 +146,9 @@ def test_minmod_monotonicity_preservation():
     # monotonicity is tested near the left half of the square
     test_region = [i for i in range(len(x)) if x[i] > 0.05 and x[i] < 0.45]
     assert not all(
-        [nolimiter[i + 1, -1] - nolimiter[i, -1] > 0 for i in test_region]
+        [nolimiter[-1][i + 1] - nolimiter[-1][i] > 0 for i in test_region]
     )
-    assert all([minmod[i + 1, -1] - minmod[i, -1] > 0 for i in test_region])
+    assert all([minmod[-1][i + 1] - minmod[-1][i] > 0 for i in test_region])
 
 
 def test_maxmimum_principle_preservation():
@@ -152,7 +181,7 @@ def test_maxmimum_principle_preservation():
     nompp_solution.ssp_rk3()
     nompp = nompp_solution.u
 
-    assert all([mpp[i, -1] > 0 and mpp[i, -1] < 1 for i in range(len(x))])
+    assert all([mpp[-1][i] > 0 and mpp[-1][i] < 1 for i in range(len(x))])
     assert not all(
-        [nompp[i, -1] > 0 and nompp[i, -1] < 1 for i in range(len(x))]
+        [nompp[-1][i] > 0 and nompp[-1][i] < 1 for i in range(len(x))]
     )

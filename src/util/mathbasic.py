@@ -1,4 +1,5 @@
 import dataclasses
+import numpy as np
 
 
 def fact(n):
@@ -38,6 +39,27 @@ def lcm(a: int, b: int) -> int:
     if all(isinstance(i, int) for i in [a, b]):
         return a * b // gcf([a, b])
     raise TypeError("Input is not a pair of integers.")
+
+
+def l1_norm(x):
+    """
+    l1 norm divided by length of vector
+    """
+    return sum([np.abs(i) for i in x]) / len(x)
+
+
+def l2_norm(x):
+    """
+    l2 norm divided by length of vector before square root
+    """
+    return np.sqrt(sum([i**2 for i in x]) / len(x))
+
+
+def linf_norm(x):
+    """
+    l infinity norm (max)
+    """
+    return max(np.abs(x))
 
 
 @dataclasses.dataclass

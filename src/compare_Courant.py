@@ -47,7 +47,7 @@ for i in range(len(Cs)):
     solutions[i].ssp_rk3()
     plt.plot(
         x,
-        solutions[i].u[:, -1],
+        solutions[i].u[-1],
         "-",
         marker="o",
         mfc="none",
@@ -56,7 +56,7 @@ for i in range(len(Cs)):
     solutions_rk4[i].rk4()
     plt.plot(
         x,
-        solutions_rk4[i].u[:, -1],
+        solutions_rk4[i].u[-1],
         "--",
         marker="o",
         mfc="none",
