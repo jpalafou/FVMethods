@@ -113,3 +113,11 @@ class Integrator:
             x2 = (3 / 4) * x0 + (1 / 4) * (x1 + k1 * dt)
             k2 = self.udot(x2, self.t[i])
             self.u[i + 1] = (1 / 3) * x0 + (2 / 3) * (x2 + k2 * dt)
+
+
+def rk4_Dt_adjust(h, L, spatial_order):
+    """
+    how much do we need to reduce Dt for rk4 to preserve a given order
+    of accuracy
+    """
+    return (h / L) ** ((spatial_order - 4) / 4)

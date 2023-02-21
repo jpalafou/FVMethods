@@ -1,11 +1,11 @@
 import pytest
 import numpy as np
-from util.advection import (
+from util.advection1d import (
     AdvectionSolver,
     AdvectionSolver_minmod,
     AdvectionSolver_nOrder_MPP,
 )
-from util.initial_condition import initial_condition1D
+from util.initial_condition import initial_condition1d
 
 # inputs
 a = 1  # tranpsort speed
@@ -29,7 +29,7 @@ def test_periodic_solution_nolimiter(advection_speed):
     t = np.arange(0, 1 + Dt, Dt)
 
     # initial conditions (square)
-    u0 = initial_condition1D(x, "sinus")
+    u0 = initial_condition1d(x, "sinus")
 
     # solution
     nolimiter_solution = AdvectionSolver(

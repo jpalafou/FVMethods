@@ -4,7 +4,7 @@ from util.integrate import Integrator
 from util.fvscheme import ConservativeInterpolation
 
 
-class AdvectionSolver2D(Integrator):
+class AdvectionSolver(Integrator):
     """
     uses polynomial reconstruction of arbitrary order
     no limiter
@@ -37,6 +37,10 @@ class AdvectionSolver2D(Integrator):
         self.left_interface_stensil = (
             left_interface_stensil_original.nparray().reshape(-1, 1, 1)
         )
+        assert sum(self.left_interface_stensil) == sum(
+            self.right_interface_stensil
+        )
+        self._stensil_sum = sum(self.left_interface_stensil)
         # number of kernel cells from center referenced by a scheme
         # symmetry is assumed
         self._k = max(right_interface_stensil_original.coeffs.keys())
@@ -99,39 +103,43 @@ class AdvectionSolver2D(Integrator):
             ew.append(ubarbar_extended[:, i:right_ind])
         NS = np.asarray(ns)
         EW = np.asarray(ew)
-        ubar_north = sum(NS * self.left_interface_stensil) / sum(
-            self.left_interface_stensil
-        )
-        ubar_south = sum(NS * self.right_interface_stensil) / sum(
-            self.right_interface_stensil
-        )
-        ubar_east = sum(EW * self.right_interface_stensil) / sum(
-            self.right_interface_stensil
-        )
-        ubar_west = sum(EW * self.left_interface_stensil) / sum(
-            self.left_interface_stensil
-        )
-
-        Delta_u_NS = np.zeros((n, n))
-        Delta_u_EW = np.zeros((n, n))
-        for i in range(n):
-            for j in range(n):
-                Delta_u_NS[i] = self.reimann(
+        ubar_north = sum(NS * self.left_interface_stensil) / self._stensil_sum
+        ubar_south = sum(NS * self.right_interface_stensil) / self._stensil_sum
+        ubar_east = sum(EW * self.right_interface_stensil) / self._stensil_sum
+        ubar_west = sum(EW * self.left_interface_stensil) / self._stensil_sum
+        # evaluation arrays have excess ghost information and must be
+        # chopped
+        chop = self._gw - 1
+        anti_chop = -chop
+        if chop > 0:
+            ubar_north = ubar_north[:, chop:anti_chop]
+            ubar_south = ubar_south[:, chop:anti_chop]
+            ubar_east = ubar_east[chop:anti_chop, :]
+            ubar_west = ubar_west[chop:anti_chop, :]
+        # initialize empty difference arrays
+        Delta_ubar_NS = np.zeros((n, n))
+        Delta_ubar_EW = np.zeros((n, n))
+        for i in range(1, n + 1):
+            for j in range(1, n + 1):
+                Delta_ubar_NS[i - 1, j - 1] = self.reimann(
                     self.b,
-                    ubar_north[i + gw, j + gw],
-                    ubar_south[i + gw - 1, j + gw],
+                    ubar_north[i, j],
+                    ubar_south[i - 1, j],
                 ) - self.reimann(
                     self.b,
-                    ubar_north[i + gw + 1, j + gw],
-                    ubar_south[i + gw, j + gw],
+                    ubar_north[i + 1, j],
+                    ubar_south[i, j],
                 )
-                Delta_u_EW[i] = self.reimann(
+                Delta_ubar_EW[i - 1, j - 1] = self.reimann(
                     self.a,
-                    ubar_east[i + gw, j + gw],
-                    ubar_west[i + gw, j + gw + 1],
+                    ubar_east[i, j],
+                    ubar_west[i, j + 1],
                 ) - self.reimann(
                     self.a,
-                    ubar_east[i + gw, j + gw - 1],
-                    ubar_west[i + gw, j + gw],
+                    ubar_east[i, j - 1],
+                    ubar_west[i, j],
                 )
-        return -(self.b / self.h) * Delta_u_NS - (self.a / self.h) * Delta_u_EW
+        return (
+            -(self.a / self.h) * Delta_ubar_EW
+            - (self.b / self.h) * Delta_ubar_NS
+        )

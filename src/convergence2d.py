@@ -1,30 +1,25 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from csv import writer
-from util.mathbasic import l1_norm, l2_norm, linf_norm
-from util.initial_condition import initial_condition1d
 from util.integrate import rk4_Dt_adjust
-from util.advection1d import (
-    AdvectionSolver,
-    AdvectionSolver_nOrder_MPP,
-    AdvectionSolver_nOrder_MPP_lite,
-)
+from util.initial_condition import initial_condition2d
+import util.advection2d as advection2d
 
 
 # inputs
 ic_type = "sinus"  # initial condition type
-a = 1  # tranpsort speed
+a = [1, 1]  # tranpsort speed
 x_bounds = [0, 1]  # spatial domain
 T = 2  # solving time
 
 # admin
 plot_path = "figures/"
 data_path = "data/"
-project_name = "error_convergence_1d_advection"
+project_name = "error_convergence_2d_advection"
 
 # configurations
 global_configs = {
-    "mesh sizes": [20, 40, 80, 160, 320, 640],
+    "mesh sizes": [16, 32, 64],
     "error norm": "l1",
     "solution scheme": "no limiter",
     "courant factor": 0.5,
@@ -60,24 +55,6 @@ solution_configs = [
         "courant factor": 0.5,
         "solution scheme": "mpp",
     },
-    {
-        "spatial order": 6,
-        "time order": 6,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
-    },
-    {
-        "spatial order": 7,
-        "time order": 7,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
-    },
-    {
-        "spatial order": 8,
-        "time order": 8,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
-    },
 ]
 
 
@@ -110,7 +87,7 @@ with open(data_path + project_name + ".csv", "w+") as f_object:
 # start plot
 plt.figure(figsize=(12, 8))
 # initialize index for forming triangles
-triangle_index = 2
+triangle_index = 1
 h_list = [
     (x_bounds[1] - x_bounds[0]) / n for n in global_configs["mesh sizes"]
 ]
@@ -133,7 +110,7 @@ for config in solution_configs:
         # time vector
         time_step_adjustment_label = ""
         rkorder = config["time order"]
-        Dt = config["courant factor"] * h / np.abs(a)
+        Dt = config["courant factor"] * h / max(np.abs(a))
         if config["time order"] > 4:
             rkorder = 4
             time_step_adjustment = rk4_Dt_adjust(
@@ -146,19 +123,11 @@ for config in solution_configs:
         n_time = int(np.ceil(T / Dt))
         t = np.linspace(0, T, num=n_time)
         # initial condition
-        u0 = initial_condition1d(x, ic_type)
+        u0 = initial_condition2d(x, ic_type)
         # set up solution
         if config["solution scheme"] == "no limiter":
-            solution = AdvectionSolver(
-                u0=u0, t=t, h=h, a=a, order=config["spatial order"]
-            )
-        elif config["solution scheme"] == "mpp":
-            solution = AdvectionSolver_nOrder_MPP(
-                u0=u0, t=t, h=h, a=a, order=config["spatial order"]
-            )
-        elif config["solution scheme"] == "mpp lite":
-            solution = AdvectionSolver_nOrder_MPP_lite(
-                u0=u0, t=t, h=h, a=a, order=config["spatial order"]
+            solution = advection2d.AdvectionSolver(
+                u0=u0, t=t, h=h, a=a[0], b=a[1], order=config["spatial order"]
             )
         else:
             raise BaseException(
@@ -168,11 +137,7 @@ for config in solution_configs:
         solution.rkn(rkorder)
         # find error
         if global_configs["error norm"] == "l1":
-            error = l1_norm(solution.u[-1] - u0)
-        elif global_configs["error norm"] == "l2":
-            error = l2_norm(solution.u[-1] - u0)
-        elif global_configs["error norm"] == "linf":
-            error = linf_norm(solution.u[-1] - u0)
+            error = np.sum(np.abs((solution.u[-1] - u0))) / u0.size
         else:
             raise BaseException(
                 f"invalid error norm {global_configs['error norm']}"
@@ -202,8 +167,8 @@ for config in solution_configs:
             [h_list[triangle_index], h_list[triangle_index - 1]],
             [errors[triangle_index], errors[triangle_index - 1]],
         )
-        if triangle_index == len(h_list) - 3:
-            triangle_index = 2
+        if triangle_index == len(h_list) - 1:
+            triangle_index = 1
         else:
             triangle_index += 1
 
