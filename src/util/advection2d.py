@@ -14,14 +14,19 @@ class AdvectionSolver(Integrator):
         self,
         u0: np.ndarray,
         t: np.ndarray,
-        h: float,
+        x: np.ndarray,
+        y: np.ndarray,
         a: float,
         b: float,
         order: int = 1,
         bc_type: str = "periodic",
     ):
         super().__init__(u0, t)
-        self.h = h  # mesh size
+        self.x = x  # x array
+        self.y = y  # y array
+        # check dimensions of u0, x, and y
+        if u0.shape != (len(y), len(x)):
+            raise BaseException("u0 dimensions do not match spatial domain")
         self.a = a  # horizontal velocity
         self.b = b  # vertical velocity
         # devise a scheme for reconstructed values at cell interfaces
@@ -47,6 +52,9 @@ class AdvectionSolver(Integrator):
         # number of ghost cells on either side of the extended state vector
         self._gw = self._k + 1
         self.bc_type = bc_type  # type of boudnary condition
+        # assume single mesh size in each direction FOR NOW ...
+        self.h_x = (x[-1] - x[0]) / (len(x) - 1)
+        self.h_y = (y[0] - y[-1]) / (len(y) - 1)
 
     def apply_bc(self, ubarbar_extended: np.ndarray):
         if self.bc_type == "periodic":
@@ -84,10 +92,10 @@ class AdvectionSolver(Integrator):
 
     def udot(self, u: np.ndarray, t_i: float) -> np.ndarray:
         # construct an extended array with ghost zones and apply bc
-        n = len(u)
+        n_y, n_x = u.shape
         gw = self._gw
         antigw = -self._gw
-        ubarbar_extended = np.zeros((n + 2 * gw, n + 2 * gw))
+        ubarbar_extended = np.zeros((n_y + 2 * gw, n_x + 2 * gw))
         ubarbar_extended[gw:antigw, gw:antigw] = u
         self.apply_bc(ubarbar_extended)
         # construct an array of staggered state arrays such that a 3D
@@ -98,8 +106,9 @@ class AdvectionSolver(Integrator):
         ew = []
         stensil_length = 2 * self._k + 1
         for i in range(stensil_length):
-            right_ind = i + n + 2
-            ns.append(ubarbar_extended[i:right_ind, :])
+            top_ind = i + n_y + 2
+            right_ind = i + n_x + 2
+            ns.append(ubarbar_extended[i:top_ind, :])
             ew.append(ubarbar_extended[:, i:right_ind])
         NS = np.asarray(ns)
         EW = np.asarray(ew)
@@ -117,10 +126,10 @@ class AdvectionSolver(Integrator):
             ubar_east = ubar_east[chop:anti_chop, :]
             ubar_west = ubar_west[chop:anti_chop, :]
         # initialize empty difference arrays
-        Delta_ubar_NS = np.zeros((n, n))
-        Delta_ubar_EW = np.zeros((n, n))
-        for i in range(1, n + 1):
-            for j in range(1, n + 1):
+        Delta_ubar_NS = np.zeros((n_y, n_x))
+        Delta_ubar_EW = np.zeros((n_y, n_x))
+        for i in range(1, n_y + 1):
+            for j in range(1, n_x + 1):
                 Delta_ubar_NS[i - 1, j - 1] = self.reimann(
                     self.b,
                     ubar_north[i, j],
@@ -140,6 +149,7 @@ class AdvectionSolver(Integrator):
                     ubar_west[i, j],
                 )
         return (
-            -(self.a / self.h) * Delta_ubar_EW
-            - (self.b / self.h) * Delta_ubar_NS
+            -(self.a / self.h_x) * Delta_ubar_EW
+            - (self.b / self.h_y) * Delta_ubar_NS
         )
+        # return -(dt / (self.h_x * self.h_y)) * (self.a * Delta_ubar_EW + self.b * Delta_ubar_NS)

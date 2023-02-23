@@ -57,12 +57,12 @@ def initial_condition1d(x, ic_type):
     return u0
 
 
-def initial_condition2d(x, ic_type):
+def initial_condition2d(x, y, ic_type):
     if ic_type == "sinus":
         return -np.array(
             [
                 [np.cos(2 * math.pi * i) + np.cos(2 * math.pi * j) for i in x]
-                for j in x
+                for j in y
             ]
         )
     elif ic_type == "square":
@@ -74,6 +74,7 @@ def initial_condition2d(x, ic_type):
                     else 0
                     for i in x
                 ]
-                for j in x
+                for j in y
             ]
         )
+

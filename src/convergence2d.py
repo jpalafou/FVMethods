@@ -107,6 +107,7 @@ for config in solution_configs:
         x_interface = np.linspace(x_bounds[0], x_bounds[1], num=n + 1)
         x = 0.5 * (x_interface[:-1] + x_interface[1:])  # x at cell centers
         h = (x_bounds[1] - x_bounds[0]) / n
+        y = np.flip(x)
         # time vector
         time_step_adjustment_label = ""
         rkorder = config["time order"]
@@ -123,11 +124,11 @@ for config in solution_configs:
         n_time = int(np.ceil(T / Dt))
         t = np.linspace(0, T, num=n_time)
         # initial condition
-        u0 = initial_condition2d(x, ic_type)
+        u0 = initial_condition2d(x, y, ic_type)
         # set up solution
         if config["solution scheme"] == "no limiter":
             solution = advection2d.AdvectionSolver(
-                u0=u0, t=t, h=h, a=a[0], b=a[1], order=config["spatial order"]
+                u0=u0, t=t, x=x, y=y, a=a[0], b=a[1], order=config["spatial order"]
             )
         else:
             raise BaseException(
