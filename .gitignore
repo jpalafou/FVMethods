@@ -1,9 +1,13 @@
-# Byte-compiled / optimized / DLL files
+# pytest / cache
 */__pycache__/*
 *.py[cod]
+*.pytest_cache
 
 # C extensions
 *.so
+
+# DS store
+*.DS_Store
 
 # Distribution / packaging
 bin/
