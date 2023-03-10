@@ -143,7 +143,10 @@ class ConservativeInterpolation(LinearCombinationOfFractions):
 
     @classmethod
     def construct_from_order(
-        cls, order: int = 1, reconstruct_here: str = "right"
+        cls,
+        order: int = 1,
+        reconstruct_here: str = "right",
+        printupdate: str = False,
     ):
         """
         generate a stensil to evaluate a kernel at x = reconstruct_here
@@ -168,10 +171,11 @@ class ConservativeInterpolation(LinearCombinationOfFractions):
                     elif isinstance(reconstruct_here, float):
                         coeffs[int(row[0])] = float(row[1])
                 interface_scheme = cls(coeffs)
-            print(
-                f"Read a {reconstruct_here} interface reconstruction scheme "
-                f"of order {order} from {save_path}\n"
-            )
+            if printupdate:
+                print(
+                    f"Read a {reconstruct_here} interface reconstruction"
+                    f" scheme of order {order} from {save_path}\n"
+                )
         else:
             if order % 2 != 0:  # odd order
                 kern = Kernel(order // 2, order // 2)

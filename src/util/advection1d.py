@@ -1,10 +1,12 @@
 # advection solution schems
 import numpy as np
+from util.initial_condition import initial_condition1d
 from util.polynome import Polynome
-from util.integrate import Integrator
+from util.integrate import Integrator, rk4_Dt_adjust
 from util.fvscheme import ConservativeInterpolation
 
 
+# class definition
 class AdvectionSolver(Integrator):
     """
     uses polynomial reconstruction of arbitrary order
@@ -13,17 +15,59 @@ class AdvectionSolver(Integrator):
 
     def __init__(
         self,
-        u0: np.ndarray,
-        t: np.ndarray,
-        h: float,
-        a: float,
+        u0: np.ndarray = None,
+        u0_preset: str = "square",
+        n: int = 32,
+        x: tuple = (0, 1),
+        T: float = 2,
+        a: float = 1,
+        courant: float = 0.5,
         order: int = 1,
         bc_type: str = "periodic",
     ):
-        super().__init__(u0, t)
-        self.h = h  # mesh size
-        self.a = a  # velocity field
-        # devise a scheme for reconstructed values at cell interfaces
+        self.a = a
+        self.order = order
+
+        # spatial discretization
+        self.n = n
+        self.x_interface = np.linspace(x[0], x[1], num=n + 1)
+        self.x = 0.5 * (
+            self.x_interface[:-1] + self.x_interface[1:]
+        )  # x at cell centers
+        self.h = (x[1] - x[0]) / n
+
+        # time discretization
+        self.courant = courant
+        if a:  # nonzero advection velocity
+            Dt = courant * self.h / np.abs(a)
+        else:
+            Dt = courant * self.h
+        time_step_adjustment = 1
+        if order > 4:
+            time_step_adjustment = rk4_Dt_adjust(self.h, x[1] - x[0], order)
+            print(
+                f"Decreasing timestep by a factor of"
+                f" {time_step_adjustment} to maintain order {order}"
+                " with rk4"
+            )
+            Dt = Dt * time_step_adjustment
+        n_time = int(np.ceil(T / Dt))
+        self.Dt = T / n_time
+        self.time_step_adjustment = time_step_adjustment
+        self.t = np.linspace(0, T, num=n_time)
+
+        # initial condition
+        if not u0:
+            self.u0 = initial_condition1d(self.x, u0_preset)
+        else:
+            if len(u0) != n:
+                raise BaseException(f"Invalid initial condition for size {n}")
+            self.u0 = u0
+
+        # initialize integrator
+        super().__init__(self.u0, self.t)
+
+        # stensil for reconstructed values at cell interfaces
         right_interface_stensil_original = (
             ConservativeInterpolation.construct_from_order(order, "right")
         )
@@ -34,8 +78,7 @@ class AdvectionSolver(Integrator):
             right_interface_stensil_original.nparray()
         )
         self.left_interface_stensil = left_interface_stensil_original.nparray()
-        # number of kernel cells from center referenced by a scheme
-        # symmetry is assumed
+        # number of kernel cells from center referenced by a symmetric scheme
         self._k = max(right_interface_stensil_original.coeffs.keys())
         # number of ghost cells on either side of the extended state vector
         self._gw = self._k + 1

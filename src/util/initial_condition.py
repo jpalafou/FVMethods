@@ -77,4 +77,3 @@ def initial_condition2d(x, y, ic_type):
                 for j in y
             ]
         )
-

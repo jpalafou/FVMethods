@@ -45,24 +45,24 @@ def compute_prediction(s: "simulator",U,dxU,dyU,dxUeq=np.zeros((10)),dyUeq=np.ze
     else:
         s.dm.dMt[0] = -dxU[1]-dyU[2]
         # s.dm.dMt[1] = (-dxU[0]*(0.5*(gamma-3)*U[1]**2+(1-gamma)*U[2]**2)/U[0]**2
-        #                   -dxU[1]*(3-gamma)*U[1]/U[0] 
+        #                   -dxU[1]*(3-gamma)*U[1]/U[0]
         #                   -dxU[2]*2*(gamma-1)*U[2]/U[0]
         #                   -dxU[3]*(gamma-1)
         #                   +dyU[0]*U[1]*U[2]/U[0]**2
         #                   -dyU[1]*U[2]/U[0]
         #                   -dyU[2]*U[1]/U[0])
         # s.dm.dMt[2] = (-dyU[0]*(0.5*(gamma-3)*U[2]**2+(1-gamma)*U[1]**2)/U[0]**2
-        #                   -dyU[1]*2*(gamma-1)*U[1]/U[0] 
+        #                   -dyU[1]*2*(gamma-1)*U[1]/U[0]
         #                   -dyU[2]*(3-gamma)*U[2]/U[0]
         #                   -dyU[3]*(gamma-1)
         #                   +dxU[0]*U[1]*U[2]/U[0]**2
         #                   -dxU[1]*U[2]/U[0]
         #                   -dxU[2]*U[1]/U[0])
-        # s.dm.dMt[3] = (-dxU[0]*U[1]*(-gamma*U[3]*U[0] + (gamma-1)*(U[1]**2+U[2]**2))/U[0]**3 
+        # s.dm.dMt[3] = (-dxU[0]*U[1]*(-gamma*U[3]*U[0] + (gamma-1)*(U[1]**2+U[2]**2))/U[0]**3
         #                   -dxU[1]*(gamma*U[3]/U[0] - 0.5*(gamma-1)*(3*U[1]**2+U[2]**2)/U[0]**2)
         #                   -dxU[2]*(1-gamma)*U[1]*U[2]/U[0]**2
         #                   -dxU[3]*gamma*U[1]/U[0]
-        #                   -dyU[0]*U[2]*(-gamma*U[3]*U[0] + (gamma-1)*(U[1]**2+U[2]**2))/U[0]**3 
+        #                   -dyU[0]*U[2]*(-gamma*U[3]*U[0] + (gamma-1)*(U[1]**2+U[2]**2))/U[0]**3
         #                   -dyU[1]*(1-gamma)*U[1]*U[2]/U[0]**2
         #                   -dyU[2]*(gamma*U[3]/U[0] - 0.5*(gamma-1)*(U[1]**2+3*U[2]**2)/U[0]**2)
         #                   -dyU[3]*gamma*U[2]/U[0])
@@ -82,7 +82,7 @@ def moncen(dU_L,dU_R,dx_L,dx_R,dx_M):
     dU_C = (dx_L*dU_L + dx_R*dU_R)/(dx_L+dx_R)
     slope = np.minimum(np.abs(2*dU_L*dx_L/dx_M),np.abs(2*dU_R*dx_R/dx_M))
     slope = np.sign(dU_C)*np.minimum(slope,np.abs(dU_C))
-    return np.where(dU_L*dU_R>=0,slope,0)     
+    return np.where(dU_L*dU_R>=0,slope,0)
 
 def compute_slopes_x(s,dU):
     na = np.newaxis
@@ -113,12 +113,12 @@ def compute_second_order_fluxes(s: "simulator", m: int):
     prims = s.fv_slopes == "primitives"
     s.dm.M_fv[...]  = 0
     if prims:
-        M_cv = s.dm.W_cv  
-    else: 
+        M_cv = s.dm.W_cv
+    else:
         M_cv = s.dm.U_cv
 
     s.dm.M_fv[:,2:-2,2:-2] = M_cv
-    
+
     if s.mhd:
         _bx_ = s._bx_
         _by_ = s._by_
@@ -131,7 +131,7 @@ def compute_second_order_fluxes(s: "simulator", m: int):
 
     dx_cv = (s.dm.x_cv[1:]-s.dm.x_cv[:-1])
     dy_cv = (s.dm.y_cv[1:]-s.dm.y_cv[:-1])
-    dx = (s.dm.x_fp[1: ]-s.dm.x_fp[:-1]) 
+    dx = (s.dm.x_fp[1: ]-s.dm.x_fp[:-1])
     dy = (s.dm.y_fp[1: ]-s.dm.y_fp[:-1])
 
     ########################
@@ -139,15 +139,15 @@ def compute_second_order_fluxes(s: "simulator", m: int):
     ########################
     fv.FV_Boundaries_x(s,perturbation=True,primitives=prims)
     dM = (s.dm.M_fv[:,:,1:] - s.dm.M_fv[:,:,:-1])/dx_cv[na,na,:]
-    s.dm.dMx[...] = compute_slopes_x(s,dM)    
-    Sx = 0.5*s.dm.dMx*dx[na,na,1:-1] #Slope_x*dx/2      
-                     
+    s.dm.dMx[...] = compute_slopes_x(s,dM)
+    Sx = 0.5*s.dm.dMx*dx[na,na,1:-1] #Slope_x*dx/2
+
     ########################
     # Y-Direction
     ########################
     fv.FV_Boundaries_y(s,perturbation=True,primitives=prims)
     dM = (s.dm.M_fv[:,1:,:] - s.dm.M_fv[:,:-1,:])/dy_cv[na,:,na]
-    s.dm.dMy[...] = compute_slopes_y(s,dM)                
+    s.dm.dMy[...] = compute_slopes_y(s,dM)
     Sy = 0.5*s.dm.dMy*dy[na,1:-1,na] #Slope_y*dy/2
 
     if s.mhd:
@@ -156,8 +156,8 @@ def compute_second_order_fluxes(s: "simulator", m: int):
         dxBy = (s.dm.By_fv[1:-1,1:] - s.dm.By_fv[1:-1,:-1])/dx_cv[na,:]
         dxBy = compute_slopes_x(s,dxBy[na,:,:])[0]
         dyBx = (s.dm.Bx_fv[1:,1:-1] - s.dm.Bx_fv[:-1,1:-1])/dy_cv[:,na]
-        dyBx = compute_slopes_y(s,dyBx[na,:,:])[0] 
-    
+        dyBx = compute_slopes_y(s,dyBx[na,:,:])[0]
+
     if s.use_predictor:
         dt = s.dt*s.dm.w_tp[m]
         if s.well_balance:
@@ -165,14 +165,14 @@ def compute_second_order_fluxes(s: "simulator", m: int):
             s.dm.M_fv += s.dm.M_eq_fv
             #dxMeq and dyMeq could be computed only once, but we are kind of limited by memory
             dxMeq = compute_slopes_x(s,(s.dm.M_eq_fv[:,:,1:] - s.dm.M_eq_fv[:,:,:-1])/dx_cv[na,na,:])
-            dyMeq = compute_slopes_y(s,(s.dm.M_eq_fv[:,1:,:] - s.dm.M_eq_fv[:,:-1,:])/dy_cv[na,:,na]) 
+            dyMeq = compute_slopes_y(s,(s.dm.M_eq_fv[:,1:,:] - s.dm.M_eq_fv[:,:-1,:])/dy_cv[na,:,na])
             compute_prediction(s,s.dm.M_fv[:,1:-1,1:-1],s.dm.dMx[:,1:-1,:],s.dm.dMy[:,:,1:-1],dxMeq[:,1:-1,:],dyMeq[:,:,1:-1])
             if s.potential:
                 s.dm.dMt[1] +=  ((s.dm.M_fv[0]-s.dm.M_eq_fv[0])/s.dm.M_fv[0]*s.dm.grad_phi_fv[0])[1:-1,1:-1]
                 s.dm.dMt[2] +=  ((s.dm.M_fv[0]-s.dm.M_eq_fv[0])/s.dm.M_fv[0]*s.dm.grad_phi_fv[1])[1:-1,1:-1]
         else:
             compute_prediction(s,s.dm.M_fv[:,1:-1,1:-1],s.dm.dMx[:,1:-1,:],s.dm.dMy[:,:,1:-1])
-        
+
         if s.mhd:
             #Corner point weighted averages
             Bx = ((s.dm.Bx_fv[1:,:]*dy[1:,na] + s.dm.Bx_fv[:-1,:]*dy[:-1,na])/(dy[1:,na]+dy[:-1,na]))
@@ -189,19 +189,19 @@ def compute_second_order_fluxes(s: "simulator", m: int):
             #We move (Bx,By)(t^n) ->(Bx,By)(t^n+1/2)
             s.dm.Bx_fv[1:-1,:] += 0.5*dt*(Ez[1: ,:]-Ez[:-1,:])/dy[1:-1,na]
             s.dm.By_fv[:,1:-1] -= 0.5*dt*(Ez[:,1: ]-Ez[:,:-1])/dx[na,1:-1]
-        
+
         if s.well_balance:
             #We move back to the perturbation
             s.dm.M_fv -= s.dm.M_eq_fv
-        #We move U(t^n) ->U(t^n+1/2)            
+        #We move U(t^n) ->U(t^n+1/2)
         s.dm.M_fv[:,1:-1,1:-1] += 0.5*s.dm.dMt*dt
 
 
     #UR = U - SlopeC*dx/2, UL = U + SlopeC*dx/2
-    s.dm.MR_face_x[...] = s.dm.M_fv[:,2:-2,2:-1] - Sx[:,2:-2,1: ] 
-    s.dm.ML_face_x[...] = s.dm.M_fv[:,2:-2,1:-2] + Sx[:,2:-2,:-1] 
-    s.dm.MR_face_y[...] = s.dm.M_fv[:,2:-1,2:-2] - Sy[:,1: ,2:-2] 
-    s.dm.ML_face_y[...] = s.dm.M_fv[:,1:-2,2:-2] + Sy[:,:-1,2:-2] 
+    s.dm.MR_face_x[...] = s.dm.M_fv[:,2:-2,2:-1] - Sx[:,2:-2,1: ]
+    s.dm.ML_face_x[...] = s.dm.M_fv[:,2:-2,1:-2] + Sx[:,2:-2,:-1]
+    s.dm.MR_face_y[...] = s.dm.M_fv[:,2:-1,2:-2] - Sy[:,1: ,2:-2]
+    s.dm.ML_face_y[...] = s.dm.M_fv[:,1:-2,2:-2] + Sy[:,:-1,2:-2]
 
     if s.complex_BC:
         s.dm.MR_face_x[:,:,1:-1]  = np.where(s.dm.c_BC_fv[na,:,1: ]-s.dm.c_BC_fv[na,:,:-1]<0, s.dm.ML_face_x[:,:,1:-1], s.dm.MR_face_x[:,:,1:-1])
@@ -219,26 +219,26 @@ def compute_second_order_fluxes(s: "simulator", m: int):
     if s.fv_safetynet and prims:
         M_re = [s.dm.MR_face_x,s.dm.ML_face_x,s.dm.MR_face_y,s.dm.ML_face_y]
         M_cv = [s.dm.M_fv[:,2:-2,2:-1],s.dm.M_fv[:,2:-2,1:-2],s.dm.M_fv[:,2:-1,2:-2],s.dm.M_fv[:,1:-2,2:-2]]
-        for i in range(4):    
+        for i in range(4):
             M_re[i][s._p_] = np.where(M_re[i][s._p_]>smallp,M_re[i][s._p_],smallp)
             M_re[i][0] = np.where(M_re[i][0]>smallr,M_re[i][0],M_cv[i][0])
 
     if s.mhd:
         fv.B_Boundaries(s)
         #We compute the cell centered values as the average of the face values, and then displace the values of the
-        #transversal components using the slopes at t^n  
-        By_cv = 0.5*(s.dm.By_fv[1:-2,:]+s.dm.By_fv[2:-1,:]) 
-        s.dm.MR_face_x[_by_,...] = By_cv[:,2:-1] - Sx[_by_,2:-2,1: ] 
-        s.dm.ML_face_x[_by_,...] = By_cv[:,1:-2] + Sx[_by_,2:-2,:-1] 
-        Bx_cv = 0.5*(s.dm.Bx_fv[:,1:-2]+s.dm.Bx_fv[:,2:-1]) 
-        s.dm.MR_face_y[_bx_,...] = Bx_cv[2:-1,:] - Sy[_bx_,1: ,2:-2] 
-        s.dm.ML_face_y[_bx_,...] = Bx_cv[1:-2,:] + Sy[_bx_,:-1,2:-2] 
-        
+        #transversal components using the slopes at t^n
+        By_cv = 0.5*(s.dm.By_fv[1:-2,:]+s.dm.By_fv[2:-1,:])
+        s.dm.MR_face_x[_by_,...] = By_cv[:,2:-1] - Sx[_by_,2:-2,1: ]
+        s.dm.ML_face_x[_by_,...] = By_cv[:,1:-2] + Sx[_by_,2:-2,:-1]
+        Bx_cv = 0.5*(s.dm.Bx_fv[:,1:-2]+s.dm.Bx_fv[:,2:-1])
+        s.dm.MR_face_y[_bx_,...] = Bx_cv[2:-1,:] - Sy[_bx_,1: ,2:-2]
+        s.dm.ML_face_y[_bx_,...] = Bx_cv[1:-2,:] + Sy[_bx_,:-1,2:-2]
+
         s.dm.MR_face_x[_bx_] = s.dm.ML_face_x[_bx_] = s.dm.Bx_fv[2:-2,1:-1]
         s.dm.MR_face_y[_by_] = s.dm.ML_face_y[_by_] = s.dm.By_fv[1:-1,2:-2]
-    
-    s.riemann_solver_FV(s, s.dm.ML_face_x, s.dm.MR_face_x, 1, 2,prims)  
-    s.riemann_solver_FV(s, s.dm.ML_face_y, s.dm.MR_face_y, 2, 1,prims)    
+
+    s.riemann_solver_FV(s, s.dm.ML_face_x, s.dm.MR_face_x, 1, 2,prims)
+    s.riemann_solver_FV(s, s.dm.ML_face_y, s.dm.MR_face_y, 2, 1,prims)
 
     if s.well_balance:
         #We compute the perturbation over the flux for conservative variables
@@ -256,16 +256,15 @@ def compute_second_order_fluxes(s: "simulator", m: int):
         if s.fv_safetynet and prims:
             M_re = [MBL,MTL,MBR,MTR]
             M_cv = [s.dm.M_fv[:,1:-2,1:-2],s.dm.M_fv[:,2:-1,1:-2],s.dm.M_fv[:,1:-2,2:-1],s.dm.M_fv[:,2:-1,2:-1]]
-            for i in range(4):    
+            for i in range(4):
                 M_re[i][s._p_] = np.where(M_re[i][s._p_]>smallp,M_re[i][s._p_],smallp)
                 M_re[i][0] = np.where(M_re[i][0]>smallr,M_re[i][0],M_cv[i][0])
-        
+
         Sx = 0.5*dxBy*dx[na,1:-1]
         ByR = s.dm.By_fv[1:-1,2:-1] - Sx[:,1: ]
         ByL = s.dm.By_fv[1:-1,1:-2] + Sx[:,:-1]
-        Sy = 0.5*dyBx*dy[1:-1,na] 
+        Sy = 0.5*dyBx*dy[1:-1,na]
         BxT = s.dm.Bx_fv[2:-1,1:-1] - Sy[1: ,:]
         BxB = s.dm.Bx_fv[1:-2,1:-1] + Sy[:-1,:]
 
         s.riemann_solver_FV_E(s,MBL,MTL,MBR,MTR,BxB,BxT,ByL,ByR,s.dm.Es,primitives=prims)
-        

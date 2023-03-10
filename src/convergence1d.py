@@ -2,81 +2,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 from csv import writer
 from util.mathbasic import l1_norm, l2_norm, linf_norm
-from util.initial_condition import initial_condition1d
-from util.integrate import rk4_Dt_adjust
 from util.advection1d import (
     AdvectionSolver,
     AdvectionSolver_nOrder_MPP,
     AdvectionSolver_nOrder_MPP_lite,
 )
 
-
-# inputs
-ic_type = "sinus"  # initial condition type
-a = 1  # tranpsort speed
-x_bounds = [0, 1]  # spatial domain
-T = 2  # solving time
-
-# admin
+# file locations
 plot_path = "figures/"
 data_path = "data/"
 project_name = "error_convergence_1d_advection"
 
 # configurations
-global_configs = {
-    "mesh sizes": [20, 40, 80, 160, 320, 640],
+global_config = {
+    "initial condition": "sinus",
+    "mesh sizes": [16, 32, 64, 128, 256],
     "error norm": "l1",
     "solution scheme": "no limiter",
     "courant factor": 0.5,
+    "advection velocity": 1,
+    "solution time": 2,
 }
 solution_configs = [
     {
-        "spatial order": 1,
-        "time order": 1,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
+        "order": 1,
     },
     {
-        "spatial order": 2,
-        "time order": 2,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
+        "order": 2,
     },
     {
-        "spatial order": 3,
-        "time order": 3,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
+        "order": 3,
     },
     {
-        "spatial order": 4,
-        "time order": 4,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
+        "order": 4,
     },
     {
-        "spatial order": 5,
-        "time order": 5,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
-    },
-    {
-        "spatial order": 6,
-        "time order": 6,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
-    },
-    {
-        "spatial order": 7,
-        "time order": 7,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
-    },
-    {
-        "spatial order": 8,
-        "time order": 8,
-        "courant factor": 0.5,
-        "solution scheme": "mpp",
+        "order": 5,
     },
 ]
 
@@ -107,100 +68,96 @@ with open(data_path + project_name + ".csv", "w+") as f_object:
     writer_object.writerow(["label", "h", "error"])
     f_object.close()
 
-# start plot
+# initialize plot
 plt.figure(figsize=(12, 8))
-# initialize index for forming triangles
-triangle_index = 2
-h_list = [
-    (x_bounds[1] - x_bounds[0]) / n for n in global_configs["mesh sizes"]
-]
+triangle_index = 2  # initialize index for forming triangles
 for config in solution_configs:
-    errors = []
-    for n in global_configs["mesh sizes"]:
+    h_list = []
+    error_list = []
+    for n in global_config["mesh sizes"]:
         # global config
-        for key in config.keys():
-            if key in global_configs.keys():
-                config[key] = global_configs[key]
+        for key in global_config.keys():
+            config[key] = global_config[key]
         # print update
+        print("- - - - -")
         for key, item in config.items():
             print(f"{key}: {item}")
         print(f"mesh size: {n}")
         print()
-        # array of x-values
-        x_interface = np.linspace(x_bounds[0], x_bounds[1], num=n + 1)
-        x = 0.5 * (x_interface[:-1] + x_interface[1:])  # x at cell centers
-        h = (x_bounds[1] - x_bounds[0]) / n
-        # time vector
-        time_step_adjustment_label = ""
-        rkorder = config["time order"]
-        Dt = config["courant factor"] * h / np.abs(a)
-        if config["time order"] > 4:
-            rkorder = 4
-            time_step_adjustment = rk4_Dt_adjust(
-                h, x_bounds[1] - x_bounds[0], config["spatial order"]
-            )
-            Dt = Dt * time_step_adjustment
-            time_step_adjustment_label = (
-                r" + $\Delta t$ * " + f"{round(time_step_adjustment, 5)}"
-            )
-        n_time = int(np.ceil(T / Dt))
-        t = np.linspace(0, T, num=n_time)
-        # initial condition
-        u0 = initial_condition1d(x, ic_type)
-        # set up solution
+        # define solution
         if config["solution scheme"] == "no limiter":
             solution = AdvectionSolver(
-                u0=u0, t=t, h=h, a=a, order=config["spatial order"]
+                u0_preset=config["initial condition"],
+                n=n,
+                T=config["solution time"],
+                a=config["advection velocity"],
+                courant=config["courant factor"],
+                order=config["order"],
             )
         elif config["solution scheme"] == "mpp":
             solution = AdvectionSolver_nOrder_MPP(
-                u0=u0, t=t, h=h, a=a, order=config["spatial order"]
+                u0_preset=config["initial condition"],
+                n=n,
+                T=config["solution time"],
+                a=config["advection velocity"],
+                courant=config["courant factor"],
+                order=config["order"],
             )
         elif config["solution scheme"] == "mpp lite":
             solution = AdvectionSolver_nOrder_MPP_lite(
-                u0=u0, t=t, h=h, a=a, order=config["spatial order"]
+                u0_preset=config["initial condition"],
+                n=n,
+                T=config["solution time"],
+                a=config["advection velocity"],
+                courant=config["courant factor"],
+                order=config["order"],
             )
         else:
             raise BaseException(
                 f"invalid solution scheme {config['solution scheme']}"
             )
         # time integration
-        solution.rkn(rkorder)
+        solution.rkn(config["order"])
         # find error
-        if global_configs["error norm"] == "l1":
-            error = l1_norm(solution.u[-1] - u0)
-        elif global_configs["error norm"] == "l2":
-            error = l2_norm(solution.u[-1] - u0)
-        elif global_configs["error norm"] == "linf":
-            error = linf_norm(solution.u[-1] - u0)
+        if config["error norm"] == "l1":
+            error = l1_norm(solution.u[-1] - solution.u[0])
+        elif config["error norm"] == "l2":
+            error = l2_norm(solution.u[-1] - solution.u[0])
+        elif config["error norm"] == "linf":
+            error = linf_norm(solution.u[-1] - solution.u[0])
         else:
-            raise BaseException(
-                f"invalid error norm {global_configs['error norm']}"
-            )
+            raise BaseException(f"invalid error norm {config['error norm']}")
         # append error to list of errors
-        errors.append(error)
+        h_list.append(solution.h)
+        error_list.append(error)
         # label generation
-        if rkorder == 1:
+        if config["order"] == 1:
             time_message = "euler"
+        elif config["order"] > 1 and config["order"] <= 4:
+            time_message = f"rk{config['order']}"
         else:
-            time_message = f"rk{rkorder}{time_step_adjustment_label}"
+            time_message = (
+                "rk4 + "
+                + r"$\Delta t$"
+                + f" * {round(solution.time_step_adjustment, 5)}"
+            )
         label = (
-            f"{config['solution scheme']} order {config['spatial order']}"
+            f"{config['solution scheme']} order {config['order']}"
             f" + {time_message}"
         )
         # data logging
         with open(data_path + project_name + ".csv", "a") as f_object:
             writer_object = writer(f_object)
-            writer_object.writerow([label, h, error])
+            writer_object.writerow([label, solution.h, error])
             f_object.close()
-    # plotting
+    # plottingc
     # plot the error on loglog
-    plt.loglog(h_list, errors, "-*", label=label)
+    plt.loglog(h_list, error_list, "-*", label=label)
     # if the order of the solution is even, give it a slope triangle
-    if config["spatial order"] % 2 == 0:
+    if config["order"] % 2 == 0:
         plot_slope_triangle(
             [h_list[triangle_index], h_list[triangle_index - 1]],
-            [errors[triangle_index], errors[triangle_index - 1]],
+            [error_list[triangle_index], error_list[triangle_index - 1]],
         )
         if triangle_index == len(h_list) - 3:
             triangle_index = 2
@@ -209,8 +166,10 @@ for config in solution_configs:
 
 # finish plot
 plt.xlabel(r"$h$")
-plt.ylabel(f"{global_configs['error norm']} " + r"$\epsilon$")
-C = global_configs["courant factor"]
+plt.ylabel(f"{global_config['error norm']} " + r"$\epsilon$")
+C = global_config["courant factor"]
+T = global_config["solution time"]
 plt.title(f"C = {C}, {T} orbits of advection")
 plt.legend()
 plt.savefig(plot_path + project_name + ".png", dpi=300)
+plt.show()
