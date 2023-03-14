@@ -37,6 +37,7 @@ def compute_prediction(s: "simulator",U,dxU,dyU,dxUeq=np.zeros((10)),dyUeq=np.ze
         # s.dm.dMt[_vx_] = -(U[_vx_]*dxU[_vx_]+(dxU[_p_]+By*dxBy+Bz*dxBz)/U[0]) - (U[_vy_]*dyU[_vx_]-By*dyBx/U[0])
         # s.dm.dMt[_vy_] = -(U[_vx_]*dxU[_vy_]-Bx*dxBy/U[0]) - (U[_vy_]*dyU[_vy_]+(dyU[_p_]+Bx*dyBx+Bz*dyBz)/U[0])
         if s.mhd:
+            ...
             # s.dm.dMt[3] =  -(U[_vx_]*dxU[_vz_]-Bx*dxBz/U[0]) - (U[_vy_]*dyU[_vz_]-By*dyBz/U[0])
             # s.dm.dMt[5] = 0
             # s.dm.dMt[6] = 0

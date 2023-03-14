@@ -59,21 +59,22 @@ def compute_W_min(W, dim):
     return compute_W_ex(W, dim, "min")
 
 
-# def minmod(SlopeL,SlopeR):
-#     #First compute ratio between slopes SlopeR/SlopeL
-#     #Then limit the ratio to be lower than 1
-#     #Finally, limit the ratio be positive and multiply by SlopeL to get the limited slope at the cell center
-#     #We use where instead of maximum/minimum as it doesn't propagte the NaNs caused when SlopeL=0
-#     ratio = SlopeR/SlopeL
-#     ratio = np.where(ratio<1,ratio,1)
-#     return np.where(ratio>0,ratio,0)*SlopeL
+def minmod(SlopeL,SlopeR):
+    #First compute ratio between slopes SlopeR/SlopeL
+    #Then limit the ratio to be lower than 1
+    #Finally, limit the ratio be positive and multiply by SlopeL to get the limited slope at the cell center
+    #We use where instead of maximum/minimum as it doesn't propagte the NaNs caused when SlopeL=0
+    ratio = SlopeR/SlopeL
+    ratio = np.where(ratio<1,ratio,1)
+    return np.where(ratio>0,ratio,0)*SlopeL
 
-# def moncen(dU_L,dU_R,dx_L,dx_R,dx_M):
-#     #Compute central slope
-#     dU_C = (dx_L*dU_L + dx_R*dU_R)/(dx_L+dx_R)
-#     slope = np.minimum(np.abs(2*dU_L*dx_L/dx_M),np.abs(2*dU_R*dx_R/dx_M))
-#     slope = np.sign(dU_C)*np.minimum(slope,np.abs(dU_C))
-#     return np.where(dU_L*dU_R>=0,slope,0)
+
+def moncen(dU_L,dU_R):
+    #Compute central slope
+    dU_C = 0.5*(dU_L + dU_R)
+    slope = np.minimum(np.abs(2*dU_L),np.abs(2*dU_R))
+    slope = np.sign(dU_C)*np.minimum(slope,np.abs(dU_C))
+    return np.where(dU_L*dU_R>=0,slope,0)
 
 # def compute_slopes_x(dU,limiter):
 #     na = np.newaxis

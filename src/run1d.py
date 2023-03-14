@@ -1,35 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from util.advection1d import (
-    AdvectionSolver,
-    AdvectionSolver_nOrder_MPP,
-    AdvectionSolver_nOrder_MPP_lite,
-)
+import warnings
+from util.advection1d import AdvectionSolver
+
+warnings.filterwarnings("ignore")
 
 # configurations
 global_config = {
-    "mesh sizes": [64],
-    "initial condition": "sinus",
+    "mesh sizes": [32],
+    "initial condition": "square",
     "courant factor": 0.5,
     "advection velocity": 1,
-    "solution time": 2,
-    "solution scheme": "no limiter",
+    "solution time": 1,
 }
 solution_configs = [
     {
-        "order": 1,
+        "order": 5,
+        "apriori limiting": "mpp",
     },
-    {
-        "order": 2,
-    },
-    {
-        "order": 3,
-    },
-    {
-        "order": 4,
-    },
+    {"order": 5, "apriori limiting": "mpp lite", "linetype": "o--"},
     {
         "order": 5,
+        "apriori limiting": None,
     },
 ]
 
@@ -52,42 +44,25 @@ for config in solution_configs:
         print(f"mesh size: {n}")
         print()
         # define solution
-        if config["solution scheme"] == "no limiter":
-            solution = AdvectionSolver(
-                u0_preset=config["initial condition"],
-                n=n,
-                T=config["solution time"],
-                a=config["advection velocity"],
-                courant=config["courant factor"],
-                order=config["order"],
-            )
-        elif config["solution scheme"] == "mpp":
-            solution = AdvectionSolver_nOrder_MPP(
-                u0_preset=config["initial condition"],
-                n=n,
-                T=config["solution time"],
-                a=config["advection velocity"],
-                courant=config["courant factor"],
-                order=config["order"],
-            )
-        elif config["solution scheme"] == "mpp lite":
-            solution = AdvectionSolver_nOrder_MPP_lite(
-                u0_preset=config["initial condition"],
-                n=n,
-                T=config["solution time"],
-                a=config["advection velocity"],
-                courant=config["courant factor"],
-                order=config["order"],
-            )
-        else:
-            raise BaseException(
-                f"invalid solution scheme {config['solution scheme']}"
-            )
+        solution = AdvectionSolver(
+            u0_preset=config["initial condition"],
+            n=n,
+            T=config["solution time"],
+            a=config["advection velocity"],
+            courant=config["courant factor"],
+            order=config["order"],
+            apriori=config["apriori limiting"],
+        )
         # time integration
         solution.rkn(config["order"])
         # errors
         print(
-            f"l1 error = {np.sum(np.abs(solution.u[-1] - solution.u[0])) / n}"
+            "l1 error = ",
+            f"{round(np.sum(np.abs(solution.u[-1] - solution.u[0])) / n, 5)}",
+        )
+        print(
+            f"final soluion min = {round(min(solution.u[-1]), 5)}, ",
+            f"max = {round(max(solution.u[-1]), 5)}",
         )
         # label generation
         if config["order"] == 1:
@@ -100,16 +75,19 @@ for config in solution_configs:
                 + r"$\Delta t$"
                 + f" * {round(solution.time_step_adjustment, 5)}"
             )
+        limiter_message = solution.apriori if solution.apriori else "no"
         label = (
-            f"{config['solution scheme']} order {config['order']}"
+            f"{limiter_message} limiter order {config['order']}"
             f" + {time_message}"
         )
         # plotting
+        linetype = "o-"
+        if "linetype" in config.keys():
+            linetype = config["linetype"]
         plt.plot(
             solution.x,
             solution.u[-1],
-            "-",
-            marker="o",
+            linetype,
             mfc="none",
             label=label,
         )
