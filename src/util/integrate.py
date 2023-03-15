@@ -147,19 +147,6 @@ class Integrator:
             self.logupdate(i)
             self.u0 = self.u1
 
-    def rkn(self, n):
-        """
-        euler and rk2-4 integration
-        """
-        if n == 1:
-            self.euler()
-        elif n == 2:
-            self.rk2()
-        elif n == 3:
-            self.rk3()
-        elif n >= 4:
-            self.rk4()
-
     def ssp_rk2(self):
         """
         2nd order strong stability preserving Runge-Kutta integrator

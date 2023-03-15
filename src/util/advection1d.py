@@ -27,10 +27,12 @@ class AdvectionSolver(Integrator):
         bc_type: str = "periodic",
         apriori: str = None,
         aposteriori: bool = False,
+        smooth_extrema: bool = False,
     ):
         self.order = order
         self.apriori = apriori
         self.aposteriori = aposteriori
+        self.smooth_extrema = smooth_extrema
 
         # spatial discretization
         self.n = n
@@ -211,6 +213,51 @@ class AdvectionSolver(Integrator):
         )
         return fluxes * velocities_at_boundaries
 
+    def detect_smooth_extrema(self, u: np.ndarray) -> np.ndarray:
+        dudx = (u[2:] - u[:-2]) / (2 * self.h)
+        left_difference = dudx[1:-1] - dudx[:-2]
+        right_difference = dudx[2:] - dudx[1:-1]
+        central_difference = 0.5 * (left_difference + right_difference)
+        alphaL = np.zeros(len(central_difference))
+        alphaL = np.where(
+            central_difference < 0,
+            np.minimum(
+                np.minimum(2 * left_difference, 0) / central_difference, 1
+            ),
+            alphaL,
+        )
+        alphaL = np.where(
+            central_difference > 0,
+            np.minimum(
+                np.maximum(2 * left_difference, 0) / central_difference, 1
+            ),
+            alphaL,
+        )
+        alphaR = np.zeros(len(central_difference))
+        alphaR = np.where(
+            central_difference < 0,
+            np.minimum(
+                np.minimum(2 * right_difference, 0) / central_difference, 1
+            ),
+            alphaR,
+        )
+        alphaR = np.where(
+            central_difference > 0,
+            np.minimum(
+                np.maximum(2 * right_difference, 0) / central_difference, 1
+            ),
+            alphaR,
+        )
+        alpha = np.minimum(alphaL, alphaR)
+        apply_here = np.where(
+            np.amin(np.array([alpha[2:], alpha[1:-1], alpha[:-2]]), axis=0)
+            < 1,
+            1,
+            0,
+        )
+        assert len(apply_here) == len(u) - 6
+        return apply_here
+
     def udot(self, u: np.ndarray, t_i: float) -> np.ndarray:
         ubar_extended = self.apply_bc(u, self._gw)
         list_of_windows = []
@@ -268,6 +315,11 @@ class AdvectionSolver(Integrator):
             theta_arg_m = np.abs(m - ubar_1gw) / np.abs(m_i - ubar_1gw)
             theta_i = np.where(theta_arg_M < theta_i, theta_arg_M, theta_i)
             theta_i = np.where(theta_arg_m < theta_i, theta_arg_m, theta_i)
+            if self.smooth_extrema:
+                ubar_4gw = self.apply_bc(u, 4)
+                theta_i = np.where(
+                    self.detect_smooth_extrema(ubar_4gw), theta_i, 1
+                )
         # slope limited interpolation at cell faces
         u_interface_right_tilda = (
             theta_i * (u_interface_right - ubar_1gw) + ubar_1gw
@@ -286,3 +338,16 @@ class AdvectionSolver(Integrator):
             u_interface_left_tilda[1:-1],
         )
         return -a_Delta_u / self.h
+
+    def rkorder(self):
+        """
+        rk integrate to an order that matches the spatial order
+        """
+        if self.order > 3:
+            self.rk4()
+        if self.order > 2:
+            self.rk3()
+        if self.order > 1:
+            self.rk2()
+        else:
+            self.euler()
