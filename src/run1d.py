@@ -10,8 +10,8 @@ global_config = {
     "mesh sizes": [32],
     "initial condition": "square",
     "courant factor": 0.5,
-    "advection velocity": 1,
     "solution time": 1,
+    "apriori limiting": None
 }
 solution_configs = [
     {
