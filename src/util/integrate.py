@@ -31,7 +31,6 @@ class Integrator:
         self.u0_initial = u0
         self.u0 = u0
         self.u1 = self.emptyu
-        self.aposteriori = aposteriori
 
     # helper functions
     @abc.abstractmethod
@@ -40,22 +39,6 @@ class Integrator:
         the state derivate at a given value of time
         """
         pass
-
-    @abc.abstractmethod
-    def posteriori_revision(
-        self, u0: np.ndarray, ucandidate: np.ndarray
-    ) -> np.ndarray:
-        """
-        perform a posteriori check on the solution
-        """
-        pass
-
-    def revise_the_candidate(self, u0: np.ndarray, ucandidate: np.ndarray):
-        """
-        perform a posteriori check on the solution
-        """
-        if self.aposteriori:
-            ucandidate = self.posteriori_revision(u0=u0, ucandidate=ucandidate)
 
     def findDt(self, i) -> float:
         return self.t[i + 1] - self.t[i]
@@ -68,6 +51,14 @@ class Integrator:
             self.u[self._ilog.index(i + 1)] = self.u1
 
     # integrators
+    def one_euler_step(self):
+        """
+        1st order forward Euler integrator
+        """
+        dt = self.findDt(0)
+        # one stage with posteriori check
+        self.u1 = self.u0 + dt * self.udot(self.u0, self.t[0])
+
     def euler(self):
         """
         1st order forward Euler integrator
@@ -76,7 +67,6 @@ class Integrator:
             dt = self.findDt(i)
             # one stage with posteriori check
             self.u1 = self.u0 + dt * self.udot(self.u0, self.t[i])
-            self.revise_the_candidate(self.u0, self.u1)
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
@@ -90,11 +80,9 @@ class Integrator:
             # first stage with posteriori check
             k0 = self.udot(self.u0, self.t[i])
             stage1 = self.u0 + dt * k0
-            self.revise_the_candidate(self.u0, stage1)
             # second stage with posteriori check
             k1 = self.udot(stage1, self.t[i] + dt)
             self.u1 = self.u0 + (1 / 2) * (k0 + k1) * dt
-            self.revise_the_candidate(self.u0, self.u1)
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
@@ -108,15 +96,12 @@ class Integrator:
             # first stage with posteriori check
             k0 = self.udot(self.u0, self.t[i])
             stage1 = self.u0 + (1 / 3) * dt * k0
-            self.revise_the_candidate(self.u0, stage1)
             # second stage with posteriori check
             k1 = self.udot(stage1, self.t[i] + (1 / 3) * dt)
             stage2 = self.u0 + (2 / 3) * dt * k1
-            self.revise_the_candidate(self.u0, stage2)
             # third stage with posteriori check
             k2 = self.udot(stage2, self.t[i] + (2 / 3) * dt)
             self.u1 = self.u0 + (1 / 4) * (k0 + 3 * k2) * dt
-            self.revise_the_candidate(self.u0, self.u1)
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
@@ -128,21 +113,17 @@ class Integrator:
         for i in range(len(self.t) - 1):
             dt = self.findDt(i)
             # first stage with posteriori check
-            k0 = self.udot(self.u0, self.t[i])
-            stage1 = self.u0 + dt * k0 / 2
-            self.revise_the_candidate(self.u0, stage1)
+            k1 = self.udot(self.u0, self.t[i], dt / 2)
+            stage1 = self.u0 + dt * k1 / 2
             # second stage with posteriori check
-            k1 = self.udot(stage1, self.t[i] + dt / 2)
-            stage2 = self.u0 + dt * k1 / 2
-            self.revise_the_candidate(self.u0, stage2)
+            k2 = self.udot(stage1, self.t[i] + dt / 2, dt / 2)
+            stage2 = self.u0 + dt * k2 / 2
             # third stage with posteriori check
-            k2 = self.udot(stage2, self.t[i] + dt / 2)
-            stage3 = self.u0 + dt * k2
-            self.revise_the_candidate(self.u0, stage3)
+            k3 = self.udot(stage2, self.t[i] + dt / 2, dt)
+            stage3 = self.u0 + dt * k3
             # fourth stage with posteriori check
-            k3 = self.udot(stage3, self.t[i] + dt)
-            self.u1 = self.u0 + (1 / 6) * (k0 + 2 * k1 + 2 * k2 + k3) * dt
-            self.revise_the_candidate(self.u0, self.u1)
+            k4 = self.udot(stage3, self.t[i] + dt, dt)
+            self.u1 = self.u0 + (1 / 6) * (k1 + 2 * k2 + 2 * k3 + k4) * dt
             # clean up
             self.logupdate(i)
             self.u0 = self.u1

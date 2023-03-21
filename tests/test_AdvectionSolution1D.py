@@ -54,7 +54,7 @@ def test_mpp_limiting(order):
     final solution should be bounded between 0 and 1 with mpp limitng
     """
     solution = AdvectionSolver(
-        order=order, apriori="mpp", u0_preset="square", T=10
+        order=order, apriori_limiting="mpp", u0_preset="square", T=10
     )
     solution.rkorder()
     assert [i > 0 and i < 1 for i in solution.u[-1]]

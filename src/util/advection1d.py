@@ -4,12 +4,14 @@ from util.initial_condition import initial_condition1d
 from util.polynome import Polynome
 from util.integrate import Integrator, rk4_Dt_adjust
 from util.fvscheme import ConservativeInterpolation
-from util.david.simple_trouble_detection import trouble_detection1d
+from util.david.simple_trouble_detection import (
+    trouble_detection1d,
+    compute_second_order_fluxes,
+)
 from util.mathbasic import l1_error, l2_error, max_error
 
 
 # class definition
-# OH YEAH MEGA ADVECTION CLASS TIME
 class AdvectionSolver(Integrator):
     """
     uses polynomial reconstruction of arbitrary order
@@ -27,16 +29,22 @@ class AdvectionSolver(Integrator):
         courant: float = 0.5,
         order: int = 1,
         bc_type: str = "periodic",
-        apriori: str = None,
-        aposteriori: bool = False,
-        smooth_extrema: bool = False,
-        loglen: int = 10,
+        apriori_limiting: str = None,
+        smooth_extrema_detection: bool = False,
+        aposteriori_limiting: bool = False,
+        loglen: int = 11,
         adujst_time_step: bool = False,
     ):
         self.order = order
-        self.apriori = apriori
-        self.smooth_extrema = smooth_extrema
+        self.apriori_limiting = apriori_limiting
+        self.smooth_extrema_detection = smooth_extrema_detection
+        self.aposteriori_limiting = aposteriori_limiting
         self.adujst_time_step = adujst_time_step
+        if apriori_limiting:
+            if apriori_limiting != "mpp" and apriori_limiting != "mpp lite":
+                raise BaseException(
+                    f"Invalid apriori limiting type: {apriori_limiting}"
+                )
 
         # spatial discretization
         self.n = n
@@ -57,6 +65,12 @@ class AdvectionSolver(Integrator):
                 )
             self.a = a
             self.a_max = np.max(np.abs(a))
+        self.right_interpolations = np.zeros(
+            len(self.x) + 2
+        )  # right wrt cell center
+        self.left_interpolations = np.zeros(
+            len(self.x) + 2
+        )  # left wrt cell center
 
         # time discretization
         self.courant = courant
@@ -88,9 +102,7 @@ class AdvectionSolver(Integrator):
             self.u0 = u0
 
         # initialize integrator
-        super().__init__(
-            u0=self.u0, t=self.t, loglen=loglen, aposteriori=aposteriori
-        )
+        super().__init__(u0=self.u0, t=self.t, loglen=loglen)
 
         # stensil for reconstructed values at cell interfaces
         right_interface_stensil_original = (
@@ -112,7 +124,7 @@ class AdvectionSolver(Integrator):
         self.list_of_interior_stensils = []
 
         # stensils to interpolate at Guass-Lobatto quadrature points
-        if apriori and "mpp" in apriori:
+        if apriori_limiting:
             # devise schemes for reconstructed values at free abscissas
             # find q, the number of abscissas
             p = self.order - 1  # degree p
@@ -150,7 +162,7 @@ class AdvectionSolver(Integrator):
             )
             # divide by 2 for coordinate transformation
             transformed_free_abscissas = np.array(free_abscissas) / 2
-            if self.apriori == "mpp lite":
+            if apriori_limiting == "mpp lite":
                 transformed_free_abscissas = [
                     0
                 ]  # only evaluate at cell center
@@ -264,7 +276,7 @@ class AdvectionSolver(Integrator):
         assert len(apply_here) == len(u) - 6
         return apply_here
 
-    def udot(self, u: np.ndarray, t_i: float) -> np.ndarray:
+    def udot(self, u: np.ndarray, t_i: float, dt: float = None) -> np.ndarray:
         ubar_extended = self.apply_bc(u, self._gw)
         list_of_windows = []
         n = len(u)
@@ -307,7 +319,7 @@ class AdvectionSolver(Integrator):
         # slope limiter
         theta_i = np.ones(n + 2)
         ubar_1gw = self.apply_bc(u, 1)
-        if self.apriori and "mpp" in self.apriori:
+        if self.apriori_limiting:
             ubar_2gw = self.apply_bc(u, 2)
             M = np.maximum(
                 ubar_2gw[:-2], np.maximum(ubar_2gw[1:-1], ubar_2gw[2:])
@@ -321,7 +333,7 @@ class AdvectionSolver(Integrator):
             theta_arg_m = np.abs(m - ubar_1gw) / np.abs(m_i - ubar_1gw)
             theta_i = np.where(theta_arg_M < theta_i, theta_arg_M, theta_i)
             theta_i = np.where(theta_arg_m < theta_i, theta_arg_m, theta_i)
-            if self.smooth_extrema:
+            if self.smooth_extrema_detection:
                 ubar_4gw = self.apply_bc(u, 4)
                 theta_i = np.where(
                     self.detect_smooth_extrema(ubar_4gw), theta_i, 1
@@ -333,32 +345,63 @@ class AdvectionSolver(Integrator):
         u_interface_left_tilda = (
             theta_i * (u_interface_left - ubar_1gw) + ubar_1gw
         )
-        # right fluxes - left fluxes
-        # flux = self.riemann
-        a_Delta_u = self.riemann(
-            self.a[1:],
-            u_interface_right_tilda[1:-1],
-            u_interface_left_tilda[2:],
-        ) - self.riemann(
-            self.a[:-1],
-            u_interface_right_tilda[:-2],
-            u_interface_left_tilda[1:-1],
+        # flux = a * dU
+        self.right_interpolations = u_interface_right_tilda
+        self.left_interpolations = u_interface_left_tilda
+        self.fluxes = self.riemann(
+            self.a,
+            self.right_interpolations[:-1],
+            self.left_interpolations[1:],
         )
-        return -a_Delta_u / self.h
+        if self.aposteriori_limiting:
+            unew = (
+                self.u0 + dt * -(self.fluxes[1:] - self.fluxes[:-1]) / self.h
+            )
+            self.revise_solution(u0=u, ucandidate=unew, t_i=t_i)
+        return -(self.fluxes[1:] - self.fluxes[:-1]) / self.h
 
-    def posteriori_revision(
-        self, u0: np.ndarray, ucandidate: np.ndarray
+    def revise_solution(
+        self, u0: np.ndarray, ucandidate: np.ndarray, t_i: float
     ) -> np.ndarray:
-        """
-        perform a posteriori check on the solution
-        """
+        # give the previous and candidate solutions two ghost cells
         u0_2gw = self.apply_bc(u0, 2)
-        unew = self.apply_bc(ucandidate, 2)
+        unew_2gw = self.apply_bc(ucandidate, 2)
+        # reshape into 3d array to match david's code
         u0_2gw = u0_2gw.reshape(1, 1, -1)
-        unew = unew.reshape(1, 1, -1)
-        trouble = trouble_detection1d(u0_2gw, unew, self.h)
-        print(trouble)
-        return unew[2:-2]
+        unew_2gw = unew_2gw.reshape(1, 1, -1)
+        # find troubled cells
+        troubled_cells = trouble_detection1d(u0_2gw, unew_2gw, self.h)
+        # troubled_cells = np.zeros((1, 1, len(u0)))
+        # assert not np.any(troubled_cells)
+        troubled_faces = np.zeros((1, 1, len(u0) + 1))
+        # find troubled faces
+        if np.any(troubled_cells):
+            troubled_faces[:, :, :-1] = troubled_cells
+            troubled_faces[:, :, 1:] = np.where(
+                troubled_cells == 1, 1, troubled_faces[:, :, 1:]
+            )
+            # find 2nd order face values
+            (
+                order2_left_interpolation,
+                order2_right_interpolation,
+            ) = compute_second_order_fluxes(u0_2gw)
+            # replace troubled faces with second order interpolations
+            self.right_interpolations[:-1] = np.where(
+                troubled_faces[0, 0, :],
+                order2_right_interpolation[0, 0, :-1],
+                self.right_interpolations[:-1],
+            )
+            self.left_interpolations[1:] = np.where(
+                troubled_faces[0, 0, :],
+                order2_left_interpolation[0, 0, 1:],
+                self.left_interpolations[1:],
+            )
+            # revise fluxes
+            self.fluxes = self.riemann(
+                self.a,
+                self.right_interpolations[:-1],
+                self.left_interpolations[1:],
+            )
 
     def rkorder(self):
         """
@@ -374,6 +417,9 @@ class AdvectionSolver(Integrator):
             self.euler()
 
     def find_error(self, norm: str = "l1"):
+        """
+        measure error between first state and last state
+        """
         if norm == "l1":
             return l1_error(self.u[-1], self.u[0])
         elif norm == "l2":

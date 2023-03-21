@@ -41,7 +41,7 @@ def test_damped_oscillator(unused_parameter):
         state vector: (u, udot)
         """
 
-        def udot(self, u, t_i):
+        def udot(self, u, t_i, dt=None):
             return np.array([u[1], -b * u[1] - (k / m) * u[0]])
 
     dho = DampedOscillatorTest(np.array([u0, udot0]), t)
@@ -49,6 +49,3 @@ def test_damped_oscillator(unused_parameter):
 
     # compare
     assert dho.u[-1][0] == pytest.approx(analytical_solution(t[-1]))
-
-
-# need a test for 2D space

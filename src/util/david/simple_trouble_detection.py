@@ -24,7 +24,7 @@ def trouble_detection(trouble, u0, unew):
 
 
 def trouble_detection1d(u0, unew, h):
-    tolerance_ptge = 1e-8
+    tolerance_ptge = 1e-5
 
     W_max = compute_W_max(u0, "x")[:, :, 2:-2]
     W_min = compute_W_min(u0, "x")[:, :, 2:-2]
@@ -34,13 +34,16 @@ def trouble_detection1d(u0, unew, h):
 
     possible_trouble = np.where(unew[:, :, 2:-2] >= W_min, 0, 1)
     possible_trouble = np.where(unew[:, :, 2:-2] <= W_max, possible_trouble, 1)
+
     # Now check for smooth extrema and relax the criteria for such cases
     trouble = np.zeros(len(possible_trouble))
     if np.any(possible_trouble):
-        alpha = compute_smooth_extrema(unew, h, "x")
-        trouble = np.where(possible_trouble, np.where(alpha < 1, 1, trouble), trouble)
+        alphax = compute_smooth_extrema(unew, "x", h)
+        alpha = alphax
+        trouble = np.where(
+            possible_trouble == 1, np.where(alpha < 1, 1, trouble), trouble
+        )
     return trouble
-
 
 def compute_W_ex(W, dim, case):
     if case == "max":
@@ -68,30 +71,6 @@ def compute_W_ex(W, dim, case):
             W_f[:, 1:, :] = f(W_f[:, 1:, :], W[:, :-1, :])
     return W_f
 
-
-def compute_W_max(W, dim):
-    return compute_W_ex(W, dim, "max")
-
-
-def compute_W_min(W, dim):
-    return compute_W_ex(W, dim, "min")
-
-
-def first_order_derivative(U, h, dim):
-    na = np.newaxis
-    if dim == 0:
-        # dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
-        dU = (U[:, :, 2:] - U[:, :, :-2]) / (
-            2*h
-        )
-
-    elif dim == 1:
-        # dUdy(j) = [U(j+1)-U(j-1)]/[y_cv(j+1)-y_cv(j-1)]
-        dU = (U[:, 2:, :] - U[:, :-2, :]) / (
-            2*h
-        )
-    return dU
-
 def compute_min(A, Amin, dim):
     if dim == 0:
         Amin[..., :-1] = np.where(
@@ -115,14 +94,26 @@ def compute_min(A, Amin, dim):
         #    Amin[..., 0,:] = np.where(A[...,-1,:]<Amin[..., 0,:],A[...,-1,:],Amin[..., 0,:])
 
 
-def compute_smooth_extrema(U, h, dim):
+def first_order_derivative(U, dim, h):
+    na = np.newaxis
+    if dim == 0:
+        # dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
+        dU = (U[:, :, 2:] - U[:, :, :-2]) / (2 * h)
+
+    elif dim == 1:
+        # dUdy(j) = [U(j+1)-U(j-1)]/[y_cv(j+1)-y_cv(j-1)]
+        dU = (U[:, 2:, :] - U[:, :-2, :]) / (2 * h)
+    return dU
+
+
+def compute_smooth_extrema(U, dim, h):
     na = np.newaxis
     eps = 0
     if dim == "x":
         # First derivative dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
-        dU = first_order_derivative(U, h, 0)
+        dU = first_order_derivative(U, 0, h)
         # Second derivative d2Udx2(i) = [dU(i+1)-dU(i-1)]/[x_cv(i+1)-x_cv(i-1)]
-        d2U = first_order_derivative(dU, h, 0)
+        d2U = first_order_derivative(dU, 0, h)
 
         dv = 0.5 * h * d2U
         # vL = dU(i-1)-dU(i)
@@ -148,33 +139,42 @@ def compute_smooth_extrema(U, h, dim):
         alpha = alphaL
 
     if dim == "y":
-        dU = first_order_derivative(U, h, 1)
-        d2U = first_order_derivative(dU, h, 1)
+        ...
+        # dU = first_order_derivative(U, s.dm.y_cv, 1)
+        # d2U = first_order_derivative(dU, s.dm.y_cv[1:-1], 1)
 
-        dv = 0.5 * h * d2U
-        # vL = dU(j-1)-dU(j)
-        vL = dU[..., :-2, :] - dU[..., 1:-1, :]
-        # alphaL = min(1,max(vL,0)/(-dv)),1,min(1,min(vL,0)/(-dv)) for dv<0,dv=0,dv>0
-        alphaL = (
-            -np.where(dv < 0, np.where(vL > 0, vL, 0), np.where(vL < 0, vL, 0))
-            / dv
-        )
-        alphaL = np.where(np.abs(dv) <= eps, 1, alphaL)
-        alphaL = np.where(alphaL < 1, alphaL, 1)
-        # vR = dU(j+1)-dU(j)
-        vR = dU[..., 2:, :] - dU[..., 1:-1, :]
-        # alphaR = min(1,max(vR,0)/(dv)),1,min(1,min(vR,0)/(dv)) for dv>0,dv=0,dv<0
-        alphaR = (
-            np.where(dv > 0, np.where(vR > 0, vR, 0), np.where(vR < 0, vR, 0))
-            / dv
-        )
-        alphaR = np.where(np.abs(dv) <= eps, 1, alphaR)
-        alphaR = np.where(alphaR < 1, alphaR, 1)
-        alphaR = np.where(alphaR < alphaL, alphaR, alphaL)
-        compute_min(alphaR, alphaL, 1)
-        alpha = alphaL
+        # dv = 0.5 * (s.dm.y_fp[na, 3:-2, na] - s.dm.y_fp[na, 2:-3, na]) * d2U
+        # # vL = dU(j-1)-dU(j)
+        # vL = dU[..., :-2, :] - dU[..., 1:-1, :]
+        # # alphaL = min(1,max(vL,0)/(-dv)),1,min(1,min(vL,0)/(-dv)) for dv<0,dv=0,dv>0
+        # alphaL = (
+        #     -np.where(dv < 0, np.where(vL > 0, vL, 0), np.where(vL < 0, vL, 0))
+        #     / dv
+        # )
+        # alphaL = np.where(np.abs(dv) <= eps, 1, alphaL)
+        # alphaL = np.where(alphaL < 1, alphaL, 1)
+        # # vR = dU(j+1)-dU(j)
+        # vR = dU[..., 2:, :] - dU[..., 1:-1, :]
+        # # alphaR = min(1,max(vR,0)/(dv)),1,min(1,min(vR,0)/(dv)) for dv>0,dv=0,dv<0
+        # alphaR = (
+        #     np.where(dv > 0, np.where(vR > 0, vR, 0), np.where(vR < 0, vR, 0))
+        #     / dv
+        # )
+        # alphaR = np.where(np.abs(dv) <= eps, 1, alphaR)
+        # alphaR = np.where(alphaR < 1, alphaR, 1)
+        # alphaR = np.where(alphaR < alphaL, alphaR, alphaL)
+        # compute_min(s, alphaR, alphaL, 1)
+        # alpha = alphaL
 
     return alpha
+
+
+def compute_W_max(W, dim):
+    return compute_W_ex(W, dim, "max")
+
+
+def compute_W_min(W, dim):
+    return compute_W_ex(W, dim, "min")
 
 
 def minmod(SlopeL,SlopeR):
@@ -195,3 +195,27 @@ def moncen(dU_L,dU_R):
     return np.where(dU_L*dU_R>=0,slope,0)
 
 
+def compute_slopes_x(dU, slope_limiter = "moncen"):
+    na = np.newaxis
+    if slope_limiter == "minmod":
+        return minmod(dU[:,:,:-1],dU[:,:,1:])
+
+    elif slope_limiter == "moncen":
+        return moncen(dU[:,:,:-1],dU[:,:,1: ])
+
+
+def compute_second_order_fluxes(u0):
+    # u0 has gw=2
+    na = np.newaxis
+    ########################
+    # X-Direction
+    ########################
+    dM = u0[:,:,1:] - u0[:,:,:-1]
+    dMx = compute_slopes_x(dM, slope_limiter = "moncen")
+    Sx = 0.5*dMx #Slope_x*dx/2
+
+    #UR = U - SlopeC*dx/2, UL = U + SlopeC*dx/2
+    right_interpolation = u0[:,:,1:-1] - Sx
+    left_interpolation = u0[:,:,1:-1] + Sx
+
+    return left_interpolation, right_interpolation
