@@ -4,6 +4,8 @@ from util.initial_condition import initial_condition1d
 from util.polynome import Polynome
 from util.integrate import Integrator, rk4_Dt_adjust
 from util.fvscheme import ConservativeInterpolation
+from util.david.simple_trouble_detection import trouble_detection1d
+from util.mathbasic import l1_error, l2_error, max_error
 
 
 # class definition
@@ -20,7 +22,7 @@ class AdvectionSolver(Integrator):
         u0_preset: str = "square",
         n: int = 32,
         x: tuple = (0, 1),
-        T: float = 2,
+        T: float = 1,
         a: float = 1,
         courant: float = 0.5,
         order: int = 1,
@@ -28,11 +30,13 @@ class AdvectionSolver(Integrator):
         apriori: str = None,
         aposteriori: bool = False,
         smooth_extrema: bool = False,
+        loglen: int = 10,
+        adujst_time_step: bool = False,
     ):
         self.order = order
         self.apriori = apriori
-        self.aposteriori = aposteriori
         self.smooth_extrema = smooth_extrema
+        self.adujst_time_step = adujst_time_step
 
         # spatial discretization
         self.n = n
@@ -58,7 +62,7 @@ class AdvectionSolver(Integrator):
         self.courant = courant
         Dt = courant * self.h / max(max(np.abs(self.a)), 1e-6)
         time_step_adjustment = 1
-        if self.order > 4:
+        if self.adujst_time_step and self.order > 4:
             time_step_adjustment = rk4_Dt_adjust(
                 self.h, self.x_interface[-1] - self.x_interface[0], self.order
             )
@@ -84,7 +88,9 @@ class AdvectionSolver(Integrator):
             self.u0 = u0
 
         # initialize integrator
-        super().__init__(self.u0, self.t)
+        super().__init__(
+            u0=self.u0, t=self.t, loglen=loglen, aposteriori=aposteriori
+        )
 
         # stensil for reconstructed values at cell interfaces
         right_interface_stensil_original = (
@@ -198,7 +204,7 @@ class AdvectionSolver(Integrator):
             with_ghost_cells[negative_gw:] = with_ghost_cells[gw:right_index]
         return with_ghost_cells
 
-    def reimann(
+    def riemann(
         self,
         velocities_at_boundaries: float,
         left_of_boundary_values: float,
@@ -328,16 +334,31 @@ class AdvectionSolver(Integrator):
             theta_i * (u_interface_left - ubar_1gw) + ubar_1gw
         )
         # right fluxes - left fluxes
-        a_Delta_u = self.reimann(
+        # flux = self.riemann
+        a_Delta_u = self.riemann(
             self.a[1:],
             u_interface_right_tilda[1:-1],
             u_interface_left_tilda[2:],
-        ) - self.reimann(
+        ) - self.riemann(
             self.a[:-1],
             u_interface_right_tilda[:-2],
             u_interface_left_tilda[1:-1],
         )
         return -a_Delta_u / self.h
+
+    def posteriori_revision(
+        self, u0: np.ndarray, ucandidate: np.ndarray
+    ) -> np.ndarray:
+        """
+        perform a posteriori check on the solution
+        """
+        u0_2gw = self.apply_bc(u0, 2)
+        unew = self.apply_bc(ucandidate, 2)
+        u0_2gw = u0_2gw.reshape(1, 1, -1)
+        unew = unew.reshape(1, 1, -1)
+        trouble = trouble_detection1d(u0_2gw, unew, self.h)
+        print(trouble)
+        return unew[2:-2]
 
     def rkorder(self):
         """
@@ -345,9 +366,17 @@ class AdvectionSolver(Integrator):
         """
         if self.order > 3:
             self.rk4()
-        if self.order > 2:
+        elif self.order > 2:
             self.rk3()
-        if self.order > 1:
+        elif self.order > 1:
             self.rk2()
         else:
             self.euler()
+
+    def find_error(self, norm: str = "l1"):
+        if norm == "l1":
+            return l1_error(self.u[-1], self.u[0])
+        elif norm == "l2":
+            return l2_error(self.u[-1], self.u[0])
+        elif norm == "inf":
+            return max_error(self.u[-1], self.u[0])

@@ -41,25 +41,19 @@ def lcm(a: int, b: int) -> int:
     raise TypeError("Input is not a pair of integers.")
 
 
-def l1_norm(x):
-    """
-    l1 norm divided by length of vector
-    """
-    return sum([np.abs(i) for i in x]) / len(x)
+def l1_error(approx, truth):
+    assert len(approx) == len(truth)
+    return np.sum(np.abs(approx - truth)) / len(truth)
 
 
-def l2_norm(x):
-    """
-    l2 norm divided by length of vector before square root
-    """
-    return np.sqrt(sum([i**2 for i in x]) / len(x))
+def l2_error(approx, truth):
+    assert len(approx) == len(truth)
+    return np.sqrt(np.sum(np.power(approx - truth, 2)) / len(truth))
 
 
-def linf_norm(x):
-    """
-    l infinity norm (max)
-    """
-    return max(np.abs(x))
+def max_error(approx, truth):
+    assert len(approx) == len(truth)
+    return np.max(np.abs(approx - truth))
 
 
 @dataclasses.dataclass

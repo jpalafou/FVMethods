@@ -15,7 +15,7 @@ class Integrator:
         u0: np.ndarray,
         t: np.ndarray,
         loglen: int = 10,
-        posteriori: bool = False,
+        aposteriori: bool = False,
     ):
         self.t = t
         self._ilog = [int(i) for i in np.linspace(0, len(t) - 1, loglen)]
@@ -31,7 +31,7 @@ class Integrator:
         self.u0_initial = u0
         self.u0 = u0
         self.u1 = self.emptyu
-        self.posteriori = posteriori
+        self.aposteriori = aposteriori
 
     # helper functions
     @abc.abstractmethod
@@ -54,7 +54,7 @@ class Integrator:
         """
         perform a posteriori check on the solution
         """
-        if self.posteriori:
+        if self.aposteriori:
             ucandidate = self.posteriori_revision(u0=u0, ucandidate=ucandidate)
 
     def findDt(self, i) -> float:

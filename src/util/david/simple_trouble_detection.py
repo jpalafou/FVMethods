@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def trouble_detection(trouble, u0, unew):
     tolerance_ptge = 1e-8
 
@@ -22,6 +21,25 @@ def trouble_detection(trouble, u0, unew):
         )
     else:
         trouble = possible_trouble
+
+
+def trouble_detection1d(u0, unew, h):
+    tolerance_ptge = 1e-8
+
+    W_max = compute_W_max(u0, "x")[:, :, 2:-2]
+    W_min = compute_W_min(u0, "x")[:, :, 2:-2]
+
+    W_min -= np.abs(W_min) * tolerance_ptge
+    W_max += np.abs(W_max) * tolerance_ptge
+
+    possible_trouble = np.where(unew[:, :, 2:-2] >= W_min, 0, 1)
+    possible_trouble = np.where(unew[:, :, 2:-2] <= W_max, possible_trouble, 1)
+    # Now check for smooth extrema and relax the criteria for such cases
+    trouble = np.zeros(len(possible_trouble))
+    if np.any(possible_trouble):
+        alpha = compute_smooth_extrema(unew, h, "x")
+        trouble = np.where(possible_trouble, np.where(alpha < 1, 1, trouble), trouble)
+    return trouble
 
 
 def compute_W_ex(W, dim, case):
@@ -59,6 +77,106 @@ def compute_W_min(W, dim):
     return compute_W_ex(W, dim, "min")
 
 
+def first_order_derivative(U, h, dim):
+    na = np.newaxis
+    if dim == 0:
+        # dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
+        dU = (U[:, :, 2:] - U[:, :, :-2]) / (
+            2*h
+        )
+
+    elif dim == 1:
+        # dUdy(j) = [U(j+1)-U(j-1)]/[y_cv(j+1)-y_cv(j-1)]
+        dU = (U[:, 2:, :] - U[:, :-2, :]) / (
+            2*h
+        )
+    return dU
+
+def compute_min(A, Amin, dim):
+    if dim == 0:
+        Amin[..., :-1] = np.where(
+            A[..., :-1] < A[..., 1:], A[..., :-1], A[..., 1:]
+        )
+        Amin[..., 1:] = np.where(
+            A[..., :-1] < Amin[..., 1:], A[..., :-1], Amin[..., 1:]
+        )
+        # if s.BC[0] == "periodic":
+        #    Amin[...,-1] = np.where(A[..., 0]<Amin[...,-1],A[..., 0],Amin[...,-1])
+        #    Amin[..., 0] = np.where(A[...,-1]<Amin[..., 0],A[...,-1],Amin[..., 0])
+    elif dim == 1:
+        Amin[..., :-1, :] = np.where(
+            A[..., :-1, :] < A[..., 1:, :], A[..., :-1, :], A[..., 1:, :]
+        )
+        Amin[..., 1:, :] = np.where(
+            A[..., :-1, :] < Amin[..., 1:, :], A[..., :-1, :], Amin[..., 1:, :]
+        )
+        # if s.BC[1] == "periodic":
+        #    Amin[...,-1,:] = np.where(A[..., 0,:]<Amin[...,-1,:],A[..., 0,:],Amin[...,-1,:])
+        #    Amin[..., 0,:] = np.where(A[...,-1,:]<Amin[..., 0,:],A[...,-1,:],Amin[..., 0,:])
+
+
+def compute_smooth_extrema(U, h, dim):
+    na = np.newaxis
+    eps = 0
+    if dim == "x":
+        # First derivative dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
+        dU = first_order_derivative(U, h, 0)
+        # Second derivative d2Udx2(i) = [dU(i+1)-dU(i-1)]/[x_cv(i+1)-x_cv(i-1)]
+        d2U = first_order_derivative(dU, h, 0)
+
+        dv = 0.5 * h * d2U
+        # vL = dU(i-1)-dU(i)
+        vL = dU[:, :, :-2] - dU[:, :, 1:-1]
+        # alphaL = min(1,max(vL,0)/(-dv)),1,min(1,min(vL,0)/(-dv)) for dv<0,dv=0,dv>0
+        alphaL = (
+            -np.where(dv < 0, np.where(vL > 0, vL, 0), np.where(vL < 0, vL, 0))
+            / dv
+        )
+        alphaL = np.where(np.abs(dv) <= eps, 1, alphaL)
+        alphaL = np.where(alphaL < 1, alphaL, 1)
+        # vR = dU(i+1)-dU(i)
+        vR = dU[..., 2:] - dU[..., 1:-1]
+        # alphaR = min(1,max(vR,0)/(dv)),1,min(1,min(vR,0)/(dv)) for dv>0,dv=0,dv<0
+        alphaR = (
+            np.where(dv > 0, np.where(vR > 0, vR, 0), np.where(vR < 0, vR, 0))
+            / dv
+        )
+        alphaR = np.where(np.abs(dv) <= eps, 1, alphaR)
+        alphaR = np.where(alphaR < 1, alphaR, 1)
+        alphaR = np.where(alphaR < alphaL, alphaR, alphaL)
+        compute_min(alphaR, alphaL, 0)
+        alpha = alphaL
+
+    if dim == "y":
+        dU = first_order_derivative(U, h, 1)
+        d2U = first_order_derivative(dU, h, 1)
+
+        dv = 0.5 * h * d2U
+        # vL = dU(j-1)-dU(j)
+        vL = dU[..., :-2, :] - dU[..., 1:-1, :]
+        # alphaL = min(1,max(vL,0)/(-dv)),1,min(1,min(vL,0)/(-dv)) for dv<0,dv=0,dv>0
+        alphaL = (
+            -np.where(dv < 0, np.where(vL > 0, vL, 0), np.where(vL < 0, vL, 0))
+            / dv
+        )
+        alphaL = np.where(np.abs(dv) <= eps, 1, alphaL)
+        alphaL = np.where(alphaL < 1, alphaL, 1)
+        # vR = dU(j+1)-dU(j)
+        vR = dU[..., 2:, :] - dU[..., 1:-1, :]
+        # alphaR = min(1,max(vR,0)/(dv)),1,min(1,min(vR,0)/(dv)) for dv>0,dv=0,dv<0
+        alphaR = (
+            np.where(dv > 0, np.where(vR > 0, vR, 0), np.where(vR < 0, vR, 0))
+            / dv
+        )
+        alphaR = np.where(np.abs(dv) <= eps, 1, alphaR)
+        alphaR = np.where(alphaR < 1, alphaR, 1)
+        alphaR = np.where(alphaR < alphaL, alphaR, alphaL)
+        compute_min(alphaR, alphaL, 1)
+        alpha = alphaL
+
+    return alpha
+
+
 def minmod(SlopeL,SlopeR):
     #First compute ratio between slopes SlopeR/SlopeL
     #Then limit the ratio to be lower than 1
@@ -76,41 +194,4 @@ def moncen(dU_L,dU_R):
     slope = np.sign(dU_C)*np.minimum(slope,np.abs(dU_C))
     return np.where(dU_L*dU_R>=0,slope,0)
 
-# def compute_slopes_x(dU,limiter):
-#     na = np.newaxis
-#     if limiter == "minmod":
-#         return minmod(dU[:,:,:-1],dU[:,:,1:])
 
-#     elif limiter == "moncen":
-#         return moncen(dU[:,:,:-1],dU[:,:,1: ],1,1,1)
-
-# def compute_slopes_y(dU,limiter):
-#     na = np.newaxis
-#     if limiter == "minmod":
-#         return minmod(dU[:,:-1,:],dU[:,1:,:])
-
-#     elif limiter == "moncen":
-#         return moncen(dU[:,:-1,:],dU[:,1: ,:],1,1,1)
-
-# def compute_second_order_fluxes(cell_values,limiter):
-#     # assume constant mesh
-#     ########################
-#     # X-Direction
-#     ########################
-#     dM = cell_values[:,:,1:] - cell_values[:,:,:-1] # column subtraction
-#     dMx = compute_slopes_x(dM,limiter)
-#     Sx = 0.5*dMx
-
-#     ########################
-#     # Y-Direction
-#     ########################
-#     dM = cell_values[:,1:,:] - cell_values[:,:-1,:] # row subtraction
-#     dMy = compute_slopes_y(dM,limiter)
-#     Sy = 0.5*dMy
-
-#     #UR = U - SlopeC*dx/2, UL = U + SlopeC*dx/2
-#     MR_face_x = cell_values[:,2:-2,2:-1] - Sx[:,2:-2,1: ]
-#     ML_face_x = cell_values[:,2:-2,1:-2] + Sx[:,2:-2,:-1]
-#     MR_face_y = cell_values[:,2:-1,2:-2] - Sy[:,1: ,2:-2]
-#     ML_face_y = cell_values[:,1:-2,2:-2] + Sy[:,:-1,2:-2]
-#     return MR_face_x, ML_face_x, MR_face_y, ML_face_y

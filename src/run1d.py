@@ -1,4 +1,3 @@
-import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 from util.advection1d import AdvectionSolver
@@ -6,15 +5,18 @@ from util.advection1d import AdvectionSolver
 warnings.filterwarnings("ignore")
 
 # configurations
-order = 5
-n = 32
-u0_preset = "square"
+n = 256
+u0_preset = "composite"
 solutions = [
-    AdvectionSolver(n=n, order=order, u0_preset=u0_preset, apriori="mpp"),
+    AdvectionSolver(n=n, order=4, u0_preset=u0_preset, courant=0.166),
+    AdvectionSolver(
+        n=n, order=4, u0_preset=u0_preset, courant=0.166, apriori="mpp"
+    ),
     AdvectionSolver(
         n=n,
-        order=order,
+        order=4,
         u0_preset=u0_preset,
+        courant=0.166,
         apriori="mpp",
         smooth_extrema=True,
     ),
@@ -29,15 +31,11 @@ plt.plot(
     label="initial condition",
 )
 # run all cases
-dashed = False
 for solution in solutions:
     # time integration
     solution.rkorder()
     # errors
-    print(
-        "l1 error = ",
-        f"{round(np.sum(np.abs(solution.u[-1] - solution.u[0])) / n, 5)}",
-    )
+    print(f"l1 error = {solution.find_error('l1')}")
     print(
         f"final soluion min = {round(min(solution.u[-1]), 5)}, ",
         f"max = {round(max(solution.u[-1]), 5)}",
@@ -46,11 +44,13 @@ for solution in solutions:
     # label generation
     if solution.order == 1:
         time_message = "euler"
-    elif solution.order > 1 and solution.order <= 4:
+    elif solution.order > 1 and solution.order < 4:
         time_message = f"rk{solution.order}"
-    else:
-        time_message = (
-            "rk4 + "
+    elif solution.order >= 4:
+        time_message = "rk4"
+    if solution.adujst_time_step and solution.order > 4:
+        time_message += (
+            " + "
             + r"$\Delta t$"
             + f" * {round(solution.time_step_adjustment, 5)}"
         )
@@ -62,15 +62,10 @@ for solution in solutions:
     )
     label = f"{limiter_message} order {solution.order}" f" + {time_message}"
     # plotting
-    if dashed:
-        linetype = "o--"
-    else:
-        linetype = "o-"
-    dashed = not dashed
     plt.plot(
         solution.x,
         solution.u[-1],
-        linetype,
+        "o--",
         mfc="none",
         label=label,
     )
