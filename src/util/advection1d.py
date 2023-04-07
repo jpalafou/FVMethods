@@ -354,9 +354,7 @@ class AdvectionSolver(Integrator):
             self.left_interpolations[1:],
         )
         if self.aposteriori_limiting:
-            unew = (
-                self.u0 + dt * -(self.fluxes[1:] - self.fluxes[:-1]) / self.h
-            )
+            unew = u + dt * -(self.fluxes[1:] - self.fluxes[:-1]) / self.h
             self.revise_solution(u0=u, ucandidate=unew, t_i=t_i)
         return -(self.fluxes[1:] - self.fluxes[:-1]) / self.h
 
@@ -371,8 +369,6 @@ class AdvectionSolver(Integrator):
         unew_2gw = unew_2gw.reshape(1, 1, -1)
         # find troubled cells
         troubled_cells = trouble_detection1d(u0_2gw, unew_2gw, self.h)
-        # troubled_cells = np.zeros((1, 1, len(u0)))
-        # assert not np.any(troubled_cells)
         troubled_faces = np.zeros((1, 1, len(u0) + 1))
         # find troubled faces
         if np.any(troubled_cells):

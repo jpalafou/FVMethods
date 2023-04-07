@@ -215,7 +215,7 @@ def compute_second_order_fluxes(u0):
     Sx = 0.5*dMx #Slope_x*dx/2
 
     #UR = U - SlopeC*dx/2, UL = U + SlopeC*dx/2
-    right_interpolation = u0[:,:,1:-1] - Sx
-    left_interpolation = u0[:,:,1:-1] + Sx
+    right_interpolation = u0[:,:,1:-1] + Sx
+    left_interpolation = u0[:,:,1:-1] - Sx
 
     return left_interpolation, right_interpolation

@@ -39,7 +39,7 @@ plt.plot(
 # run all cases
 for solution in solutions:
     # time integration
-    solution.rkorder()
+    solution.ssp_rk3()
     # errors
     print(f"l1 error = {solution.find_error('l1')}")
     print(

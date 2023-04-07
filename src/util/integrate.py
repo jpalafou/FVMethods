@@ -134,11 +134,11 @@ class Integrator:
         """
         for i in range(len(self.t) - 1):
             dt = self.findDt(i)
-            x0 = self.u0
-            k0 = self.udot(x0, self.t[i])
-            x1 = x0 + k0 * dt
-            k1 = self.udot(x1, self.t[i])
-            self.u1 = (1 / 2) * x0 + (1 / 2) * (x1 + k1 * dt)
+            x1 = self.u0
+            x2 = x1 + dt * self.udot(x1, self.t[i], dt)
+            self.u1 = (1 / 2) * x1 + (1 / 2) * (
+                x2 + dt * self.udot(x2, self.t[i], dt)
+            )
             self.logupdate(i)
             self.u0 = self.u1
 
@@ -148,13 +148,14 @@ class Integrator:
         """
         for i in range(len(self.t) - 1):
             dt = self.findDt(i)
-            x0 = self.u0
-            k0 = self.udot(x0, self.t[i])
-            x1 = x0 + k0 * dt
-            k1 = self.udot(x1, self.t[i])
-            x2 = (3 / 4) * x0 + (1 / 4) * (x1 + k1 * dt)
-            k2 = self.udot(x2, self.t[i])
-            self.u1 = (1 / 3) * x0 + (2 / 3) * (x2 + k2 * dt)
+            x1 = self.u0
+            x2 = x1 + dt * self.udot(x1, self.t[i], dt)
+            x3 = (3 / 4) * x1 + (1 / 4) * (
+                x2 + dt * self.udot(x2, self.t[i], dt)
+            )
+            self.u1 = (1 / 3) * x1 + (2 / 3) * (
+                x3 + dt * self.udot(x3, self.t[i], dt)
+            )
             self.logupdate(i)
             self.u0 = self.u1
 
