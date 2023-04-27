@@ -1,19 +1,4 @@
 import dataclasses
-import numpy as np
-
-
-def fact(n):
-    """
-    factorial n! of an integer n
-    """
-    if not isinstance(n, int):
-        raise TypeError("fact() only accept integers")
-    if n < 0:
-        raise BaseException("fact() is not definted for negative integers")
-    product = 1
-    for i in range(1, n + 1):
-        product *= i
-    return product
 
 
 def gcf(mylist: list[int]) -> int:
@@ -39,21 +24,6 @@ def lcm(a: int, b: int) -> int:
     if all(isinstance(i, int) for i in [a, b]):
         return a * b // gcf([a, b])
     raise TypeError("Input is not a pair of integers.")
-
-
-def l1_error(approx, truth):
-    assert len(approx) == len(truth)
-    return np.sum(np.abs(approx - truth)) / len(truth)
-
-
-def l2_error(approx, truth):
-    assert len(approx) == len(truth)
-    return np.sqrt(np.sum(np.power(approx - truth, 2)) / len(truth))
-
-
-def max_error(approx, truth):
-    assert len(approx) == len(truth)
-    return np.max(np.abs(approx - truth))
 
 
 @dataclasses.dataclass

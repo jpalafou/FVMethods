@@ -158,11 +158,3 @@ class Integrator:
             )
             self.logupdate(i)
             self.u0 = self.u1
-
-
-def rk4_Dt_adjust(h, L, spatial_order):
-    """
-    how much do we need to reduce Dt for rk4 to preserve a given order
-    of accuracy
-    """
-    return (h / L) ** ((spatial_order - 4) / 4)

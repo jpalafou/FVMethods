@@ -1,26 +1,50 @@
 # advection solution schems
 import numpy as np
 from util.initial_condition import initial_condition1d
-from util.polynome import Polynome
-from util.integrate import Integrator, rk4_Dt_adjust
+from util.integrate import Integrator
 from util.fvscheme import ConservativeInterpolation
 from util.david.simple_trouble_detection import (
     trouble_detection1d,
     compute_second_order_fluxes,
 )
-from util.mathbasic import l1_error, l2_error, max_error
+
+
+def rk4_Dt_adjust(h, L, order):
+    """
+    args:
+        h:  cell size
+        L:  1d domain size
+        order:  accuracy requirement
+    returns:
+        Dt multiplication factor for rk4 to satisfy an order of accuracy
+    """
+    return (h / L) ** ((order - 4) / 4)
 
 
 # class definition
 class AdvectionSolver(Integrator):
     """
-    uses polynomial reconstruction of arbitrary order
-    no limiter
+    args:
+        u0_preset   string describing a pre-coded initial condition
+        n:  number of cells
+        x:  boundaries for x
+        T:  solving time
+        a:  constant advection speed
+        courant:    stability condition
+        order:  accuracy requirement for polynomial interpolation
+        bc_type:    string describing a pre-coded boudnary condition
+        apriori_limiting:   whether to apply an a priori slope limiter
+            can be None, mpp, or mpp lite
+        smooth_extrema_detection:   whether to detect smooth extrema
+        aposteriori_limiting:   whether to apply a fallback scheme
+        loglen: number of saved states
+        adujst_time_step:   whether to reduce timestep for order >4
+    returns:
+        u   array of saved states
     """
 
     def __init__(
         self,
-        u0: np.ndarray = None,
         u0_preset: str = "square",
         n: int = 32,
         x: tuple = (0, 1),
@@ -35,186 +59,146 @@ class AdvectionSolver(Integrator):
         loglen: int = 11,
         adujst_time_step: bool = False,
     ):
+        # misc. attributes
         self.order = order
         self.apriori_limiting = apriori_limiting
         self.smooth_extrema_detection = smooth_extrema_detection
         self.aposteriori_limiting = aposteriori_limiting
         self.adujst_time_step = adujst_time_step
-        if apriori_limiting:
-            if apriori_limiting != "mpp" and apriori_limiting != "mpp lite":
-                raise BaseException(
-                    f"Invalid apriori limiting type: {apriori_limiting}"
-                )
+        if apriori_limiting not in (None, "mpp", "mpp lite"):
+            raise BaseException(
+                f"Invalid apriori limiting type: {apriori_limiting}"
+            )
 
         # spatial discretization
         self.n = n
-        self.x_interface = np.linspace(x[0], x[1], num=n + 1)
+        self.x_interface = np.linspace(
+            x[0], x[1], num=n + 1
+        )  # cell interfaces
         self.x = 0.5 * (
             self.x_interface[:-1] + self.x_interface[1:]
-        )  # x at cell centers
-        self.h = (x[1] - x[0]) / n
+        )  # cell centers
+        self.L = x[1] - x[0]  # domain size
+        self.h = self.L / n  # cell size
 
-        # advection velocty
-        if isinstance(a, int) or isinstance(a, float):  # constant advection
-            self.a = a * np.ones(len(self.x_interface))
-            self.a_max = a
-        else:  # advection vector
-            if len(a) != len(self.x_interface):
-                raise BaseException(
-                    f"Invalid advection velocity array with size {len(a)}"
-                )
-            self.a = a
-            self.a_max = np.max(np.abs(a))
-        self.right_interpolations = np.zeros(
-            len(self.x) + 2
-        )  # right wrt cell center
-        self.left_interpolations = np.zeros(
-            len(self.x) + 2
-        )  # left wrt cell center
+        # constant advection velocity defined at cell interfaces
+        self.a = a * np.ones(len(self.x_interface))
 
         # time discretization
         self.courant = courant
-        Dt = courant * self.h / max(max(np.abs(self.a)), 1e-6)
-        time_step_adjustment = 1
-        if self.adujst_time_step and self.order > 4:
-            time_step_adjustment = rk4_Dt_adjust(
-                self.h, self.x_interface[-1] - self.x_interface[0], self.order
-            )
+        Dt = courant * self.h / max(np.abs(a), 1e-6)
+        Dt_adjustment = 1
+        if self.adujst_time_step and order > 4:
+            Dt_adjustment = rk4_Dt_adjust(self.h, self.L, order)
+            Dt = Dt * Dt_adjustment
             print(
-                f"Decreasing timestep by a factor of"
-                f" {time_step_adjustment} to maintain order {self.order}"
-                " with rk4"
+                f"Decreasing timestep by a factor of {Dt_adjustment} to maintain",
+                f" order {order} with rk4",
             )
-            Dt = Dt * time_step_adjustment
-        self.time_step_adjustment = time_step_adjustment
-        n_time = int(np.ceil(T / Dt))
-        self.Dt = T / n_time
-        self.t = np.linspace(0, T, num=n_time)
+        self.Dt_adjustment = Dt_adjustment
+        n_timesteps = int(np.ceil(T / Dt))
+        self.Dt = T / n_timesteps
+        self.t = np.linspace(0, T, num=n_timesteps + 1)
 
-        # initial condition
-        if not u0:
-            self.u0 = initial_condition1d(self.x, u0_preset)
-        else:
-            if len(u0) != n:
-                raise BaseException(
-                    f"Invalid initial condition with size {len(u0)}"
-                )
-            self.u0 = u0
+        # initial/boundary conditions
+        u0 = initial_condition1d(self.x, u0_preset)
+        self.bc_type = bc_type
 
         # initialize integrator
-        super().__init__(u0=self.u0, t=self.t, loglen=loglen)
+        super().__init__(u0=u0, t=self.t, loglen=loglen)
 
-        # stensil for reconstructed values at cell interfaces
-        right_interface_stensil_original = (
-            ConservativeInterpolation.construct_from_order(self.order, "right")
+        # interpolating values at cell interfaces
+        left_interface_stensil = (
+            ConservativeInterpolation.construct_from_order(
+                order, "left"
+            ).nparray()
         )
-        left_interface_stensil_original = (
-            ConservativeInterpolation.construct_from_order(self.order, "left")
+        right_interface_stensil = (
+            ConservativeInterpolation.construct_from_order(
+                order, "right"
+            ).nparray()
         )
-        self.right_interface_stensil = (
-            right_interface_stensil_original.nparray()
-        )
-        self.left_interface_stensil = left_interface_stensil_original.nparray()
-        # number of kernel cells from center referenced by a symmetric scheme
-        self._k = max(right_interface_stensil_original.coeffs.keys())
-        # number of ghost cells on either side of the extended state vector
-        self._gw = self._k + 1
-        self._stensil_size = 2 * self._k + 1
-        self.bc_type = bc_type  # type of boudnary condition
-        self.list_of_interior_stensils = []
+        self._stensil_size = len(
+            left_interface_stensil
+        )  # assume symmetric stensils
+        k = int(
+            np.floor(len(left_interface_stensil) / 2)
+        )  # length of stensil arms
+        self.gw = k + 1
 
-        # stensils to interpolate at Guass-Lobatto quadrature points
-        if apriori_limiting:
-            # devise schemes for reconstructed values at free abscissas
-            # find q, the number of abscissas
-            p = self.order - 1  # degree p
-            # how many quadrature points do we need for this degrees
-            q = int(np.ceil((p + 1) / 2)) + 1
-            self.q = q
-            # find the free (interior) abscissas
-            # solve on [0, 1] to find an exact origin solution in the case
-            # of an odd legendre polynomial, enforce symmetry
-            free_abscissas = (
-                Polynome.legendre(q - 1).prime().find_zeros([0, 1])
-            )
-            if len(free_abscissas) > 0:
-                if free_abscissas[0] == 0:
-                    free_abscissas = [
-                        -free_abscissas[len(free_abscissas) - i - 1]
-                        for i in range(len(free_abscissas) - 1)
-                    ] + free_abscissas
-                else:
-                    free_abscissas = [
-                        -free_abscissas[len(free_abscissas) - i - 1]
-                        for i in range(len(free_abscissas))
-                    ] + free_abscissas
-            assert len(free_abscissas) == q - 2
-            # find quadrature weights
-            # https://mathworld.wolfram.com/LobattoQuadrature.html
-            endpoint_weight = 2 / (q * (q - 1))
-            weights = (
-                [endpoint_weight]
-                + [
-                    2 / (q * (q - 1) * Polynome.legendre(q - 1).eval(x) ** 2)
-                    for x in free_abscissas
-                ]
-                + [endpoint_weight]
-            )
-            # divide by 2 for coordinate transformation
-            transformed_free_abscissas = np.array(free_abscissas) / 2
+        # interpolating values inside cells
+        p = order - 1  # polynomial degree p
+        q = (
+            int(np.ceil((p + 1) / 2)) + 1
+        )  # number of required quadrature points
+        interior_stensils = []
+        if apriori_limiting and q > 2:
             if apriori_limiting == "mpp lite":
-                transformed_free_abscissas = [
-                    0
-                ]  # only evaluate at cell center
-            weights = np.array(weights) / 2
-            # now we can find a stability condition
-            C_max = weights[0]
-            self.C_max = C_max
-            # determine if stability is satisfied
-            Dt_max = max(
-                [self.t[i + 1] - self.t[i] for i in range(len(self.t) - 1)]
-            )  # maximum time step
-            if self.a_max * Dt_max / self.h >= C_max:
-                print(
-                    "WARNING: Maximum principle preserving not satisfied.\n"
-                    f"Try a timestep less than {C_max * self.h / self.a_max}"
-                    f" for a Courant condition of {C_max}."
-                )
-            # key takeway from the Gauss-Lobatto quadrature are the schemes
-            # to evaluate at the interior quadrature points
-            list_of_interior_stensils = []
-            for x in transformed_free_abscissas:
-                list_of_interior_stensils.append(
+                # lite version of mpp uses only the cell center as a free absicca
+                cell_center_stensil = (
                     ConservativeInterpolation.construct_from_order(
-                        order, x
+                        order, "center"
                     ).nparray()
                 )
-            # if the scheme is missing elements place a zero on either end
-            list_of_interior_stensils_same_length = []
-            for stensil in list_of_interior_stensils:
-                if len(stensil) < self._stensil_size:
-                    stensil = np.concatenate(
-                        (np.zeros(1), stensil, np.zeros(1))
-                    )
+                interior_stensils.append(cell_center_stensil)
+            elif apriori_limiting == "mpp":
+                # full version requires a stensil for each Guass-Lobatto point
+                free_abscissas, _ = np.polynomial.legendre.leggauss(q - 2)
+                # transform to cell coordinate
+                free_abscissas /= 2
+                for x in free_abscissas:
+                    stensil = ConservativeInterpolation.construct_from_order(
+                        order, x
+                    ).nparray()
+                    # if the stensil is short, assume it needs a 0 on either end
+                    while len(stensil) < self._stensil_size:
+                        stensil = np.concatenate(
+                            (np.zeros(1), stensil, np.zeros(1))
+                        )
                     assert len(stensil) == self._stensil_size
-                list_of_interior_stensils_same_length.append(stensil)
-            self.list_of_interior_stensils = (
-                list_of_interior_stensils_same_length
-            )
+                    interior_stensils.append(stensil)
+            # quadrature weight at endpoints
+            # https://mathworld.wolfram.com/LobattoQuadrature.html
+            endpoint_weight = 2 / (q * (q - 1))
+            # reduced Courant condition for monotonicity (transform to cell coordinate)
+            C_for_mpp = endpoint_weight / 2
+            # check if our solution will satisfy mpp
+            if abs(a) * self.Dt / self.h >= C_for_mpp:
+                print(
+                    "WARNING: Maximum principle preserving not satisfied.\nTry a",
+                    f" timestep less than {C_for_mpp * self.h / abs(a)} for a",
+                    f" Courant condition of {C_for_mpp}.",
+                )
+
+        # complete list of interpolation stensils going fromleft to right
+        self.list_of_stensils = (
+            [left_interface_stensil]
+            + interior_stensils
+            + [right_interface_stensil]
+        )
+
+        # array to store interpolations at each cell
+        self.left_face_values = np.zeros(n + 2)
+        self.right_face_values = np.zeros(n + 2)
 
     def apply_bc(
-        self, without_ghost_cells: np.ndarray, num_ghost_cells: int
+        self, u_without_ghost_cells: np.ndarray, gw: int
     ) -> np.ndarray:
-        gw = num_ghost_cells
-        negative_gw = -gw
-        with_ghost_cells = np.zeros(len(without_ghost_cells) + 2 * gw)
-        with_ghost_cells[gw:negative_gw] = without_ghost_cells
+        """
+        args:
+            u_without_ghost_cells   1d np array
+            gw      number of ghost cells on either side of u
+        returns:
+            u_with_ghost_cells
+        """
+        negatvie_gw = -gw
         if self.bc_type == "periodic":
-            left_index = -2 * gw
-            with_ghost_cells[:gw] = with_ghost_cells[left_index:negative_gw]
-            right_index = 2 * gw
-            with_ghost_cells[negative_gw:] = with_ghost_cells[gw:right_index]
-        return with_ghost_cells
+            left_ghost_zone = u_without_ghost_cells[negatvie_gw:]
+            right_ghost_zone = u_without_ghost_cells[:gw]
+            u_with_ghost_cells = np.concatenate(
+                (left_ghost_zone, u_without_ghost_cells, right_ghost_zone)
+            )
+        return u_with_ghost_cells
 
     def riemann(
         self,
@@ -277,45 +261,22 @@ class AdvectionSolver(Integrator):
         return apply_here
 
     def udot(self, u: np.ndarray, t_i: float, dt: float = None) -> np.ndarray:
-        ubar_extended = self.apply_bc(u, self._gw)
+        ubar_extended = self.apply_bc(u, self.gw)
+        n, nwg = len(u), len(ubar_extended)
+        # construct an array of staggered state vectors such that a matrix operation
+        # with a stensil multiplies weights by their referenced cells
         list_of_windows = []
-        n = len(u)
-        nwg = len(ubar_extended)
-        # construct an array of staggered state vectors such that a
-        # matrix operation with a stensil multiplies weights by their
-        # referenced cells
-        # right and left interface interpolations
         for i in range(self._stensil_size):
             right_ind = i + nwg - (self._stensil_size - 1)
             list_of_windows.append(ubar_extended[i:right_ind])
         array_of_windows = np.array(list_of_windows).T
-        # interpolate at right and left cell interfaces
-        u_interface_right = (
-            array_of_windows
-            @ self.right_interface_stensil
-            / sum(self.right_interface_stensil)
-        )
-        u_interface_left = (
-            array_of_windows
-            @ self.left_interface_stensil
-            / sum(self.left_interface_stensil)
-        )
-        # interpolate using interior stensils
-        list_of_interior_evaluations = []
-        for stensil in self.list_of_interior_stensils:
-            list_of_interior_evaluations.append(
+        # interpolate each x value in each cell
+        list_of_interpolations = []
+        for stensil in self.list_of_stensils:
+            list_of_interpolations.append(
                 array_of_windows @ stensil / sum(stensil)
             )
-        array_of_interior_evaluations = np.array(
-            list_of_interior_evaluations
-        ).reshape(len(self.list_of_interior_stensils), len(u_interface_right))
-        evaluations = np.concatenate(
-            (
-                u_interface_left.reshape(1, n + 2),
-                array_of_interior_evaluations.reshape(-1, n + 2),
-                u_interface_right.reshape(1, n + 2),
-            )
-        )
+        interpolations = np.array(list_of_interpolations)
         # slope limiter
         theta_i = np.ones(n + 2)
         ubar_1gw = self.apply_bc(u, 1)
@@ -327,8 +288,8 @@ class AdvectionSolver(Integrator):
             m = np.minimum(
                 ubar_2gw[:-2], np.minimum(ubar_2gw[1:-1], ubar_2gw[2:])
             )
-            M_i = np.amax(evaluations, axis=0)
-            m_i = np.amin(evaluations, axis=0)
+            M_i = np.amax(interpolations, axis=0)
+            m_i = np.amin(interpolations, axis=0)
             theta_arg_M = np.abs(M - ubar_1gw) / np.abs(M_i - ubar_1gw)
             theta_arg_m = np.abs(m - ubar_1gw) / np.abs(m_i - ubar_1gw)
             theta_i = np.where(theta_arg_M < theta_i, theta_arg_M, theta_i)
@@ -339,19 +300,15 @@ class AdvectionSolver(Integrator):
                     self.detect_smooth_extrema(ubar_4gw), theta_i, 1
                 )
         # slope limited interpolation at cell faces
-        u_interface_right_tilda = (
-            theta_i * (u_interface_right - ubar_1gw) + ubar_1gw
+        self.left_face_values = (
+            theta_i * (list_of_interpolations[0] - ubar_1gw) + ubar_1gw
         )
-        u_interface_left_tilda = (
-            theta_i * (u_interface_left - ubar_1gw) + ubar_1gw
+        self.right_face_values = (
+            theta_i * (list_of_interpolations[-1] - ubar_1gw) + ubar_1gw
         )
         # flux = a * dU
-        self.right_interpolations = u_interface_right_tilda
-        self.left_interpolations = u_interface_left_tilda
         self.fluxes = self.riemann(
-            self.a,
-            self.right_interpolations[:-1],
-            self.left_interpolations[1:],
+            self.a, self.right_face_values[:-1], self.left_face_values[1:]
         )
         if self.aposteriori_limiting:
             unew = u + dt * -(self.fluxes[1:] - self.fluxes[:-1]) / self.h
@@ -382,21 +339,19 @@ class AdvectionSolver(Integrator):
                 order2_right_interpolation,
             ) = compute_second_order_fluxes(u0_2gw)
             # replace troubled faces with second order interpolations
-            self.right_interpolations[:-1] = np.where(
-                troubled_faces[0, 0, :],
-                order2_right_interpolation[0, 0, :-1],
-                self.right_interpolations[:-1],
-            )
-            self.left_interpolations[1:] = np.where(
+            self.left_face_values[1:] = np.where(
                 troubled_faces[0, 0, :],
                 order2_left_interpolation[0, 0, 1:],
-                self.left_interpolations[1:],
+                self.left_face_values[1:],
+            )
+            self.right_face_values[:-1] = np.where(
+                troubled_faces[0, 0, :],
+                order2_right_interpolation[0, 0, :-1],
+                self.right_face_values[:-1],
             )
             # revise fluxes
             self.fluxes = self.riemann(
-                self.a,
-                self.right_interpolations[:-1],
-                self.left_interpolations[1:],
+                self.a, self.right_face_values[:-1], self.left_face_values[1:]
             )
 
     def rkorder(self):
@@ -416,9 +371,11 @@ class AdvectionSolver(Integrator):
         """
         measure error between first state and last state
         """
+        approx = self.u[-1]
+        truth = self.u[0]
         if norm == "l1":
-            return l1_error(self.u[-1], self.u[0])
-        elif norm == "l2":
-            return l2_error(self.u[-1], self.u[0])
-        elif norm == "inf":
-            return max_error(self.u[-1], self.u[0])
+            return np.sum(np.abs(approx - truth)) / len(truth)
+        if norm == "l2":
+            return np.sqrt(np.sum(np.power(approx - truth, 2)) / len(truth))
+        if norm == "inf":
+            return np.max(np.abs(approx - truth))

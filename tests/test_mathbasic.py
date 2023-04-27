@@ -1,13 +1,4 @@
-from util.mathbasic import fact, gcf, lcm
-
-
-def test_fact():
-    """
-    test the fact function
-    """
-    assert fact(0) == 1
-    assert fact(1) == 1
-    assert fact(10) == 3628800
+from util.mathbasic import gcf, lcm
 
 
 def test_gcf():
