@@ -128,9 +128,7 @@ class AdvectionSolver(Integrator):
 
         # interpolating values inside cells
         p = order - 1  # polynomial degree p
-        q = (
-            int(np.ceil((p + 1) / 2)) + 1
-        )  # number of required quadrature points
+        q = int(np.ceil((p + 1) / 2)) + 1  # of required quadrature points
         interior_stensils = []
         if apriori_limiting and q > 2:
             if apriori_limiting == "mpp lite":

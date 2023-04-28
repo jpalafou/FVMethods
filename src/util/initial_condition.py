@@ -77,3 +77,17 @@ def initial_condition2d(x, y, ic_type):
                 for j in y
             ]
         )
+    elif ic_type == "disk":
+        xx, yy = np.meshgrid(x, y)
+        r = 0.3
+        slotw = 0.05
+        slotl = 0.5
+        disp = 0.5
+        disk_idx = xx**2 + (yy - disp) ** 2 < r**2
+        slot_idx = np.logical_and(
+            np.abs(xx) < slotw / 2,
+            np.logical_and(disp - r + slotl > yy, yy > disp - r),
+        )
+        u = np.zeros(x.shape)
+        u = np.where(np.logical_and(disk_idx, np.logical_not(slot_idx)), 1, u)
+        return u
