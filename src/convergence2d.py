@@ -9,11 +9,23 @@ warnings.filterwarnings("ignore")
 # configurations
 order_list = [1, 2, 3, 4, 5]
 n_list = [16, 32, 64, 128]
-u0_preset = "sinus"
+u0_preset = "gauss"
 courant = 0.5
-T = 1
-x = (0, 1)
+T = 2 * np.pi
+x = (-1, 1)
 a = (1, 1)
+
+def a(x, y):
+    """
+    args:
+        1d arrays x and y
+    returns:
+        tuple of meshes of both components of velocity in x, y
+        for a vortex advection field
+    """
+    xx, yy = np.meshgrid(x, y)
+    vx, vy = -yy, xx
+    return vx, vy
 
 
 # file locations

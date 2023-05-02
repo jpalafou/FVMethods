@@ -177,7 +177,7 @@ class AdvectionSolver(Integrator):
         # interpolating values along cell interfaces
         p = order - 1  # polynomial degree
         q = (
-            int(np.ceil((p - 1) / 2)) + 1
+            int(np.ceil((p + 1) / 2)) + 1
         )  # required number of quadrature points
         quadrature_points, weights = np.polynomial.legendre.leggauss(q)
         # scale to cell of width 1
