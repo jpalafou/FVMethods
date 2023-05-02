@@ -11,16 +11,7 @@ T = 1
 solutions = [
     AdvectionSolver(
         n=n,
-        order=2,
-        u0_preset=u0_preset,
-        courant=0.166,
-        T=T,
-        apriori_limiting="mpp",
-        smooth_extrema_detection=True,
-    ),
-    AdvectionSolver(
-        n=n,
-        order=3,
+        order=4,
         u0_preset=u0_preset,
         courant=0.166,
         T=T,
@@ -33,8 +24,7 @@ solutions = [
         u0_preset=u0_preset,
         courant=0.166,
         T=T,
-        apriori_limiting="mpp",
-        smooth_extrema_detection=True,
+        aposteriori_limiting=True,
     ),
 ]
 

@@ -59,12 +59,13 @@ def initial_condition1d(x, ic_type):
 
 def initial_condition2d(x, y, ic_type):
     if ic_type == "sinus":
-        return -np.array(
-            [
-                [np.cos(2 * math.pi * i) + np.cos(2 * math.pi * j) for i in x]
-                for j in y
-            ]
-        )
+        return np.sin(2 * np.pi * (x + y[:, np.newaxis]))
+    elif ic_type == "sinusx":
+        xx = np.tile(x, (len(y), 1))
+        return np.sin(2 * np.pi * xx)
+    elif ic_type == "sinusy":
+        yy = np.tile(y.reshape(-1, 1), (1, len(x)))
+        return np.sin(2 * np.pi * yy)
     elif ic_type == "square":
         return np.array(
             [
@@ -91,3 +92,8 @@ def initial_condition2d(x, y, ic_type):
         u = np.zeros(x.shape)
         u = np.where(np.logical_and(disk_idx, np.logical_not(slot_idx)), 1, u)
         return u
+    elif ic_type == "gauss":
+        sigma = 1 / 14
+        xx, yy = np.meshgrid(x, y)
+        r_sq = xx**2 + yy**2
+        return np.exp(-r_sq / (2 * (sigma**2)))

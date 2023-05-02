@@ -80,7 +80,7 @@ class AdvectionSolver(Integrator):
     def __init__(
         self,
         u0_preset: str = "square",
-        n: int = 32,
+        n: tuple = (32, 32),
         x: tuple = (0, 1),
         y: tuple = None,
         T: float = 1,
@@ -116,6 +116,7 @@ class AdvectionSolver(Integrator):
         )  # cell centers
         self.Ly = y[1] - y[0]  # domain size in y
         self.hy = self.Ly / ny  # cell size in y
+        self.h = self.hx if self.hx == self.hy else None
 
         # constant advection velocity defined at cell interfaces
         if isinstance(a, tuple):
@@ -127,9 +128,15 @@ class AdvectionSolver(Integrator):
 
         # time discretization
         self.courant = courant
-        Dt = courant * min(
-            self.hx / max(a_max[0], 1e-6), self.hy / max(a_max[1], 1e-6)
-        )
+        if isinstance(a, tuple):
+            Dt = courant / (
+                np.max(np.abs(self.a)) / self.hx
+                + np.max(np.abs(self.b)) / self.hy
+            )
+        if callable(a):
+            precompa, precompb = self.a(self.x_interface, self.y_interface)
+            maxa, maxb = np.max(np.abs(precompa)), np.max(np.abs(precompb))
+            Dt = courant / (maxa / self.hx + maxb / self.hy)
         Dt_adjustment = 1
         if self.adujst_time_step and order > 4:
             Dt_adjustment_x = rk4_Dt_adjust(self.hx, self.Lx, order)
@@ -380,15 +387,18 @@ class AdvectionSolver(Integrator):
         approx = self.u[-1]
         truth = self.u[0]
         if norm == "l1":
-            return np.sum(np.abs(approx - truth)) / len(truth)
+            return np.sum(np.abs(approx - truth) * self.hx * self.hy)
         if norm == "l2":
-            return np.sqrt(np.sum(np.power(approx - truth, 2)) / len(truth))
+            return np.sqrt(
+                np.sum(np.power(approx - truth, 2)) * self.hx * self.hy
+            )
         if norm == "inf":
             return np.max(np.abs(approx - truth))
 
     def plot(self):
         # global max and min
         hmin, hmax = np.min(self.u), np.max(self.u)
+        bounds = [self.x[0], self.x[-1], self.y[0], self.y[-1]]
 
         # select plot frames
         data1 = np.flipud(self.u[0])
@@ -408,12 +418,22 @@ class AdvectionSolver(Integrator):
             figure=fig,
         )
         axs = gs.subplots()
-        im1 = axs[0, 0].imshow(data1, cmap="cool", vmin=hmin, vmax=hmax)
-        axs[0, 1].imshow(data2, cmap="cool", vmin=hmin, vmax=hmax)
-        axs[0, 2].imshow(data3, cmap="cool", vmin=hmin, vmax=hmax)
-        axs[1, 0].imshow(data4, cmap="cool", vmin=hmin, vmax=hmax)
-        axs[1, 1].imshow(data5, cmap="cool", vmin=hmin, vmax=hmax)
-        im6 = axs[1, 2].imshow(data6, cmap="hot")
+        im1 = axs[0, 0].imshow(
+            data1, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
+        )
+        axs[0, 1].imshow(
+            data2, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
+        )
+        axs[0, 2].imshow(
+            data3, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
+        )
+        axs[1, 0].imshow(
+            data4, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
+        )
+        axs[1, 1].imshow(
+            data5, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
+        )
+        im6 = axs[1, 2].imshow(data6, cmap="hot", extent=bounds)
 
         # color bars
         cbar1 = fig.add_subplot(gs[0, 3])

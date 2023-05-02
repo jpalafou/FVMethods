@@ -80,13 +80,15 @@ for order in sorted(order_list):
             time_message += (
                 " + "
                 + r"$\Delta t$"
-                + f" * {round(solution.time_step_adjustment, 5)}"
+                + f" * {round(solution.Dt_adjustment, 5)}"
             )
         limiter_message = (
-            solution.apriori if solution.apriori else "no"
+            solution.apriori_limiting if solution.apriori_limiting else "no"
         ) + " limiter"
         limiter_message += (
-            " with smooth extrema detection" if solution.smooth_extrema else ""
+            " with smooth extrema detection"
+            if solution.smooth_extrema_detection
+            else ""
         )
         label = (
             f"{limiter_message} order {solution.order}" f" + {time_message}"
