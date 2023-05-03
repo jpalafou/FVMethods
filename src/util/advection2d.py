@@ -84,22 +84,17 @@ class AdvectionSolver(Integrator):
         x: tuple = (0, 1),
         y: tuple = None,
         T: float = 1,
-        a: tuple = (1, 1),
-        a_max: float = None,
+        v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,
         bc_type: str = "periodic",
+        apriori_limiting: str = None,
         loglen: int = 21,
         adujst_time_step: bool = False,
     ):
-        # misc. attributes
-        self.order = order
-        self.adujst_time_step = adujst_time_step
-
-        # spatial discretization
+        # spatial discretization in x
         self.n = (n, n) if isinstance(n, int) else n
         ny, nx = self.n
-        y = x if y is None else y
         self.x_interface = np.linspace(
             x[0], x[1], num=nx + 1
         )  # cell interfaces
@@ -108,6 +103,10 @@ class AdvectionSolver(Integrator):
         )  # cell centers
         self.Lx = x[1] - x[0]  # domain size in x
         self.hx = self.Lx / nx  # cell size in x
+        self.hx_recip = nx / self.Lx  # 1 / h
+
+        # spatial discretization in y
+        y = x if y is None else y
         self.y_interface = np.linspace(
             y[0], y[1], num=ny + 1
         )  # cell interfaces
@@ -116,29 +115,27 @@ class AdvectionSolver(Integrator):
         )  # cell centers
         self.Ly = y[1] - y[0]  # domain size in y
         self.hy = self.Ly / ny  # cell size in y
-        self.h = self.hx if self.hx == self.hy else None
+        self.hy_recip = ny / self.Ly  # 1 / h
 
-        # constant advection velocity defined at cell interfaces
-        if isinstance(a, tuple):
-            self.a = a[0] * np.ones((ny, nx + 1))
-            self.b = a[1] * np.ones((ny + 1, nx))
-        if callable(a):
-            self.a = a
-        a_max = (1, 1) if a_max is None else a_max
+        # maximum expected advection velocities
+        if isinstance(v, tuple):
+            vx_max, vy_max = abs(v[0]), abs(v[1])
+        if callable(v):
+            self.v = v
+            # precompute velocity at cell corners and use this as estimate for max
+            xx_interface, yy_interface = np.meshgrid(
+                self.x_interface, self.y_interface
+            )
+            v_max = v(xx_interface, yy_interface)
+            vx_max, vy_max = np.max(abs(v_max[0])), np.max(abs(v_max[1]))
 
         # time discretization
         self.courant = courant
-        if isinstance(a, tuple):
-            Dt = courant / (
-                np.max(np.abs(self.a)) / self.hx
-                + np.max(np.abs(self.b)) / self.hy
-            )
-        if callable(a):
-            precompa, precompb = self.a(self.x_interface, self.y_interface)
-            maxa, maxb = np.max(np.abs(precompa)), np.max(np.abs(precompb))
-            Dt = courant / (maxa / self.hx + maxb / self.hy)
-        Dt_adjustment = 1
-        if self.adujst_time_step and order > 4:
+        self.adujst_time_step = adujst_time_step
+        self.order = order
+        Dt = courant / (vx_max / self.hx + vy_max / self.hy)
+        Dt_adjustment = None
+        if adujst_time_step and order > 4:
             Dt_adjustment_x = rk4_Dt_adjust(self.hx, self.Lx, order)
             Dt_adjustment_y = rk4_Dt_adjust(self.hy, self.Ly, order)
             Dt_adjustment = min(Dt_adjustment_x, Dt_adjustment_y)
@@ -148,6 +145,7 @@ class AdvectionSolver(Integrator):
                 f" order {order} with rk4",
             )
         self.Dt_adjustment = Dt_adjustment
+        # round to nearest integer number of timesteps
         n_timesteps = int(np.ceil(T / Dt))
         self.Dt = T / n_timesteps
         self.t = np.linspace(0, T, num=n_timesteps + 1)
@@ -159,33 +157,47 @@ class AdvectionSolver(Integrator):
         # initialize integrator
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
-        # interpolating averages at cell interfaces
-        self.left_face_average_stensil = (
+        # right/left interpolation from a volume or line segment
+        left_interface_stensil = (
             ConservativeInterpolation.construct_from_order(
                 order, "left"
             ).nparray()
         )
-        self.right_face_average_stensil = (
+        right_interface_stensil = (
             ConservativeInterpolation.construct_from_order(
                 order, "right"
             ).nparray()
         )
-        self._stensil_size = len(self.left_face_average_stensil)
-        self.k = int(np.floor(len(self.left_face_average_stensil) / 2))
-        self.gw = self.k + 1
+        self._stensil_size = len(left_interface_stensil)
+        self.k = int(
+            np.floor(len(left_interface_stensil) / 2)
+        )  # cell reach of stensil
+        self.gw = self.k + 1  # ghost width
 
-        # interpolating values along cell interfaces
-        p = order - 1  # polynomial degree
-        q = (
-            int(np.ceil((p + 1) / 2)) + 1
-        )  # required number of quadrature points
-        quadrature_points, weights = np.polynomial.legendre.leggauss(q)
-        # scale to cell of width 1
-        quadrature_points /= 2
-        self.guass_quadrature_weights = weights / 2
-        # generater stensils
-        list_of_quadrature_stensils = []
-        for x in quadrature_points:
+        # quadrature points setup
+        p = order - 1  # degree of reconstructed polynomial
+        N_G = int(
+            np.ceil((p + 1) / 2)
+        )  # number of gauss-legendre quadrature points
+        N_GL = int(
+            np.ceil((p + 3) / 2)
+        )  # number of gauss-lobatto quadrature points
+
+        # stensils for reconstructing the average along a line segment within a cell
+        self.list_of_line_stensils = []
+        # guass-legendre quadrature
+        (
+            gauss_quadr_points,
+            gauss_quadr_weights,
+        ) = np.polynomial.legendre.leggauss(N_G)
+        # transform to cell coordinate
+        gauss_quadr_points /= 2
+        gauss_quadr_weights /= 2
+        self.gauss_quadr_weights = (
+            gauss_quadr_weights  # for evaluating line integrals
+        )
+        # reconstruct polynomial and evaluate at each quadrature point
+        for x in gauss_quadr_points:
             stensil = ConservativeInterpolation.construct_from_order(
                 order, x
             ).nparray()
@@ -193,50 +205,80 @@ class AdvectionSolver(Integrator):
             while len(stensil) < self._stensil_size:
                 stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
             assert len(stensil) == self._stensil_size
-            list_of_quadrature_stensils.append(stensil)
-        self.list_of_quadrature_stensils = list_of_quadrature_stensils
+            self.list_of_line_stensils.append(
+                stensil
+            )  # ordered from left to right
 
-        # x and y values at north/south interfaces
-        ns_quadrature_points_x = (
-            np.tile(self.x, (q, 1))
-            + self.hx * quadrature_points[:, np.newaxis]
-        )
-        ns_quadrature_points_y = np.tile(self.y_interface, (q, 1))
-        # x and y values at east/west interfaces
-        ew_quadrature_points_x = np.tile(self.x_interface, (q, 1))
-        ew_quadrature_points_y = (
-            np.tile(self.y, (q, 1))
-            + self.hy * quadrature_points[:, np.newaxis]
+        # stensils for reconstructing pointwise values along a line average
+        self.apriori_limiting = apriori_limiting if order > 1 else None
+        list_of_GL_stensils = []
+        if self.apriori_limiting is not None and N_GL > 2:
+            # interpolating values along line segments
+            (
+                interior_GL_quadr_points,
+                _,
+            ) = np.polynomial.legendre.leggauss(N_GL - 2)
+            endpoint_GL_quadr_weights = 2 / (N_GL * (N_GL - 1))
+            # scale to cell of width 1
+            interior_GL_quadr_points /= 2
+            endpoint_GL_quadr_weights /= 2
+            # mpp lite
+            if self.apriori_limiting == "mpp lite":
+                interior_GL_quadr_points = np.array([])
+            # generate stensils two are given
+            for x in interior_GL_quadr_points:
+                stensil = ConservativeInterpolation.construct_from_order(
+                    order, x
+                ).nparray()
+                # if the stensil is short, assume it needs a 0 on either end
+                while len(stensil) < self._stensil_size:
+                    stensil = np.concatenate(
+                        (np.zeros(1), stensil, np.zeros(1))
+                    )
+                assert len(stensil) == self._stensil_size
+                list_of_GL_stensils.append(stensil)
+            # check if timestep is small enough for mpp
+            if (
+                self.Dt * (vx_max / self.hx + vy_max / self.hy)
+                > endpoint_GL_quadr_weights
+            ):
+                print(
+                    "WARNING: Maximum principle preserving not satisfied.\nTry a ",
+                    f"courant condition less than {endpoint_GL_quadr_weights}\n",
+                )
+
+        # assort list of stensils for pointwise interpolation
+        self.list_of_pointwise_stensils = (
+            [left_interface_stensil]
+            + list_of_GL_stensils
+            + [right_interface_stensil]
         )
 
-        # evaluate a at these points
-        if callable(a):
-            # nsa has shape (2, q, len(y interface), len(x center))
-            self.nsa = np.swapaxes(
-                np.asarray(
-                    [
-                        a(x, y)
-                        for x, y in zip(
-                            ns_quadrature_points_x, ns_quadrature_points_y
-                        )
-                    ]
-                ),
-                0,
-                1,
-            )
-            # nsa has shape (2, q, len(y center), len(x interface))
-            self.ewa = np.swapaxes(
-                np.asarray(
-                    [
-                        a(x, y)
-                        for x, y in zip(
-                            ew_quadrature_points_x, ew_quadrature_points_y
-                        )
-                    ]
-                ),
-                0,
-                1,
-            )
+        # x and y values at quadrature points
+        na = np.newaxis
+        # quadrature points along east/west interfaces, shape (N_G, ny, nx + 1)
+        EW_qaudr_points_x = np.tile(self.x_interface, (N_G, ny, 1))
+        EW_qaudr_points_y = (
+            np.tile(np.tile(self.y, (nx + 1, 1)).T, (N_G, 1, 1))
+            + self.hy * gauss_quadr_points[:, na, na]
+        )
+        # quadrature points along north/south interfaces, shape (N_G, ny + 1, nx)
+        NS_qaudr_points_x = (
+            np.tile(self.x, (N_G, ny + 1, 1))
+            + self.hx * gauss_quadr_points[:, na, na]
+        )
+        NS_qaudr_points_y = np.tile(
+            np.tile(self.y_interface, (nx, 1)).T, (N_G, 1, 1)
+        )
+
+        # evaluate v at the interfaces
+        # only store component of velocity that is normal to interface
+        if isinstance(v, tuple):
+            self.v_EW_interface = v[0] * np.ones(EW_qaudr_points_x.shape)
+            self.v_NS_interface = v[1] * np.ones(NS_qaudr_points_x.shape)
+        if callable(v):
+            self.v_EW_interface = v(EW_qaudr_points_x, EW_qaudr_points_y)[0]
+            self.v_NS_interface = v(NS_qaudr_points_x, NS_qaudr_points_y)[1]
 
     def apply_bc(
         self, u_without_ghost_cells: np.ndarray, gw: int, direction: str
@@ -263,109 +305,160 @@ class AdvectionSolver(Integrator):
 
     def riemann(
         self,
-        velocities_at_boundaries: np.ndarray,
-        left_of_boundary_values: np.ndarray,
-        right_of_boundary_values: np.ndarray,
+        v: np.ndarray,
+        left_value: np.ndarray,
+        right_value: np.ndarray,
     ) -> float:
         """
         args:
-            velocities_at_boundaries    array of shape (k,m,n)
-            left_of_boundary_values     array of shape (k,m,n)
-            right_of_boundary_values    array of shape (k,m,n)
+            arrays of shape (k,m,n)
+            v   advection velocity defined at an interface
+            left_value  value to the left of the interface
+            right_value value to the right of the interface
+        returns:
+            array of shape (k,m,n)
+            fluxes at interface chosen based on advection direction
         """
-        fluxes = np.zeros(velocities_at_boundaries.shape)
-        fluxes = np.where(
-            velocities_at_boundaries > 0, left_of_boundary_values, fluxes
-        )
-        fluxes = np.where(
-            velocities_at_boundaries < 0, right_of_boundary_values, fluxes
-        )
-        return fluxes * velocities_at_boundaries
+        left_flux, right_flux = v * left_value, v * right_value
+        return (
+            (right_flux + left_flux) - np.abs(v) * (right_value - left_value)
+        ) / 2.0
 
     def udot(self, u: np.ndarray, t_i: float, dt: float = None) -> np.ndarray:
         # construct an extended array with ghost zones and apply bc
-        gw = self.gw
-        negative_gw = -gw
-        u_extended = self.apply_bc(u, gw, direction="xy")
-        ny, nx = u.shape
-        # construct an array of staggered state arrays such that a 3D matrix operation
-        # with a stensil multiplies weights by their referenced cells north/south
-        # east/west
-        ew_stack = stack3d(u_extended, self._stensil_size, direction="x")
-        ns_stack = stack3d(u_extended, self._stensil_size, direction="y")
-        # 1d face average reconstruction
-        ubar_north = apply_stensil(ns_stack, self.right_face_average_stensil)
-        ubar_south = apply_stensil(ns_stack, self.left_face_average_stensil)
-        ubar_east = apply_stensil(ew_stack, self.right_face_average_stensil)
-        ubar_west = apply_stensil(ew_stack, self.left_face_average_stensil)
-        # quadrature point reconstruction
-        ubar_north_stack = stack3d(
-            ubar_north, self._stensil_size, direction="x"
-        )
-        north_quadrature_interpolations = np.asarray(
+        u_extended = self.apply_bc(u, self.gw, direction="xy")
+        # stack volume arrays NS/EW to prepare for guass stensil operation
+        EW_stack = stack3d(u_extended, self._stensil_size, direction="x")
+        NS_stack = stack3d(u_extended, self._stensil_size, direction="y")
+        # line average reconstruction, first dimension is guass-legendre point
+        vertical_line_averages = np.asarray(
             [
-                apply_stensil(ubar_north_stack, stensil)
-                for stensil in self.list_of_quadrature_stensils
+                apply_stensil(EW_stack, stensil)
+                for stensil in self.list_of_line_stensils
             ]
         )
-        ubar_south_stack = stack3d(
-            ubar_south, self._stensil_size, direction="x"
-        )
-        south_quadrature_interpolations = np.asarray(
+        horizontal_line_averages = np.asarray(
             [
-                apply_stensil(ubar_south_stack, stensil)
-                for stensil in self.list_of_quadrature_stensils
+                apply_stensil(NS_stack, stensil)
+                for stensil in self.list_of_line_stensils
             ]
         )
-        ubar_east_stack = stack3d(ubar_east, self._stensil_size, direction="y")
-        east_quadrature_interpolations = np.asarray(
+        # stack line average arrays to prepare for guass-lobatto stensil operation
+        EW_stacks = np.asarray(
             [
-                apply_stensil(ubar_east_stack, stensil)
-                for stensil in self.list_of_quadrature_stensils
+                stack3d(i, self._stensil_size, direction="x")
+                for i in horizontal_line_averages
             ]
         )
-        ubar_west_stack = stack3d(ubar_west, self._stensil_size, direction="y")
-        west_quadrature_interpolations = np.asarray(
+        NS_stacks = np.asarray(
             [
-                apply_stensil(ubar_west_stack, stensil)
-                for stensil in self.list_of_quadrature_stensils
+                stack3d(i, self._stensil_size, direction="y")
+                for i in vertical_line_averages
             ]
         )
+        # pointwise reconstruction, first dimension is guass-legendre point
+        # second dimension is guass-lobatto point
+        horizontal_points = np.asarray(
+            [
+                [
+                    apply_stensil(EW_stack, stensil)
+                    for stensil in self.list_of_pointwise_stensils
+                ]
+                for EW_stack in EW_stacks
+            ]
+        )
+        vertical_points = np.asarray(
+            [
+                [
+                    apply_stensil(NS_stack, stensil)
+                    for stensil in self.list_of_pointwise_stensils
+                ]
+                for NS_stack in NS_stacks
+            ]
+        )
+        north_points = vertical_points[:, -1, :, :]
+        south_points = vertical_points[:, 0, :, :]
+        east_points = horizontal_points[:, -1, :, :]
+        west_points = horizontal_points[:, 0, :, :]
+        # find slope limiter
+        if self.apriori_limiting is not None:
+            # max and min of 4 neighbors
+            u_2gw = self.apply_bc(u, 2, direction="xy")
+            u_1gw = u_2gw[1:-1, 1:-1]
+            list_of_9_neighbors = [
+                u_1gw,
+                u_2gw[:-2, 1:-1],
+                u_2gw[2:, 1:-1],
+                u_2gw[1:-1, :-2],
+                u_2gw[1:-1, 2:],
+                u_2gw[2:, 2:],
+                u_2gw[2:, :-2],
+                u_2gw[:-2, 2:],
+                u_2gw[:-2, :-2],
+            ]
+            M = np.maximum.reduce(list_of_9_neighbors)
+            m = np.minimum.reduce(
+                list_of_9_neighbors + [1e-12 * np.ones(u_1gw.shape)]
+            )
+            # max and min of u evaluated at quadrature points
+            M_ij = np.maximum(
+                np.amax(horizontal_points, axis=(0, 1)),
+                np.amax(vertical_points, axis=(0, 1)),
+            )
+            m_ij = np.minimum(
+                np.amin(horizontal_points, axis=(0, 1)),
+                np.amin(vertical_points, axis=(0, 1)),
+            )
+            # evaluate slope limiter
+            theta = np.ones(u_1gw.shape)
+            M_arg = np.abs(M - u_1gw) / (np.abs(M_ij - u_1gw) + 1e-6)
+            m_arg = np.abs(m - u_1gw) / (np.abs(m_ij - u_1gw) + 1e-6)
+            theta = np.where(M_arg < theta, M_arg, theta)
+            theta = np.where(m_arg < theta, m_arg, theta)
+            # limit flux points
+            _k = self.k
+            _minus_k = -self.k
+            horizontal_fallback = horizontal_line_averages[:, :, _k:_minus_k]
+            vertical_fallback = vertical_line_averages[:, _k:_minus_k, :]
+            north_points = (
+                theta[np.newaxis, ...] * (north_points - vertical_fallback)
+                + vertical_fallback
+            )
+            south_points = (
+                theta[np.newaxis, ...] * (south_points - vertical_fallback)
+                + vertical_fallback
+            )
+            east_points = (
+                theta[np.newaxis, ...] * (east_points - horizontal_fallback)
+                + horizontal_fallback
+            )
+            west_points = (
+                theta[np.newaxis, ...] * (west_points - horizontal_fallback)
+                + horizontal_fallback
+            )
         # reimann problem to solve fluxes at each face
-        if callable(self.a):
-            ns_quadrature_fluxes = self.riemann(
-                self.nsa[1],
-                north_quadrature_interpolations[:, :-1, 1:-1],
-                south_quadrature_interpolations[:, 1:, 1:-1],
-            )
-            ew_quadrature_fluxes = self.riemann(
-                self.ewa[0],
-                east_quadrature_interpolations[:, 1:-1, :-1],
-                west_quadrature_interpolations[:, 1:-1, 1:],
-            )
-            # evaluate integral
-            ns_fluxes = apply_stensil(
-                ns_quadrature_fluxes, self.guass_quadrature_weights
-            )
-            ew_fluxes = apply_stensil(
-                ew_quadrature_fluxes, self.guass_quadrature_weights
-            )
-        else:
-            ew_fluxes = self.riemann(
-                self.a,
-                ubar_east[gw:negative_gw, :-1],
-                ubar_west[gw:negative_gw, 1:],
-            )
-            ns_fluxes = self.riemann(
-                self.b,
-                ubar_north[:-1, gw:negative_gw],
-                ubar_south[1:, gw:negative_gw],
-            )
-
-        return (
-            -(ew_fluxes[:, 1:] - ew_fluxes[:, :-1]) / self.hx
-            + -(ns_fluxes[1:, :] - ns_fluxes[:-1, :]) / self.hy
+        NS_pointwise_fluxes = self.riemann(
+            self.v_NS_interface,
+            north_points[:, :-1, 1:-1],
+            south_points[:, 1:, 1:-1],
         )
+        EW_pointwise_fluxes = self.riemann(
+            self.v_EW_interface,
+            east_points[:, 1:-1, :-1],
+            west_points[:, 1:-1, 1:],
+        )
+        # guass quadrature integral approximation
+        NS_fluxes = apply_stensil(
+            NS_pointwise_fluxes, self.gauss_quadr_weights
+        )
+        EW_fluxes = apply_stensil(
+            EW_pointwise_fluxes, self.gauss_quadr_weights
+        )
+        # spatial derivative operator
+        dudt = -self.hx_recip * (
+            EW_fluxes[:, 1:] - EW_fluxes[:, :-1]
+        ) + -self.hy_recip * (NS_fluxes[1:, :] - NS_fluxes[:-1, :])
+        return dudt
 
     def rkorder(self):
         """

@@ -18,8 +18,8 @@ class Integrator:
         aposteriori: bool = False,
     ):
         self._t = t
-        self.loglen = loglen
-        self._ilog = [int(i) for i in np.linspace(0, len(t) - 1, loglen)]
+        self.loglen = len(t) if loglen is None else loglen
+        self._ilog = [int(i) for i in np.linspace(0, len(t) - 1, self.loglen)]
         assert len(self._ilog) == len(
             set(self._ilog)
         )  # there should be no duplicate values
@@ -27,7 +27,7 @@ class Integrator:
         assert t[self._ilog[-1]] == t[-1]
         self.t = t[self._ilog]
         self.emptyu = np.zeros(u0.shape)
-        u = np.asarray([u0] + [self.emptyu for _ in range(loglen - 1)])
+        u = np.asarray([u0] + [self.emptyu for _ in range(self.loglen - 1)])
         self.u = u
         self.u0_initial = u0
         self.u0 = u0
@@ -129,7 +129,7 @@ class Integrator:
             self.logupdate(i)
             self.u0 = self.u1
 
-    def ssp_rk2(self):
+    def ssprk2(self):
         """
         2nd order strong stability preserving Runge-Kutta integrator
         """
@@ -143,7 +143,7 @@ class Integrator:
             self.logupdate(i)
             self.u0 = self.u1
 
-    def ssp_rk3(self):
+    def ssprk3(self):
         """
         3rd order strong stability preserving Runge-Kutta integrator
         """

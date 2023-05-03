@@ -168,7 +168,7 @@ class AdvectionSolver(Integrator):
                     f" Courant condition of {C_for_mpp}.",
                 )
 
-        # complete list of interpolation stensils going fromleft to right
+        # complete list of interpolation stensils going from left to right
         self.list_of_stensils = (
             [left_interface_stensil]
             + interior_stensils

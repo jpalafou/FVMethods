@@ -97,3 +97,20 @@ def initial_condition2d(x, y, ic_type):
         xx, yy = np.meshgrid(x, y)
         r_sq = xx**2 + yy**2
         return np.exp(-r_sq / (2 * (sigma**2)))
+    elif ic_type == "three balls":
+        r = 0.09
+        xx, yy = np.meshgrid(x, y)
+        u = 0 * xx
+        circle1mask = np.logical_and(
+            np.abs(xx - 0.5) < r, np.abs(yy - 0.1) < r
+        )
+        circle2mask = np.logical_and(
+            np.abs(xx - 0.5) < r, np.abs(yy - 0.5) < r
+        )
+        circle3mask = np.logical_and(
+            np.abs(xx - 0.5) < r, np.abs(yy - 0.9) < r
+        )
+        u[circle1mask] = 1
+        u[circle2mask] = 1
+        u[circle3mask] = 1
+        return u

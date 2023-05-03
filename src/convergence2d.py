@@ -9,23 +9,11 @@ warnings.filterwarnings("ignore")
 # configurations
 order_list = [1, 2, 3, 4, 5]
 n_list = [16, 32, 64, 128]
-u0_preset = "gauss"
+u0_preset = "sinus"
 courant = 0.5
-T = 2 * np.pi
-x = (-1, 1)
-a = (1, 1)
-
-def a(x, y):
-    """
-    args:
-        1d arrays x and y
-    returns:
-        tuple of meshes of both components of velocity in x, y
-        for a vortex advection field
-    """
-    xx, yy = np.meshgrid(x, y)
-    vx, vy = -yy, xx
-    return vx, vy
+T = 1
+x = (0, 1)
+v = (1, 2)
 
 
 # file locations
@@ -77,14 +65,14 @@ for order in sorted(order_list):
             u0_preset=u0_preset,
             courant=courant,
             adujst_time_step=True,
-            a=a,
             T=T,
             x=x,
+            v=v,
         )
         solution.rkorder()  # time integration
         # append error to list of error
         error = solution.find_error("l1")
-        h_list.append(solution.h)
+        h_list.append(solution.hx)
         error_list.append(error)
         # label generation
         if solution.order == 1:
