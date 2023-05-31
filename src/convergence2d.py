@@ -1,10 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from csv import writer
-import warnings
 from util.advection2d import AdvectionSolver
-
-warnings.filterwarnings("ignore")
 
 # configurations
 order_list = [1, 2, 3, 4, 5]

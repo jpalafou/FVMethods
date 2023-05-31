@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 from util.advection2d import AdvectionSolver
 
@@ -23,6 +22,7 @@ def test_meshsize_convergence():
         solution.rkorder()
         errorlist = np.append(errorlist, solution.find_error("l1"))
     assert all(errorlist[:-1] - errorlist[1:] > 0)
+
 
 def test_order_convergence():
     """

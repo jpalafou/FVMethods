@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 from util.initial_condition import initial_condition2d
 from util.integrate import Integrator
 from util.fvscheme import ConservativeInterpolation
+from util.david.simple_trouble_detection2d import (
+    trouble_detection2d,
+    compute_second_order_fluxes,
+)
 
 
 def rk4_Dt_adjust(h, L, order):
@@ -88,7 +92,9 @@ class AdvectionSolver(Integrator):
         courant: float = 0.5,
         order: int = 1,
         bc_type: str = "periodic",
+        interpolation_method: str = "gauss-legendre",
         apriori_limiting: str = None,
+        aposteriori_limiting: bool = False,
         loglen: int = 21,
         adujst_time_step: bool = False,
     ):
@@ -157,7 +163,7 @@ class AdvectionSolver(Integrator):
         # initialize integrator
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
-        # right/left interpolation from a volume or line segment
+        # stensils: right/left interpolation from a volume or line segment
         left_interface_stensil = (
             ConservativeInterpolation.construct_from_order(
                 order, "left"
@@ -280,53 +286,92 @@ class AdvectionSolver(Integrator):
             self.v_EW_interface = v(EW_qaudr_points_x, EW_qaudr_points_y)[0]
             self.v_NS_interface = v(NS_qaudr_points_x, NS_qaudr_points_y)[1]
 
-    def apply_bc(
-        self, u_without_ghost_cells: np.ndarray, gw: int, direction: str
+        # initialize a posteriori limiting
+        self.aposteriori_limiting = aposteriori_limiting
+        # define normal velocity at midpoints of cell interfaces
+        if isinstance(v, tuple):
+            self.v_EW_midpoints = v[0] * np.ones((ny, nx + 1))
+            self.v_NS_midpoints = v[1] * np.ones((ny + 1, nx))
+        if callable(v):
+            x_EW_midpoints, y_EW_midpoints = np.meshgrid(
+                self.x_interface, self.y
+            )
+            x_NS_midpoints, y_NS_midpoints = np.meshgrid(
+                self.x, self.y_interface
+            )
+            self.v_EW_midpoints = v(x_EW_midpoints, y_EW_midpoints)
+            self.v_NS_midpoints = v(x_NS_midpoints, y_NS_midpoints)
+
+        # fluxes
+        self.NS_fluxes = np.zeros((ny + 1, nx))
+        self.EW_fluxes = np.zeros((ny, nx + 1))
+
+        # dynamic function assignment
+        self.interpolation_method = interpolation_method
+        if self.interpolation_method == "gauss-legendre":
+            self.compute_high_order_fluxes = self.legendre_fluxes
+        elif self.interpolation_method == "transverse":
+            self.compute_high_order_fluxes = self.transverse_fluxes
+        if self.apriori_limiting is None:
+            self.apriori_limiter = self.no_limiter
+        else:
+            self.apriori_limiter = self.mpp_limiter
+        if self.aposteriori_limiting:
+            self.aposteriori_limiter = self.revise_solution
+        else:
+            self.aposteriori_limiter = self.dont_revise_solution
+
+    def udot(
+        self, u: np.ndarray, t_i: float = None, dt: float = None
     ) -> np.ndarray:
         """
         args:
-            u_without_ghost_cells   1d np array
-            gw      number of ghost cells on either side of u
-            direction   x or y
+            u       (ny, nx)
+            t_i     time at which u is defined
+            dt      timestep size from t_i to t_i+1
         returns:
-            u_with_ghost_cells
+            dudt    (ny, nx) at t_i
+        """
+        self.compute_high_order_fluxes(u=u)
+        self.aposteriori_limiter(u0=u, dt=dt)
+        return self.get_dynamics()
+
+    def apply_bc(
+        self, u_without_ghost_cells: np.ndarray, gw: int, dim: str
+    ) -> np.ndarray:
+        """
+        args:
+            u_without_ghost_cells   (ny, nx)
+            gw  number of ghost cells on either side of u
+            dim   'x', 'y', or 'xy'
+        returns:
+            u_with_ghost_cells  (ny, nx + 2 * gw) if dim = 'x'
+                                (ny + 2 * gw, nx) if dim = 'y'
+                                (ny + 2 * gw, nx + 2 * gw) if dim = 'xy'
         """
         if self.bc_type == "periodic":
-            if direction == "x":
+            if dim == "x":
                 pad_width = ((0, 0), (gw, gw))
-            if direction == "y":
+            if dim == "y":
                 pad_width = ((gw, gw), (0, 0))
-            if direction == "xy":
+            if dim == "xy":
                 pad_width = gw
             u_with_ghost_cells = np.pad(
                 u_without_ghost_cells, pad_width, mode="wrap"
             )
         return u_with_ghost_cells
 
-    def riemann(
-        self,
-        v: np.ndarray,
-        left_value: np.ndarray,
-        right_value: np.ndarray,
-    ) -> float:
+    def legendre_fluxes(self, u: np.ndarray):
         """
+        compute fluxes with the Gauss-Legendre quadrature method
         args:
-            arrays of shape (k,m,n)
-            v   advection velocity defined at an interface
-            left_value  value to the left of the interface
-            right_value value to the right of the interface
-        returns:
-            array of shape (k,m,n)
-            fluxes at interface chosen based on advection direction
+            u   array of volume averages (ny, nx)
+        overwrites:
+            self.NS_fluxes  (ny + 1, nx)
+            self.EW_fluxes  (ny, nx + 1)
         """
-        left_flux, right_flux = v * left_value, v * right_value
-        return (
-            (right_flux + left_flux) - np.abs(v) * (right_value - left_value)
-        ) / 2.0
-
-    def udot(self, u: np.ndarray, t_i: float, dt: float = None) -> np.ndarray:
         # construct an extended array with ghost zones and apply bc
-        u_extended = self.apply_bc(u, self.gw, direction="xy")
+        u_extended = self.apply_bc(u, gw=self.gw, dim="xy")
         # stack volume arrays NS/EW to prepare for guass stensil operation
         EW_stack = stack3d(u_extended, self._stensil_size, direction="x")
         NS_stack = stack3d(u_extended, self._stensil_size, direction="y")
@@ -376,66 +421,21 @@ class AdvectionSolver(Integrator):
                 for NS_stack in NS_stacks
             ]
         )
-        north_points = vertical_points[:, -1, :, :]
-        south_points = vertical_points[:, 0, :, :]
-        east_points = horizontal_points[:, -1, :, :]
-        west_points = horizontal_points[:, 0, :, :]
-        # find slope limiter
-        if self.apriori_limiting is not None:
-            # max and min of 4 neighbors
-            u_2gw = self.apply_bc(u, 2, direction="xy")
-            u_1gw = u_2gw[1:-1, 1:-1]
-            list_of_9_neighbors = [
-                u_1gw,
-                u_2gw[:-2, 1:-1],
-                u_2gw[2:, 1:-1],
-                u_2gw[1:-1, :-2],
-                u_2gw[1:-1, 2:],
-                u_2gw[2:, 2:],
-                u_2gw[2:, :-2],
-                u_2gw[:-2, 2:],
-                u_2gw[:-2, :-2],
-            ]
-            M = np.maximum.reduce(list_of_9_neighbors)
-            m = np.minimum.reduce(
-                list_of_9_neighbors + [1e-12 * np.ones(u_1gw.shape)]
-            )
-            # max and min of u evaluated at quadrature points
-            M_ij = np.maximum(
-                np.amax(horizontal_points, axis=(0, 1)),
-                np.amax(vertical_points, axis=(0, 1)),
-            )
-            m_ij = np.minimum(
-                np.amin(horizontal_points, axis=(0, 1)),
-                np.amin(vertical_points, axis=(0, 1)),
-            )
-            # evaluate slope limiter
-            theta = np.ones(u_1gw.shape)
-            M_arg = np.abs(M - u_1gw) / (np.abs(M_ij - u_1gw) + 1e-6)
-            m_arg = np.abs(m - u_1gw) / (np.abs(m_ij - u_1gw) + 1e-6)
-            theta = np.where(M_arg < theta, M_arg, theta)
-            theta = np.where(m_arg < theta, m_arg, theta)
-            # limit flux points
-            _k = self.k
-            _minus_k = -self.k
-            horizontal_fallback = horizontal_line_averages[:, :, _k:_minus_k]
-            vertical_fallback = vertical_line_averages[:, _k:_minus_k, :]
-            north_points = (
-                theta[np.newaxis, ...] * (north_points - vertical_fallback)
-                + vertical_fallback
-            )
-            south_points = (
-                theta[np.newaxis, ...] * (south_points - vertical_fallback)
-                + vertical_fallback
-            )
-            east_points = (
-                theta[np.newaxis, ...] * (east_points - horizontal_fallback)
-                + horizontal_fallback
-            )
-            west_points = (
-                theta[np.newaxis, ...] * (west_points - horizontal_fallback)
-                + horizontal_fallback
-            )
+
+        # apply slope limiter
+        (
+            north_points,
+            south_points,
+            east_points,
+            west_points,
+        ) = self.apriori_limiter(
+            horizontal_points,
+            vertical_points,
+            horizontal_line_averages,
+            vertical_line_averages,
+            u,
+        )
+
         # reimann problem to solve fluxes at each face
         NS_pointwise_fluxes = self.riemann(
             self.v_NS_interface,
@@ -448,17 +448,232 @@ class AdvectionSolver(Integrator):
             west_points[:, 1:-1, 1:],
         )
         # guass quadrature integral approximation
-        NS_fluxes = apply_stensil(
+        self.NS_fluxes[...] = apply_stensil(
             NS_pointwise_fluxes, self.gauss_quadr_weights
         )
-        EW_fluxes = apply_stensil(
+        self.EW_fluxes[...] = apply_stensil(
             EW_pointwise_fluxes, self.gauss_quadr_weights
         )
-        # spatial derivative operator
-        dudt = -self.hx_recip * (
-            EW_fluxes[:, 1:] - EW_fluxes[:, :-1]
-        ) + -self.hy_recip * (NS_fluxes[1:, :] - NS_fluxes[:-1, :])
-        return dudt
+
+    def transverse_fluxes(self, u: np.ndarray):
+        ...
+
+    def no_limiter(
+        self,
+        horizontal_points,
+        vertical_points,
+        horizontal_line_averages,
+        vertical_line_averages,
+        u,
+    ):
+        """
+        return mpp slope limited pointwise interpolations along cell borders
+        args:
+            horizontal_points           (# horizontal lines, # points per line,
+                                        ny + 2, nx + 2)
+            vertical_points             (# vertical lines, # points per line,
+                                        ny + 2, nx + 2)
+            horizontal_line_averages    (# horizontal lines, ny + 2, nx + 2 * gw)
+            vertical_line_averages      (# vertical lines, ny + 2 * gw, nx + 2)
+            u                           (ny, nx)
+        returns:
+            north_points    (# vertical lines, ny + 2, nx + 2)
+            south_points    (# vertical lines, ny + 2, nx + 2)
+            east_points     (# horizontal lines, ny + 2, nx + 2)
+            west_points     (# horizontal lines, ny + 2, nx + 2)
+        """
+        north_points = vertical_points[:, -1, :, :]
+        south_points = vertical_points[:, 0, :, :]
+        east_points = horizontal_points[:, -1, :, :]
+        west_points = horizontal_points[:, 0, :, :]
+        return north_points, south_points, east_points, west_points
+
+    def mpp_limiter(
+        self,
+        horizontal_points,
+        vertical_points,
+        horizontal_line_averages,
+        vertical_line_averages,
+        u,
+    ):
+        """
+        return mpp slope limited pointwise interpolations along cell borders
+        args:
+            horizontal_points           (# horizontal lines, # points per line,
+                                        ny + 2, nx + 2)
+            vertical_points             (# vertical lines, # points per line,
+                                        ny + 2, nx + 2)
+            horizontal_line_averages    (# horizontal lines, ny + 2, nx + 2 * gw)
+            vertical_line_averages      (# vertical lines, ny + 2 * gw, nx + 2)
+            u                           (ny, nx)
+        returns:
+            north_points    (# vertical lines, ny + 2, nx + 2)
+            south_points    (# vertical lines, ny + 2, nx + 2)
+            east_points     (# horizontal lines, ny + 2, nx + 2)
+            west_points     (# horizontal lines, ny + 2, nx + 2)
+        """
+        north_points, south_points, east_points, west_points = self.no_limiter(
+            horizontal_points,
+            vertical_points,
+            horizontal_line_averages,
+            vertical_line_averages,
+            u,
+        )
+        # max and min of 9 neighbors
+        u_2gw = self.apply_bc(u, gw=2, dim="xy")  # u with a ghost width of 2
+        u_1gw = u_2gw[1:-1, 1:-1]  # u with a ghost width of 1
+        list_of_9_neighbors = [
+            u_1gw,
+            u_2gw[:-2, 1:-1],
+            u_2gw[2:, 1:-1],
+            u_2gw[1:-1, :-2],
+            u_2gw[1:-1, 2:],
+            u_2gw[2:, 2:],
+            u_2gw[2:, :-2],
+            u_2gw[:-2, 2:],
+            u_2gw[:-2, :-2],
+        ]
+        M = np.maximum.reduce(list_of_9_neighbors)
+        m = np.minimum.reduce(
+            list_of_9_neighbors + [1e-12 * np.ones(u_1gw.shape)]
+        )
+        # max and min of u evaluated at quadrature points
+        M_ij = np.maximum(
+            np.amax(horizontal_points, axis=(0, 1)),
+            np.amax(vertical_points, axis=(0, 1)),
+        )
+        m_ij = np.minimum(
+            np.amin(horizontal_points, axis=(0, 1)),
+            np.amin(vertical_points, axis=(0, 1)),
+        )
+        # evaluate slope limiter
+        theta = np.ones(u_1gw.shape)
+        M_arg = np.abs(M - u_1gw) / (np.abs(M_ij - u_1gw) + 1e-6)
+        m_arg = np.abs(m - u_1gw) / (np.abs(m_ij - u_1gw) + 1e-6)
+        theta = np.where(M_arg < theta, M_arg, theta)
+        theta = np.where(m_arg < theta, m_arg, theta)
+        # limit flux points
+        _k = self.k
+        _minus_k = -self.k
+        horizontal_fallback = horizontal_line_averages[:, :, _k:_minus_k]
+        vertical_fallback = vertical_line_averages[:, _k:_minus_k, :]
+        north_points = (
+            theta[np.newaxis, ...] * (north_points - vertical_fallback)
+            + vertical_fallback
+        )
+        south_points = (
+            theta[np.newaxis, ...] * (south_points - vertical_fallback)
+            + vertical_fallback
+        )
+        east_points = (
+            theta[np.newaxis, ...] * (east_points - horizontal_fallback)
+            + horizontal_fallback
+        )
+        west_points = (
+            theta[np.newaxis, ...] * (west_points - horizontal_fallback)
+            + horizontal_fallback
+        )
+        return north_points, south_points, east_points, west_points
+
+    def riemann(
+        self,
+        v: np.ndarray,
+        left_value: np.ndarray,
+        right_value: np.ndarray,
+    ) -> float:
+        """
+        args:
+            arrays of shape (k,m,n)
+            v   advection velocity defined at an interface
+            left_value  value to the left of the interface
+            right_value value to the right of the interface
+        returns:
+            array of shape (k,m,n)
+            pointwise fluxes at interface chosen based on advection direction
+        """
+        left_flux, right_flux = v * left_value, v * right_value
+        return (
+            (right_flux + left_flux) - np.abs(v) * (right_value - left_value)
+        ) / 2.0
+
+    def revise_solution(self, u0: np.ndarray, dt: float):
+        """
+        args:
+            u0  initial state (ny, nx)
+            ucandidate  proposed next state (ny, nx)
+        overwrites:
+            self.NS_fluxes and self.EW_fluxes to fall back to second order
+            when trouble is detected
+        """
+        # compute candidate solution
+        ucandidate = u0 + dt * self.get_dynamics()
+        # give the previous and candidate solutions two ghost cells
+        u0_2gw = self.apply_bc(u0, 2, dim="xy")
+        ucandidate_2gw = self.apply_bc(ucandidate, 2, dim="xy")
+        # reshape into 3d array to match david's code
+        u0_2gw = u0_2gw[np.newaxis]
+        ucandidate_2gw = ucandidate_2gw[np.newaxis]
+        # find troubled cells
+        troubled_cells = trouble_detection2d(
+            u0_2gw, ucandidate_2gw, hx=self.hx, hy=self.hy
+        )
+        NS_troubled_faces = np.zeros(self.NS_fluxes.shape)[np.newaxis]
+        EW_troubled_faces = np.zeros(self.EW_fluxes.shape)[np.newaxis]
+
+        # find troubled faces
+        if np.any(troubled_cells):
+            EW_troubled_faces[:, :, :-1] = troubled_cells
+            EW_troubled_faces[:, :, 1:] = np.where(
+                troubled_cells == 1, 1, EW_troubled_faces[:, :, 1:]
+            )
+            NS_troubled_faces[:, :-1, :] = troubled_cells
+            NS_troubled_faces[:, 1:, :] = np.where(
+                troubled_cells == 1, 1, NS_troubled_faces[:, 1:, :]
+            )
+            # find 2nd order pointwise interpolations at cell centers
+            west_midpoint, east_midpoint = compute_second_order_fluxes(
+                u0_2gw, dim="x"
+            )
+            south_midpoint, north_midpoint = compute_second_order_fluxes(
+                u0_2gw, dim="y"
+            )
+
+            # compute fluxes using face midpoints
+            NS_fluxes_2nd_order = self.riemann(
+                self.v_NS_midpoints[np.newaxis],
+                north_midpoint[:, :-1, :],
+                south_midpoint[:, 1:, :],
+            )
+            EW_fluxes_2nd_order = self.riemann(
+                self.v_EW_midpoints[np.newaxis],
+                east_midpoint[:, :, :-1],
+                west_midpoint[:, :, 1:],
+            )
+
+            # revise fluxes
+            self.NS_fluxes = np.where(
+                NS_troubled_faces[0] == 1,
+                NS_fluxes_2nd_order[0],
+                self.NS_fluxes,
+            )
+            self.EW_fluxes = np.where(
+                EW_troubled_faces[0] == 1,
+                EW_fluxes_2nd_order[0],
+                self.EW_fluxes,
+            )
+
+    def dont_revise_solution(self, u0: np.ndarray, dt: float):
+        return
+
+    def get_dynamics(self) -> np.ndarray:
+        """
+        dudt + d(au)dx + d(bu)dy = 0
+        returns:
+            dudt    (ny, nx)
+        """
+        return -self.hx_recip * (
+            self.EW_fluxes[:, 1:] - self.EW_fluxes[:, :-1]
+        ) + -self.hy_recip * (self.NS_fluxes[1:, :] - self.NS_fluxes[:-1, :])
 
     def rkorder(self):
         """
@@ -473,9 +688,12 @@ class AdvectionSolver(Integrator):
         else:
             self.euler()
 
-    def find_error(self, norm: str = "l1"):
+    def periodic_error(self, norm: str = "l1"):
         """
-        measure error between first state and last state
+        args:
+            norm    'l1', 'l2', or 'linf'
+        returns:
+            norm specified error    (ny, nx)
         """
         approx = self.u[-1]
         truth = self.u[0]

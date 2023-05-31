@@ -1,8 +1,5 @@
 import matplotlib.pyplot as plt
-import warnings
 from util.advection1d import AdvectionSolver
-
-warnings.filterwarnings("ignore")
 
 # configurations
 n = 256
@@ -39,7 +36,7 @@ plt.plot(
 # run all cases
 for solution in solutions:
     # time integration
-    solution.ssp_rk3()
+    solution.ssprk3()
     # errors
     print(f"l1 error = {solution.find_error('l1')}")
     print(

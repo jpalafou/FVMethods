@@ -70,9 +70,9 @@ def initial_condition2d(x, y, ic_type):
         return np.array(
             [
                 [
-                    1
+                    1.0
                     if (i > 0.25 and i < 0.75) and (j > 0.25 and j < 0.75)
-                    else 0
+                    else 0.0
                     for i in x
                 ]
                 for j in y

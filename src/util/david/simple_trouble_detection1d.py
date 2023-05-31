@@ -1,4 +1,7 @@
 import numpy as np
+import warnings
+
+warnings.filterwarnings("ignore")
 
 def trouble_detection(trouble, u0, unew):
     tolerance_ptge = 1e-8

@@ -3,7 +3,7 @@ import numpy as np
 from util.initial_condition import initial_condition1d
 from util.integrate import Integrator
 from util.fvscheme import ConservativeInterpolation
-from util.david.simple_trouble_detection import (
+from util.david.simple_trouble_detection1d import (
     trouble_detection1d,
     compute_second_order_fluxes,
 )
