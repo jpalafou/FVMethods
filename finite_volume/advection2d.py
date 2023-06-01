@@ -2,10 +2,10 @@
 import numpy as np
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
-from util.initial_condition import initial_condition2d
-from util.integrate import Integrator
-from util.fvscheme import ConservativeInterpolation
-from util.david.simple_trouble_detection2d import (
+from finite_volume.initial_condition import initial_condition2d
+from finite_volume.integrate import Integrator
+from finite_volume.fvscheme import ConservativeInterpolation
+from finite_volume.aposteriori.simple_trouble_detection2d import (
     trouble_detection2d,
     compute_second_order_fluxes,
 )
@@ -101,24 +101,16 @@ class AdvectionSolver(Integrator):
         # spatial discretization in x
         self.n = (n, n) if isinstance(n, int) else n
         ny, nx = self.n
-        self.x_interface = np.linspace(
-            x[0], x[1], num=nx + 1
-        )  # cell interfaces
-        self.x = 0.5 * (
-            self.x_interface[:-1] + self.x_interface[1:]
-        )  # cell centers
+        self.x_interface = np.linspace(x[0], x[1], num=nx + 1)  # cell interfaces
+        self.x = 0.5 * (self.x_interface[:-1] + self.x_interface[1:])  # cell centers
         self.Lx = x[1] - x[0]  # domain size in x
         self.hx = self.Lx / nx  # cell size in x
         self.hx_recip = nx / self.Lx  # 1 / h
 
         # spatial discretization in y
         y = x if y is None else y
-        self.y_interface = np.linspace(
-            y[0], y[1], num=ny + 1
-        )  # cell interfaces
-        self.y = 0.5 * (
-            self.y_interface[:-1] + self.y_interface[1:]
-        )  # cell centers
+        self.y_interface = np.linspace(y[0], y[1], num=ny + 1)  # cell interfaces
+        self.y = 0.5 * (self.y_interface[:-1] + self.y_interface[1:])  # cell centers
         self.Ly = y[1] - y[0]  # domain size in y
         self.hy = self.Ly / ny  # cell size in y
         self.hy_recip = ny / self.Ly  # 1 / h
@@ -129,9 +121,7 @@ class AdvectionSolver(Integrator):
         if callable(v):
             self.v = v
             # precompute velocity at cell corners and use this as estimate for max
-            xx_interface, yy_interface = np.meshgrid(
-                self.x_interface, self.y_interface
-            )
+            xx_interface, yy_interface = np.meshgrid(self.x_interface, self.y_interface)
             v_max = v(xx_interface, yy_interface)
             vx_max, vy_max = np.max(abs(v_max[0])), np.max(abs(v_max[1]))
 
@@ -164,30 +154,20 @@ class AdvectionSolver(Integrator):
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
         # stensils: right/left interpolation from a volume or line segment
-        left_interface_stensil = (
-            ConservativeInterpolation.construct_from_order(
-                order, "left"
-            ).nparray()
-        )
-        right_interface_stensil = (
-            ConservativeInterpolation.construct_from_order(
-                order, "right"
-            ).nparray()
-        )
+        left_interface_stensil = ConservativeInterpolation.construct_from_order(
+            order, "left"
+        ).nparray()
+        right_interface_stensil = ConservativeInterpolation.construct_from_order(
+            order, "right"
+        ).nparray()
         self._stensil_size = len(left_interface_stensil)
-        self.k = int(
-            np.floor(len(left_interface_stensil) / 2)
-        )  # cell reach of stensil
+        self.k = int(np.floor(len(left_interface_stensil) / 2))  # cell reach of stensil
         self.gw = self.k + 1  # ghost width
 
         # quadrature points setup
         p = order - 1  # degree of reconstructed polynomial
-        N_G = int(
-            np.ceil((p + 1) / 2)
-        )  # number of gauss-legendre quadrature points
-        N_GL = int(
-            np.ceil((p + 3) / 2)
-        )  # number of gauss-lobatto quadrature points
+        N_G = int(np.ceil((p + 1) / 2))  # number of gauss-legendre quadrature points
+        N_GL = int(np.ceil((p + 3) / 2))  # number of gauss-lobatto quadrature points
 
         # stensils for reconstructing the average along a line segment within a cell
         self.list_of_line_stensils = []
@@ -199,21 +179,15 @@ class AdvectionSolver(Integrator):
         # transform to cell coordinate
         gauss_quadr_points /= 2
         gauss_quadr_weights /= 2
-        self.gauss_quadr_weights = (
-            gauss_quadr_weights  # for evaluating line integrals
-        )
+        self.gauss_quadr_weights = gauss_quadr_weights  # for evaluating line integrals
         # reconstruct polynomial and evaluate at each quadrature point
         for x in gauss_quadr_points:
-            stensil = ConservativeInterpolation.construct_from_order(
-                order, x
-            ).nparray()
+            stensil = ConservativeInterpolation.construct_from_order(order, x).nparray()
             # if the stensil is short, assume it needs a 0 on either end
             while len(stensil) < self._stensil_size:
                 stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
             assert len(stensil) == self._stensil_size
-            self.list_of_line_stensils.append(
-                stensil
-            )  # ordered from left to right
+            self.list_of_line_stensils.append(stensil)  # ordered from left to right
 
         # stensils for reconstructing pointwise values along a line average
         self.apriori_limiting = apriori_limiting if order > 1 else None
@@ -238,9 +212,7 @@ class AdvectionSolver(Integrator):
                 ).nparray()
                 # if the stensil is short, assume it needs a 0 on either end
                 while len(stensil) < self._stensil_size:
-                    stensil = np.concatenate(
-                        (np.zeros(1), stensil, np.zeros(1))
-                    )
+                    stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
                 assert len(stensil) == self._stensil_size
                 list_of_GL_stensils.append(stensil)
             # check if timestep is small enough for mpp
@@ -255,9 +227,7 @@ class AdvectionSolver(Integrator):
 
         # assort list of stensils for pointwise interpolation
         self.list_of_pointwise_stensils = (
-            [left_interface_stensil]
-            + list_of_GL_stensils
-            + [right_interface_stensil]
+            [left_interface_stensil] + list_of_GL_stensils + [right_interface_stensil]
         )
 
         # x and y values at quadrature points
@@ -270,12 +240,9 @@ class AdvectionSolver(Integrator):
         )
         # quadrature points along north/south interfaces, shape (N_G, ny + 1, nx)
         NS_qaudr_points_x = (
-            np.tile(self.x, (N_G, ny + 1, 1))
-            + self.hx * gauss_quadr_points[:, na, na]
+            np.tile(self.x, (N_G, ny + 1, 1)) + self.hx * gauss_quadr_points[:, na, na]
         )
-        NS_qaudr_points_y = np.tile(
-            np.tile(self.y_interface, (nx, 1)).T, (N_G, 1, 1)
-        )
+        NS_qaudr_points_y = np.tile(np.tile(self.y_interface, (nx, 1)).T, (N_G, 1, 1))
 
         # evaluate v at the interfaces
         # only store component of velocity that is normal to interface
@@ -293,12 +260,8 @@ class AdvectionSolver(Integrator):
             self.v_EW_midpoints = v[0] * np.ones((ny, nx + 1))
             self.v_NS_midpoints = v[1] * np.ones((ny + 1, nx))
         if callable(v):
-            x_EW_midpoints, y_EW_midpoints = np.meshgrid(
-                self.x_interface, self.y
-            )
-            x_NS_midpoints, y_NS_midpoints = np.meshgrid(
-                self.x, self.y_interface
-            )
+            x_EW_midpoints, y_EW_midpoints = np.meshgrid(self.x_interface, self.y)
+            x_NS_midpoints, y_NS_midpoints = np.meshgrid(self.x, self.y_interface)
             self.v_EW_midpoints = v(x_EW_midpoints, y_EW_midpoints)
             self.v_NS_midpoints = v(x_NS_midpoints, y_NS_midpoints)
 
@@ -321,9 +284,7 @@ class AdvectionSolver(Integrator):
         else:
             self.aposteriori_limiter = self.dont_revise_solution
 
-    def udot(
-        self, u: np.ndarray, t_i: float = None, dt: float = None
-    ) -> np.ndarray:
+    def udot(self, u: np.ndarray, t_i: float = None, dt: float = None) -> np.ndarray:
         """
         args:
             u       (ny, nx)
@@ -356,9 +317,7 @@ class AdvectionSolver(Integrator):
                 pad_width = ((gw, gw), (0, 0))
             if dim == "xy":
                 pad_width = gw
-            u_with_ghost_cells = np.pad(
-                u_without_ghost_cells, pad_width, mode="wrap"
-            )
+            u_with_ghost_cells = np.pad(u_without_ghost_cells, pad_width, mode="wrap")
         return u_with_ghost_cells
 
     def legendre_fluxes(self, u: np.ndarray):
@@ -377,16 +336,10 @@ class AdvectionSolver(Integrator):
         NS_stack = stack3d(u_extended, self._stensil_size, direction="y")
         # line average reconstruction, first dimension is guass-legendre point
         vertical_line_averages = np.asarray(
-            [
-                apply_stensil(EW_stack, stensil)
-                for stensil in self.list_of_line_stensils
-            ]
+            [apply_stensil(EW_stack, stensil) for stensil in self.list_of_line_stensils]
         )
         horizontal_line_averages = np.asarray(
-            [
-                apply_stensil(NS_stack, stensil)
-                for stensil in self.list_of_line_stensils
-            ]
+            [apply_stensil(NS_stack, stensil) for stensil in self.list_of_line_stensils]
         )
         # stack line average arrays to prepare for guass-lobatto stensil operation
         EW_stacks = np.asarray(
@@ -423,12 +376,7 @@ class AdvectionSolver(Integrator):
         )
 
         # apply slope limiter
-        (
-            north_points,
-            south_points,
-            east_points,
-            west_points,
-        ) = self.apriori_limiter(
+        (north_points, south_points, east_points, west_points,) = self.apriori_limiter(
             horizontal_points,
             vertical_points,
             horizontal_line_averages,
@@ -534,9 +482,7 @@ class AdvectionSolver(Integrator):
             u_2gw[:-2, :-2],
         ]
         M = np.maximum.reduce(list_of_9_neighbors)
-        m = np.minimum.reduce(
-            list_of_9_neighbors + [1e-12 * np.ones(u_1gw.shape)]
-        )
+        m = np.minimum.reduce(list_of_9_neighbors + [1e-12 * np.ones(u_1gw.shape)])
         # max and min of u evaluated at quadrature points
         M_ij = np.maximum(
             np.amax(horizontal_points, axis=(0, 1)),
@@ -592,9 +538,7 @@ class AdvectionSolver(Integrator):
             pointwise fluxes at interface chosen based on advection direction
         """
         left_flux, right_flux = v * left_value, v * right_value
-        return (
-            (right_flux + left_flux) - np.abs(v) * (right_value - left_value)
-        ) / 2.0
+        return ((right_flux + left_flux) - np.abs(v) * (right_value - left_value)) / 2.0
 
     def revise_solution(self, u0: np.ndarray, dt: float):
         """
@@ -631,9 +575,7 @@ class AdvectionSolver(Integrator):
                 troubled_cells == 1, 1, NS_troubled_faces[:, 1:, :]
             )
             # find 2nd order pointwise interpolations at cell centers
-            west_midpoint, east_midpoint = compute_second_order_fluxes(
-                u0_2gw, dim="x"
-            )
+            west_midpoint, east_midpoint = compute_second_order_fluxes(u0_2gw, dim="x")
             south_midpoint, north_midpoint = compute_second_order_fluxes(
                 u0_2gw, dim="y"
             )
@@ -700,9 +642,7 @@ class AdvectionSolver(Integrator):
         if norm == "l1":
             return np.sum(np.abs(approx - truth) * self.hx * self.hy)
         if norm == "l2":
-            return np.sqrt(
-                np.sum(np.power(approx - truth, 2)) * self.hx * self.hy
-            )
+            return np.sqrt(np.sum(np.power(approx - truth, 2)) * self.hx * self.hy)
         if norm == "inf":
             return np.max(np.abs(approx - truth))
 
@@ -729,21 +669,11 @@ class AdvectionSolver(Integrator):
             figure=fig,
         )
         axs = gs.subplots()
-        im1 = axs[0, 0].imshow(
-            data1, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
-        )
-        axs[0, 1].imshow(
-            data2, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
-        )
-        axs[0, 2].imshow(
-            data3, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
-        )
-        axs[1, 0].imshow(
-            data4, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
-        )
-        axs[1, 1].imshow(
-            data5, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds
-        )
+        im1 = axs[0, 0].imshow(data1, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
+        axs[0, 1].imshow(data2, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
+        axs[0, 2].imshow(data3, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
+        axs[1, 0].imshow(data4, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
+        axs[1, 1].imshow(data5, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
         im6 = axs[1, 2].imshow(data6, cmap="hot", extent=bounds)
 
         # color bars
@@ -760,9 +690,7 @@ class AdvectionSolver(Integrator):
         axs[0, 2].set_title(f"t = {self.t[int(0.5 * self.loglen)]:.3f}")
         axs[1, 0].set_title(f"t = {self.t[int(0.75 * self.loglen)]:.3f}")
         axs[1, 1].set_title(f"t = {self.t[-1]:.3f}")
-        axs[1, 2].set_title(
-            f"u(t = {self.t[-1]:.3f}) - u(t = {self.t[0]:.3f})"
-        )
+        axs[1, 2].set_title(f"u(t = {self.t[-1]:.3f}) - u(t = {self.t[0]:.3f})")
 
         # Add a title to the entire figure
         fig.suptitle("Heatmap Grid")

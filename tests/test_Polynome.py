@@ -1,7 +1,7 @@
 # test Polynome class, which also tests the LinearCombination class
 import pytest
 from random import sample, randint, random
-from util.polynome import Polynome
+from finite_volume.polynome import Polynome
 
 
 n_tests = 10
@@ -126,9 +126,9 @@ def test_derivative(unused_parameter):  # FIX large errors for small \abs{x}
     rand_poly = create_rand_poly()
     h = 0.000001
     x = sample([-3, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 2, 3], 1)[0]
-    assert (rand_poly.eval(x + h) - rand_poly.eval(x - h)) / (
-        2 * h
-    ) == pytest.approx(rand_poly.prime().eval(x), abs=1e-3)
+    assert (rand_poly.eval(x + h) - rand_poly.eval(x - h)) / (2 * h) == pytest.approx(
+        rand_poly.prime().eval(x), abs=1e-3
+    )
 
 
 @pytest.mark.parametrize("unused_parameter", range(n_tests))
@@ -138,9 +138,7 @@ def test_derivative_of_a_sum(unused_parameter):
     """
     rand_poly1 = create_rand_poly()
     rand_poly2 = create_rand_poly()
-    assert (
-        rand_poly1 + rand_poly2
-    ).prime() == rand_poly1.prime() + rand_poly2.prime()
+    assert (rand_poly1 + rand_poly2).prime() == rand_poly1.prime() + rand_poly2.prime()
 
 
 @pytest.mark.parametrize("unused_parameter", range(n_tests))
@@ -151,7 +149,5 @@ def test_derivative_of_a_product(unused_parameter):
     rand_poly1 = create_rand_poly()
     rand_poly2 = create_rand_poly()
     derivative_of_products = (rand_poly1 * rand_poly2).prime()
-    product_rule = (
-        rand_poly1 * rand_poly2.prime() + rand_poly1.prime() * rand_poly2
-    )
+    product_rule = rand_poly1 * rand_poly2.prime() + rand_poly1.prime() * rand_poly2
     assert derivative_of_products == product_rule

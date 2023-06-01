@@ -1,4 +1,4 @@
-from util.fvscheme import ConservativeInterpolation
+from finite_volume.fvscheme import ConservativeInterpolation
 
 orders = range(1, 8)
 
@@ -7,9 +7,7 @@ ConservativeInterpolation.construct_from_order(
 )  # this should approximate the right interface reconstruction
 
 for order in orders:
-    ConservativeInterpolation.construct_from_order(
-        order=order, reconstruct_here="left"
-    )
+    ConservativeInterpolation.construct_from_order(order=order, reconstruct_here="left")
     ConservativeInterpolation.construct_from_order(
         order=order, reconstruct_here="right"
     )

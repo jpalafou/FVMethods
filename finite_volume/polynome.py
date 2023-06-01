@@ -1,6 +1,6 @@
 import dataclasses
-from util.mathbasic import gcf, lcm, Fraction
-from util.lincom import LinearCombination
+from finite_volume.mathbasic import gcf, lcm, Fraction
+from finite_volume.lincom import LinearCombination
 
 
 @dataclasses.dataclass
@@ -84,8 +84,7 @@ class Polynome(LinearCombination):
                 dict([(i, other * j) for i, j in self.coeffs.items()])
             )
         raise TypeError(
-            f"Cannot multiply a {self.__class__.__name__} with"
-            + f"a {type(other)}"
+            f"Cannot multiply a {self.__class__.__name__} with" + f"a {type(other)}"
         )
 
     __rmul__ = __mul__
@@ -93,9 +92,7 @@ class Polynome(LinearCombination):
     def __floordiv__(self, other: int):
         if isinstance(other, int):
             if other == 0:
-                raise BaseException(
-                    f"Cannot divide a {self.__class__.__name__} by 0."
-                )
+                raise BaseException(f"Cannot divide a {self.__class__.__name__} by 0.")
             return self.__class__(
                 dict([(i, j // other) for i, j in self.coeffs.items()])
             )
@@ -147,10 +144,7 @@ class Lagrange(Polynome):
         if self.denominator == 0:
             raise BaseException("Lagrange instance with 0 denominator.")
         # reformat lagrange
-        if (
-            self.denominator != 1
-            and self.numerator != self.numerator.__class__.zero()
-        ):
+        if self.denominator != 1 and self.numerator != self.numerator.__class__.zero():
             # redistribute negative sign if denominator is negative
             if self.denominator < 0:
                 new_numerator = -self.numerator
@@ -159,9 +153,7 @@ class Lagrange(Polynome):
                 new_numerator = self.numerator
                 new_denominator = self.denominator
             # factor gcf out of numerator and denominator if it is > 1
-            gcf_fraction = gcf(
-                list(new_numerator.coeffs.values()) + [new_denominator]
-            )
+            gcf_fraction = gcf(list(new_numerator.coeffs.values()) + [new_denominator])
             if gcf_fraction > 1:
                 new_numerator = new_numerator // gcf_fraction
                 new_denominator = new_denominator // gcf_fraction
@@ -188,9 +180,7 @@ class Lagrange(Polynome):
         return cls(numerator.coeffs, denominator)
 
     def zero(self):
-        return self.__class__(
-            self.numerator.__class__.zero().coeffs, self.denominator
-        )
+        return self.__class__(self.numerator.__class__.zero().coeffs, self.denominator)
 
     def __add__(self, other):
         denominator = lcm(self.denominator, other.denominator)

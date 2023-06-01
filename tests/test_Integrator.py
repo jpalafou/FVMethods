@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import math
 import random
-from util.integrate import Integrator
+from finite_volume.integrate import Integrator
 
 
 n_tests = 5

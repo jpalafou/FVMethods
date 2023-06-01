@@ -1,6 +1,6 @@
 import pytest  # run > pytest -s -q -rA
 import numpy as np
-from util.fvscheme import Kernel
+from finite_volume.fvscheme import Kernel
 
 n_tests = 5
 max_left_cells = 20
@@ -30,9 +30,7 @@ def test_kernel_setup_SingleCellKernel():
     assert len(Kernel(0, 0).x_cell_faces) - 1 == 1
 
 
-@pytest.mark.parametrize(
-    "unused_parameter", range(n_tests)
-)  # test n_tests times
+@pytest.mark.parametrize("unused_parameter", range(n_tests))  # test n_tests times
 def test_kernel_setup_random(unused_parameter, kern):
     """
     test that kernel properties are consistent when a kernel is set up randomly

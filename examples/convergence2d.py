@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from csv import writer
-from util.advection2d import AdvectionSolver
+from finite_volume.advection2d import AdvectionSolver
 
 # configurations
 order_list = [1, 2, 3, 4, 5]
@@ -17,6 +18,12 @@ v = (1, 2)
 plot_path = "figures/"
 data_path = "data/"
 project_name = "error_convergence_2d_advection"
+
+# create folders if they don't exist
+if not os.path.exists(plot_path):
+    os.makedirs(plot_path)
+if not os.path.exists(data_path):
+    os.makedirs(data_path)
 
 
 def plot_slope_triangle(x, y):
@@ -68,7 +75,7 @@ for order in sorted(order_list):
         )
         solution.rkorder()  # time integration
         # append error to list of error
-        error = solution.find_error("l1")
+        error = solution.periodic_error("l1")
         h_list.append(solution.hx)
         error_list.append(error)
         # label generation
@@ -80,9 +87,7 @@ for order in sorted(order_list):
             time_message = "rk4"
         if solution.adujst_time_step and solution.order > 4:
             time_message += (
-                " + "
-                + r"$\Delta t$"
-                + f" * {round(solution.Dt_adjustment, 5)}"
+                " + " + r"$\Delta t$" + f" * {round(solution.Dt_adjustment, 5)}"
             )
         # limiter_message = (
         #     solution.apriori_limiting if solution.apriori_limiting else "no"

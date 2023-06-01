@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from util.advection1d import AdvectionSolver
+from finite_volume.advection1d import AdvectionSolver
 
 
 def test_meshsize_convergence():
@@ -13,9 +13,7 @@ def test_meshsize_convergence():
         solution = AdvectionSolver(n=n, u0_preset="composite")
         solution.rkorder()
         errorlist.append(solution.find_error("l1"))
-    assert all(
-        errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1)
-    )
+    assert all(errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1))
 
 
 def test_order_convergence():
@@ -28,9 +26,7 @@ def test_order_convergence():
         solution = AdvectionSolver(n=256, order=order, u0_preset="composite")
         solution.rkorder()
         errorlist.append(solution.find_error("l1"))
-    assert all(
-        errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1)
-    )
+    assert all(errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1))
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
@@ -43,9 +39,7 @@ def test_periodic_solution_nolimiter(order):
     forward_advection.rkorder()
     backward_advection = AdvectionSolver(order=order, a=-1)
     backward_advection.rkorder()
-    assert forward_advection.u[-1] == pytest.approx(
-        np.flip(backward_advection.u[-1])
-    )
+    assert forward_advection.u[-1] == pytest.approx(np.flip(backward_advection.u[-1]))
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])

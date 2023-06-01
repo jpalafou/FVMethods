@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from csv import writer
-from util.advection1d import AdvectionSolver
+from finite_volume.advection1d import AdvectionSolver
 
 # configurations
 order_list = [1, 2, 3, 4, 5, 6]
@@ -14,6 +15,12 @@ T = 2
 plot_path = "figures/"
 data_path = "data/"
 project_name = "error_convergence_1d_advection"
+
+# create folders if they don't exist
+if not os.path.exists(plot_path):
+    os.makedirs(plot_path)
+if not os.path.exists(data_path):
+    os.makedirs(data_path)
 
 
 def plot_slope_triangle(x, y):
@@ -75,9 +82,7 @@ for order in sorted(order_list):
             time_message = "rk4"
         if solution.adujst_time_step and solution.order > 4:
             time_message += (
-                " + "
-                + r"$\Delta t$"
-                + f" * {round(solution.Dt_adjustment, 5)}"
+                " + " + r"$\Delta t$" + f" * {round(solution.Dt_adjustment, 5)}"
             )
         limiter_message = (
             solution.apriori_limiting if solution.apriori_limiting else "no"
@@ -87,9 +92,7 @@ for order in sorted(order_list):
             if solution.smooth_extrema_detection
             else ""
         )
-        label = (
-            f"{limiter_message} order {solution.order}" f" + {time_message}"
-        )
+        label = f"{limiter_message} order {solution.order}" f" + {time_message}"
         # data logging
         with open(data_path + project_name + ".csv", "a") as f_object:
             writer_object = writer(f_object)

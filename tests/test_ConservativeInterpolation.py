@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
 from random import random
-from util.polynome import Lagrange
-from util.mathbasic import Fraction
-from util.fvscheme import Kernel, ConservativeInterpolation
+from finite_volume.polynome import Lagrange
+from finite_volume.mathbasic import Fraction
+from finite_volume.fvscheme import Kernel, ConservativeInterpolation
 
 
 n_tests = 5
@@ -16,17 +16,13 @@ def test_2nd_order_right_biased_both_faces():
     """
     solution_right = {0: Fraction(1, 2), 1: Fraction(1, 2)}
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(0, 1), "right"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(0, 1), "right").coeffs
         == solution_right
     )
 
     solution_left = {0: Fraction(3, 2), 1: Fraction(-1, 2)}
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(0, 1), "left"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(0, 1), "left").coeffs
         == solution_left
     )
 
@@ -38,17 +34,13 @@ def test_2nd_order_left_biased_both_faces():
     """
     solution_right = {-1: Fraction(-1, 2), 0: Fraction(3, 2)}
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 0), "right"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "right").coeffs
         == solution_right
     )
 
     solution_left = {-1: Fraction(1, 2), 0: Fraction(1, 2)}
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 0), "left"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "left").coeffs
         == solution_left
     )
 
@@ -99,9 +91,7 @@ def test_2nd_order_Fromm():
         + ConservativeInterpolation.construct_from_kernel(Kernel(1, 0), "r")
     ) / 2 - (
         ConservativeInterpolation.construct_from_kernel(Kernel(0, 1, -1), "r")
-        + ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 0, -1), "r"
-        )
+        + ConservativeInterpolation.construct_from_kernel(Kernel(1, 0, -1), "r")
     ) / 2
     assert my_du.coeffs == du_solution
 
@@ -117,17 +107,13 @@ def test_3rd_order_both_faces():
         1: Fraction(1, 3),
     }
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 1), "right"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(1, 1), "right").coeffs
         == solution_right
     )
 
     solution_left = {-1: Fraction(1, 3), 0: Fraction(5, 6), 1: Fraction(-1, 6)}
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 1), "left"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(1, 1), "left").coeffs
         == solution_left
     )
 
@@ -145,9 +131,7 @@ def test_3rd_order_difference():
     }
     my_du = (
         ConservativeInterpolation.construct_from_kernel(Kernel(1, 1), "r")
-        - ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 1, -1), "r"
-        )
+        - ConservativeInterpolation.construct_from_kernel(Kernel(1, 1, -1), "r")
     ).coeffs
     assert my_du == du_solution
 
@@ -164,9 +148,7 @@ def test_4th_order_right_biased_right_face():
         2: Fraction(-1, 12),
     }
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(1, 2), "r"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(1, 2), "r").coeffs
         == solution_right
     )
 
@@ -188,9 +170,7 @@ def test_8th_order_right_biased_left_face():
         4: Fraction(3, f),
     }
     assert (
-        ConservativeInterpolation.construct_from_kernel(
-            Kernel(3, 4), "l"
-        ).coeffs
+        ConservativeInterpolation.construct_from_kernel(Kernel(3, 4), "l").coeffs
         == solution_left
     )
 
@@ -211,9 +191,7 @@ def test_nparray():
     scheme = ConservativeInterpolation.construct_from_order(5, "l")
     scheme_np = scheme.nparray()
     assert all(
-        np.array(
-            [i.numerator / i.denominator for i in list(scheme.coeffs.values())]
-        )
+        np.array([i.numerator / i.denominator for i in list(scheme.coeffs.values())])
         == scheme_np / sum(scheme_np)
     )
 
@@ -242,9 +220,7 @@ def test_stensil_construction_for_floating_point_evalation(unused_parameter):
         ConservativeInterpolation.construct_from_kernel(kernel, x).nparray()
         for x in exes
     ]
-    stensil_evaluations = [
-        u_bar @ stensil / sum(stensil) for stensil in stensils
-    ]
+    stensil_evaluations = [u_bar @ stensil / sum(stensil) for stensil in stensils]
     true_evaluations = [
         h * u_bar @ np.array([p1.eval(h * x), p2.eval(h * x), p3.eval(h * x)])
         for x in exes

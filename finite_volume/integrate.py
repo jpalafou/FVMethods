@@ -137,9 +137,7 @@ class Integrator:
             dt = self.findDt(i)
             x1 = self.u0
             x2 = x1 + dt * self.udot(x1, self._t[i], dt)
-            self.u1 = (1 / 2) * x1 + (1 / 2) * (
-                x2 + dt * self.udot(x2, self._t[i], dt)
-            )
+            self.u1 = (1 / 2) * x1 + (1 / 2) * (x2 + dt * self.udot(x2, self._t[i], dt))
             self.logupdate(i)
             self.u0 = self.u1
 
@@ -151,11 +149,7 @@ class Integrator:
             dt = self.findDt(i)
             x1 = self.u0
             x2 = x1 + dt * self.udot(x1, self._t[i], dt)
-            x3 = (3 / 4) * x1 + (1 / 4) * (
-                x2 + dt * self.udot(x2, self._t[i], dt)
-            )
-            self.u1 = (1 / 3) * x1 + (2 / 3) * (
-                x3 + dt * self.udot(x3, self._t[i], dt)
-            )
+            x3 = (3 / 4) * x1 + (1 / 4) * (x2 + dt * self.udot(x2, self._t[i], dt))
+            self.u1 = (1 / 3) * x1 + (2 / 3) * (x3 + dt * self.udot(x3, self._t[i], dt))
             self.logupdate(i)
             self.u0 = self.u1

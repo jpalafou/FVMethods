@@ -1,5 +1,5 @@
 import dataclasses
-from util.mathbasic import Fraction
+from finite_volume.mathbasic import Fraction
 
 
 @dataclasses.dataclass
@@ -71,9 +71,7 @@ class LinearCombination:
                 f"Cannot multiply type {self.__class__.__name__} with type"
                 f" {other.__class__.__name__}."
             )
-        return self.__class__(
-            dict([(i, other * j) for i, j in self.coeffs.items()])
-        )
+        return self.__class__(dict([(i, other * j) for i, j in self.coeffs.items()]))
 
     __rmul__ = __mul__
 
@@ -133,9 +131,7 @@ class LinearCombinationOfFractions(LinearCombination):
                 f"Cannot multiply type {self.__class__.__name__} with type"
                 f" {other.__class__.__name__}."
             )
-        return self.__class__(
-            dict([(i, other * j) for i, j in self.coeffs.items()])
-        )
+        return self.__class__(dict([(i, other * j) for i, j in self.coeffs.items()]))
 
     __rmul__ = __mul__
 
@@ -145,6 +141,4 @@ class LinearCombinationOfFractions(LinearCombination):
                 f"Cannot divide type {self.__class__.__name__} by type"
                 f" {other.__class__.__name__}."
             )
-        return self.__class__(
-            dict([(i, j / other) for i, j in self.coeffs.items()])
-        )
+        return self.__class__(dict([(i, j / other) for i, j in self.coeffs.items()]))

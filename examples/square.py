@@ -1,5 +1,5 @@
 import numpy as np
-from util.advection2d import AdvectionSolver
+from finite_volume.advection2d import AdvectionSolver
 
 solution = AdvectionSolver(
     u0_preset="square",
@@ -13,9 +13,7 @@ solution = AdvectionSolver(
     aposteriori_limiting=True,
 )
 solution.ssprk3()
-print(
-    f"global max: {np.max(solution.u):.2e}, global min: {np.min(solution.u):.2e}"
-)
+print(f"global max: {np.max(solution.u):.2e}, global min: {np.min(solution.u):.2e}")
 print(
     f"final max: {np.max(solution.u[-1]):.2e}, final min: {np.min(solution.u[-1]):.2e}"
 )

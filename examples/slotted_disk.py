@@ -1,5 +1,5 @@
 import numpy as np
-from util.advection2d import AdvectionSolver
+from finite_volume.advection2d import AdvectionSolver
 import matplotlib.pyplot as plt
 
 
@@ -15,16 +15,13 @@ solution = AdvectionSolver(
     v=vortex,
     courant=0.16,
     order=4,
-    apriori_limiting=None,
+    apriori_limiting="mpp",
+    aposteriori_limiting=False,
     loglen=None,
 )
 solution.rk4()
-print(
-    f"global max: {np.max(solution.u):.2e}, global min: {np.min(solution.u):.2e}"
-)
-print(
-    f"last max: {np.max(solution.u[-1]):.2e}, last min: {np.min(solution.u[-1]):.2e}"
-)
+print(f"global max: {np.max(solution.u):.2e}, global min: {np.min(solution.u):.2e}")
+print(f"last max: {np.max(solution.u[-1]):.2e}, last min: {np.min(solution.u[-1]):.2e}")
 solution.plot()
 
 plt.plot(solution.t, np.amin(solution.u, axis=(1, 2)))

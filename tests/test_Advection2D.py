@@ -1,5 +1,5 @@
 import numpy as np
-from util.advection2d import AdvectionSolver
+from finite_volume.advection2d import AdvectionSolver
 
 
 def test_meshsize_convergence():
@@ -20,7 +20,7 @@ def test_meshsize_convergence():
             apriori_limiting=None,
         )
         solution.rkorder()
-        errorlist = np.append(errorlist, solution.find_error("l1"))
+        errorlist = np.append(errorlist, solution.periodic_error("l1"))
     assert all(errorlist[:-1] - errorlist[1:] > 0)
 
 
@@ -42,5 +42,5 @@ def test_order_convergence():
             apriori_limiting=None,
         )
         solution.rkorder()
-        errorlist = np.append(errorlist, solution.find_error("l1"))
+        errorlist = np.append(errorlist, solution.periodic_error("l1"))
     assert all(errorlist[:-1] - errorlist[1:] > 0)

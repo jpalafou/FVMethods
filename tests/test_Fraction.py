@@ -1,7 +1,7 @@
 # test the Fraction module
 import pytest
 import numpy as np
-from util.mathbasic import Fraction
+from finite_volume.mathbasic import Fraction
 
 
 n_tests = 10

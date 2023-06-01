@@ -37,9 +37,7 @@ class Fraction:
     denominator: int
 
     def __post_init__(self):
-        if not isinstance(self.numerator, int) or not isinstance(
-            self.denominator, int
-        ):
+        if not isinstance(self.numerator, int) or not isinstance(self.denominator, int):
             raise TypeError("Input is not an int tuple.")
         if self.denominator == 0:
             raise BaseException("Invalid case: zero denominator.")
@@ -56,9 +54,7 @@ class Fraction:
             factor = gcf([self.numerator, self.denominator])
             if factor > 1:
                 object.__setattr__(self, "numerator", self.numerator // factor)
-                object.__setattr__(
-                    self, "denominator", self.denominator // factor
-                )
+                object.__setattr__(self, "denominator", self.denominator // factor)
             # move negative sign from denominator
             if self.denominator < 0:
                 object.__setattr__(self, "numerator", -self.numerator)

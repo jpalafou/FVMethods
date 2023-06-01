@@ -1,9 +1,9 @@
 # advection solution schems
 import numpy as np
-from util.initial_condition import initial_condition1d
-from util.integrate import Integrator
-from util.fvscheme import ConservativeInterpolation
-from util.david.simple_trouble_detection1d import (
+from finite_volume.initial_condition import initial_condition1d
+from finite_volume.integrate import Integrator
+from finite_volume.fvscheme import ConservativeInterpolation
+from finite_volume.aposteriori.simple_trouble_detection1d import (
     trouble_detection1d,
     compute_second_order_fluxes,
 )
@@ -66,18 +66,12 @@ class AdvectionSolver(Integrator):
         self.aposteriori_limiting = aposteriori_limiting
         self.adujst_time_step = adujst_time_step
         if apriori_limiting not in (None, "mpp", "mpp lite"):
-            raise BaseException(
-                f"Invalid apriori limiting type: {apriori_limiting}"
-            )
+            raise BaseException(f"Invalid apriori limiting type: {apriori_limiting}")
 
         # spatial discretization
         self.n = n
-        self.x_interface = np.linspace(
-            x[0], x[1], num=n + 1
-        )  # cell interfaces
-        self.x = 0.5 * (
-            self.x_interface[:-1] + self.x_interface[1:]
-        )  # cell centers
+        self.x_interface = np.linspace(x[0], x[1], num=n + 1)  # cell interfaces
+        self.x = 0.5 * (self.x_interface[:-1] + self.x_interface[1:])  # cell centers
         self.L = x[1] - x[0]  # domain size
         self.h = self.L / n  # cell size
 
@@ -108,22 +102,14 @@ class AdvectionSolver(Integrator):
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
         # interpolating values at cell interfaces
-        left_interface_stensil = (
-            ConservativeInterpolation.construct_from_order(
-                order, "left"
-            ).nparray()
-        )
-        right_interface_stensil = (
-            ConservativeInterpolation.construct_from_order(
-                order, "right"
-            ).nparray()
-        )
-        self._stensil_size = len(
-            left_interface_stensil
-        )  # assume symmetric stensils
-        k = int(
-            np.floor(len(left_interface_stensil) / 2)
-        )  # length of stensil arms
+        left_interface_stensil = ConservativeInterpolation.construct_from_order(
+            order, "left"
+        ).nparray()
+        right_interface_stensil = ConservativeInterpolation.construct_from_order(
+            order, "right"
+        ).nparray()
+        self._stensil_size = len(left_interface_stensil)  # assume symmetric stensils
+        k = int(np.floor(len(left_interface_stensil) / 2))  # length of stensil arms
         self.gw = k + 1
 
         # interpolating values inside cells
@@ -133,11 +119,9 @@ class AdvectionSolver(Integrator):
         if apriori_limiting and q > 2:
             if apriori_limiting == "mpp lite":
                 # lite version of mpp uses only the cell center as a free absicca
-                cell_center_stensil = (
-                    ConservativeInterpolation.construct_from_order(
-                        order, "center"
-                    ).nparray()
-                )
+                cell_center_stensil = ConservativeInterpolation.construct_from_order(
+                    order, "center"
+                ).nparray()
                 interior_stensils.append(cell_center_stensil)
             elif apriori_limiting == "mpp":
                 # full version requires a stensil for each Guass-Lobatto point
@@ -150,9 +134,7 @@ class AdvectionSolver(Integrator):
                     ).nparray()
                     # if the stensil is short, assume it needs a 0 on either end
                     while len(stensil) < self._stensil_size:
-                        stensil = np.concatenate(
-                            (np.zeros(1), stensil, np.zeros(1))
-                        )
+                        stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
                     assert len(stensil) == self._stensil_size
                     interior_stensils.append(stensil)
             # quadrature weight at endpoints
@@ -170,18 +152,14 @@ class AdvectionSolver(Integrator):
 
         # complete list of interpolation stensils going from left to right
         self.list_of_stensils = (
-            [left_interface_stensil]
-            + interior_stensils
-            + [right_interface_stensil]
+            [left_interface_stensil] + interior_stensils + [right_interface_stensil]
         )
 
         # array to store interpolations at each cell
         self.left_face_values = np.zeros(n + 2)
         self.right_face_values = np.zeros(n + 2)
 
-    def apply_bc(
-        self, u_without_ghost_cells: np.ndarray, gw: int
-    ) -> np.ndarray:
+    def apply_bc(self, u_without_ghost_cells: np.ndarray, gw: int) -> np.ndarray:
         """
         args:
             u_without_ghost_cells   1d np array
@@ -205,9 +183,7 @@ class AdvectionSolver(Integrator):
         right_of_boundary_values: float,
     ) -> float:
         fluxes = np.zeros(len(velocities_at_boundaries))
-        fluxes = np.where(
-            velocities_at_boundaries > 0, left_of_boundary_values, fluxes
-        )
+        fluxes = np.where(velocities_at_boundaries > 0, left_of_boundary_values, fluxes)
         fluxes = np.where(
             velocities_at_boundaries < 0, right_of_boundary_values, fluxes
         )
@@ -221,37 +197,28 @@ class AdvectionSolver(Integrator):
         alphaL = np.zeros(len(central_difference))
         alphaL = np.where(
             central_difference < 0,
-            np.minimum(
-                np.minimum(2 * left_difference, 0) / central_difference, 1
-            ),
+            np.minimum(np.minimum(2 * left_difference, 0) / central_difference, 1),
             alphaL,
         )
         alphaL = np.where(
             central_difference > 0,
-            np.minimum(
-                np.maximum(2 * left_difference, 0) / central_difference, 1
-            ),
+            np.minimum(np.maximum(2 * left_difference, 0) / central_difference, 1),
             alphaL,
         )
         alphaR = np.zeros(len(central_difference))
         alphaR = np.where(
             central_difference < 0,
-            np.minimum(
-                np.minimum(2 * right_difference, 0) / central_difference, 1
-            ),
+            np.minimum(np.minimum(2 * right_difference, 0) / central_difference, 1),
             alphaR,
         )
         alphaR = np.where(
             central_difference > 0,
-            np.minimum(
-                np.maximum(2 * right_difference, 0) / central_difference, 1
-            ),
+            np.minimum(np.maximum(2 * right_difference, 0) / central_difference, 1),
             alphaR,
         )
         alpha = np.minimum(alphaL, alphaR)
         apply_here = np.where(
-            np.amin(np.array([alpha[2:], alpha[1:-1], alpha[:-2]]), axis=0)
-            < 1,
+            np.amin(np.array([alpha[2:], alpha[1:-1], alpha[:-2]]), axis=0) < 1,
             1,
             0,
         )
@@ -271,21 +238,15 @@ class AdvectionSolver(Integrator):
         # interpolate each x value in each cell
         list_of_interpolations = []
         for stensil in self.list_of_stensils:
-            list_of_interpolations.append(
-                array_of_windows @ stensil / sum(stensil)
-            )
+            list_of_interpolations.append(array_of_windows @ stensil / sum(stensil))
         interpolations = np.array(list_of_interpolations)
         # slope limiter
         theta_i = np.ones(n + 2)
         ubar_1gw = self.apply_bc(u, 1)
         if self.apriori_limiting:
             ubar_2gw = self.apply_bc(u, 2)
-            M = np.maximum(
-                ubar_2gw[:-2], np.maximum(ubar_2gw[1:-1], ubar_2gw[2:])
-            )
-            m = np.minimum(
-                ubar_2gw[:-2], np.minimum(ubar_2gw[1:-1], ubar_2gw[2:])
-            )
+            M = np.maximum(ubar_2gw[:-2], np.maximum(ubar_2gw[1:-1], ubar_2gw[2:]))
+            m = np.minimum(ubar_2gw[:-2], np.minimum(ubar_2gw[1:-1], ubar_2gw[2:]))
             M_i = np.amax(interpolations, axis=0)
             m_i = np.amin(interpolations, axis=0)
             theta_arg_M = np.abs(M - ubar_1gw) / np.abs(M_i - ubar_1gw)
@@ -294,9 +255,7 @@ class AdvectionSolver(Integrator):
             theta_i = np.where(theta_arg_m < theta_i, theta_arg_m, theta_i)
             if self.smooth_extrema_detection:
                 ubar_4gw = self.apply_bc(u, 4)
-                theta_i = np.where(
-                    self.detect_smooth_extrema(ubar_4gw), theta_i, 1
-                )
+                theta_i = np.where(self.detect_smooth_extrema(ubar_4gw), theta_i, 1)
         # slope limited interpolation at cell faces
         self.left_face_values = (
             theta_i * (list_of_interpolations[0] - ubar_1gw) + ubar_1gw

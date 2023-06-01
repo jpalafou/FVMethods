@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from util.advection1d import AdvectionSolver
+from finite_volume.advection1d import AdvectionSolver
 
 # configurations
 n = 256
@@ -53,9 +53,7 @@ for solution in solutions:
         time_message = "rk4"
     if solution.adujst_time_step and solution.order > 4:
         time_message += (
-            " + "
-            + r"$\Delta t$"
-            + f" * {round(solution.time_step_adjustment, 5)}"
+            " + " + r"$\Delta t$" + f" * {round(solution.time_step_adjustment, 5)}"
         )
     if solution.apriori_limiting:
         limiter_message = solution.apriori_limiting + " limiter"
@@ -64,9 +62,7 @@ for solution in solutions:
     else:
         limiter_message = "no limiter"
     limiter_message += (
-        " with smooth extrema detection"
-        if solution.smooth_extrema_detection
-        else ""
+        " with smooth extrema detection" if solution.smooth_extrema_detection else ""
     )
     label = f"{limiter_message} order {solution.order}" f" + {time_message}"
     # plotting

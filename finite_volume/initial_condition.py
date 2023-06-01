@@ -21,21 +21,12 @@ def initial_condition1d(x, ic_type):
                     / 6
                     * (
                         np.exp(
-                            -np.log(2)
-                            / 36
-                            / 0.0025**2
-                            * (x[i] - 0.0025 - 0.15) ** 2
+                            -np.log(2) / 36 / 0.0025**2 * (x[i] - 0.0025 - 0.15) ** 2
                         )
                         + np.exp(
-                            -np.log(2)
-                            / 36
-                            / 0.0025**2
-                            * (x[i] + 0.0025 - 0.15) ** 2
+                            -np.log(2) / 36 / 0.0025**2 * (x[i] + 0.0025 - 0.15) ** 2
                         )
-                        + 4
-                        * np.exp(
-                            -np.log(2) / 36 / 0.0025**2 * (x[i] - 0.15) ** 2
-                        )
+                        + 4 * np.exp(-np.log(2) / 36 / 0.0025**2 * (x[i] - 0.15) ** 2)
                     )
                 )
             if x[i] >= 0.3 and x[i] <= 0.4:
@@ -48,9 +39,7 @@ def initial_condition1d(x, ic_type):
                     / 6
                     * (
                         np.sqrt(max(1 - (20 * (x[i] - 0.75 - 0.0025)) ** 2, 0))
-                        + np.sqrt(
-                            max(1 - (20 * (x[i] - 0.75 + 0.0025)) ** 2, 0)
-                        )
+                        + np.sqrt(max(1 - (20 * (x[i] - 0.75 + 0.0025)) ** 2, 0))
                         + 4 * np.sqrt(max(1 - (20 * (x[i] - 0.75)) ** 2, 0))
                     )
                 )
@@ -70,9 +59,7 @@ def initial_condition2d(x, y, ic_type):
         return np.array(
             [
                 [
-                    1.0
-                    if (i > 0.25 and i < 0.75) and (j > 0.25 and j < 0.75)
-                    else 0.0
+                    1.0 if (i > 0.25 and i < 0.75) and (j > 0.25 and j < 0.75) else 0.0
                     for i in x
                 ]
                 for j in y
@@ -101,15 +88,9 @@ def initial_condition2d(x, y, ic_type):
         r = 0.09
         xx, yy = np.meshgrid(x, y)
         u = 0 * xx
-        circle1mask = np.logical_and(
-            np.abs(xx - 0.5) < r, np.abs(yy - 0.1) < r
-        )
-        circle2mask = np.logical_and(
-            np.abs(xx - 0.5) < r, np.abs(yy - 0.5) < r
-        )
-        circle3mask = np.logical_and(
-            np.abs(xx - 0.5) < r, np.abs(yy - 0.9) < r
-        )
+        circle1mask = np.logical_and(np.abs(xx - 0.5) < r, np.abs(yy - 0.1) < r)
+        circle2mask = np.logical_and(np.abs(xx - 0.5) < r, np.abs(yy - 0.5) < r)
+        circle3mask = np.logical_and(np.abs(xx - 0.5) < r, np.abs(yy - 0.9) < r)
         u[circle1mask] = 1
         u[circle2mask] = 1
         u[circle3mask] = 1
