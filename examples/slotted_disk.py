@@ -8,7 +8,7 @@ def vortex(x, y):
 
 
 solution = AdvectionSolver(
-    u0_preset="disk",
+    u0="disk",
     n=64,
     x=(-1, 1),
     T=2 * np.pi,

@@ -10,7 +10,7 @@ def test_meshsize_convergence():
     nlist = [128, 256, 512, 1024]
     errorlist = []
     for n in nlist:
-        solution = AdvectionSolver(n=n, u0_preset="composite")
+        solution = AdvectionSolver(n=n, u0="composite")
         solution.rkorder()
         errorlist.append(solution.find_error("l1"))
     assert all(errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1))
@@ -23,7 +23,7 @@ def test_order_convergence():
     orderlist = [1, 2, 3, 4, 5, 6]
     errorlist = []
     for order in orderlist:
-        solution = AdvectionSolver(n=256, order=order, u0_preset="composite")
+        solution = AdvectionSolver(n=256, order=order, u0="composite")
         solution.rkorder()
         errorlist.append(solution.find_error("l1"))
     assert all(errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1))
@@ -47,8 +47,6 @@ def test_mpp_limiting(order):
     """
     final solution should be bounded between 0 and 1 with mpp limitng
     """
-    solution = AdvectionSolver(
-        order=order, apriori_limiting="mpp", u0_preset="square", T=10
-    )
+    solution = AdvectionSolver(order=order, apriori_limiting="mpp", u0="square", T=10)
     solution.rkorder()
     assert [i > 0 and i < 1 for i in solution.u[-1]]

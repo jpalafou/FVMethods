@@ -2,7 +2,7 @@ import numpy as np
 from finite_volume.advection2d import AdvectionSolver
 
 solution = AdvectionSolver(
-    u0_preset="square",
+    u0="square",
     n=32,
     x=(0, 1),
     v=(1, 2),

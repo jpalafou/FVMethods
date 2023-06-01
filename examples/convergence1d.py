@@ -7,7 +7,7 @@ from finite_volume.advection1d import AdvectionSolver
 # configurations
 order_list = [1, 2, 3, 4, 5, 6]
 n_list = [16, 32, 64, 128, 256, 512]
-u0_preset = "sinus"
+u0 = "sinus"
 courant = 0.5
 T = 2
 
@@ -63,7 +63,7 @@ for order in sorted(order_list):
         solution = AdvectionSolver(
             n=n,
             order=order,
-            u0_preset=u0_preset,
+            u0=u0,
             courant=courant,
             adujst_time_step=True,
             T=T,

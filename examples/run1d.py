@@ -3,13 +3,13 @@ from finite_volume.advection1d import AdvectionSolver
 
 # configurations
 n = 256
-u0_preset = "composite"
+u0 = "composite"
 T = 1
 solutions = [
     AdvectionSolver(
         n=n,
         order=4,
-        u0_preset=u0_preset,
+        u0=u0,
         courant=0.166,
         T=T,
         apriori_limiting="mpp",
@@ -18,7 +18,7 @@ solutions = [
     AdvectionSolver(
         n=n,
         order=4,
-        u0_preset=u0_preset,
+        u0=u0,
         courant=0.166,
         T=T,
         aposteriori_limiting=True,

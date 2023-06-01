@@ -10,7 +10,7 @@ def test_meshsize_convergence():
     errorlist = np.array([])
     for n in nlist:
         solution = AdvectionSolver(
-            u0_preset="sinus",
+            u0="sinus",
             n=n,
             x=(0, 1),
             v=(1, 2),
@@ -32,7 +32,7 @@ def test_order_convergence():
     errorlist = np.array([])
     for order in orderlist:
         solution = AdvectionSolver(
-            u0_preset="sinus",
+            u0="sinus",
             n=64,
             x=(0, 1),
             v=(1, 2),

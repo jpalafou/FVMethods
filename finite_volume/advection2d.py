@@ -2,7 +2,7 @@
 import numpy as np
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
-from finite_volume.initial_condition import initial_condition2d
+from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation
 from finite_volume.aposteriori.simple_trouble_detection2d import (
@@ -65,25 +65,28 @@ def apply_stensil(u: np.ndarray, stensil: np.ndarray):
 class AdvectionSolver(Integrator):
     """
     args:
-        u0_preset   string describing a pre-coded initial condition
-        n:  tuple of number of cells in x and y
-        x:  tuple of boundaries in x
-        y:  tuple of boundaries in y
-        T:  solving time
-        a:  tuple of constant advection speed in x and y or callable function
-        a_max:  tuple of abs max advection speeds if a is callable
-        courant:    stability condition
-        order:  accuracy requirement for polynomial interpolation
-        bc_type:    string describing a pre-coded boudnary condition
-        loglen: number of saved states
-        adujst_time_step:   whether to reduce timestep for order >4
+        u0  preset string or callable function describing solution at t=0
+        n   tuple of number of cells in x and y
+        x   tuple of boundaries in x
+        y   tuple of boundaries in y
+        T   solving time
+        v   tuple of floating point velocity components
+            callable function of x and y
+        courant                 stability condition
+        order                   accuracy requirement for polynomial interpolation
+        bc                      string describing a pre-coded boudnary condition
+        interpolation_method    'legendre' or 'transverse'
+        apriori_limiting        None, 'mpp', or 'mpp lite'
+        aposteriori_limiting    bool
+        loglen                  number of saved states
+        adujst_time_step        whether to reduce timestep for order >4
     returns:
         u   array of saved states
     """
 
     def __init__(
         self,
-        u0_preset: str = "square",
+        u0: str = "square",
         n: tuple = (32, 32),
         x: tuple = (0, 1),
         y: tuple = None,
@@ -91,7 +94,7 @@ class AdvectionSolver(Integrator):
         v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,
-        bc_type: str = "periodic",
+        bc: str = "periodic",
         interpolation_method: str = "gauss-legendre",
         apriori_limiting: str = None,
         aposteriori_limiting: bool = False,
@@ -118,7 +121,7 @@ class AdvectionSolver(Integrator):
         # maximum expected advection velocities
         if isinstance(v, tuple):
             vx_max, vy_max = abs(v[0]), abs(v[1])
-        if callable(v):
+        elif callable(v):
             self.v = v
             # precompute velocity at cell corners and use this as estimate for max
             xx_interface, yy_interface = np.meshgrid(self.x_interface, self.y_interface)
@@ -147,8 +150,9 @@ class AdvectionSolver(Integrator):
         self.t = np.linspace(0, T, num=n_timesteps + 1)
 
         # initial/boundary conditions
-        u0 = initial_condition2d(self.x, self.y, u0_preset)
-        self.bc_type = bc_type
+        if isinstance(u0, str):
+            u0 = generate_ic(type=u0, x=self.x, y=self.y)
+        self.bc = bc
 
         # initialize integrator
         super().__init__(u0=u0, t=self.t, loglen=loglen)
@@ -310,7 +314,7 @@ class AdvectionSolver(Integrator):
                                 (ny + 2 * gw, nx) if dim = 'y'
                                 (ny + 2 * gw, nx + 2 * gw) if dim = 'xy'
         """
-        if self.bc_type == "periodic":
+        if self.bc == "periodic":
             if dim == "x":
                 pad_width = ((0, 0), (gw, gw))
             if dim == "y":
@@ -494,8 +498,8 @@ class AdvectionSolver(Integrator):
         )
         # evaluate slope limiter
         theta = np.ones(u_1gw.shape)
-        M_arg = np.abs(M - u_1gw) / (np.abs(M_ij - u_1gw) + 1e-6)
-        m_arg = np.abs(m - u_1gw) / (np.abs(m_ij - u_1gw) + 1e-6)
+        M_arg = np.abs(M - u_1gw) / (np.abs(M_ij - u_1gw) + 1e-12)
+        m_arg = np.abs(m - u_1gw) / (np.abs(m_ij - u_1gw) + 1e-12)
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
         # limit flux points

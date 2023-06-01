@@ -1,6 +1,6 @@
 # advection solution schems
 import numpy as np
-from finite_volume.initial_condition import initial_condition1d
+from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation
 from finite_volume.aposteriori.simple_trouble_detection1d import (
@@ -25,16 +25,16 @@ def rk4_Dt_adjust(h, L, order):
 class AdvectionSolver(Integrator):
     """
     args:
-        u0_preset   string describing a pre-coded initial condition
+        u0  preset string or callable function describing solution at t=0
         n:  number of cells
-        x:  boundaries for x
+        x:  tuple of boundaries for x domain
         T:  solving time
         a:  constant advection speed
         courant:    stability condition
         order:  accuracy requirement for polynomial interpolation
-        bc_type:    string describing a pre-coded boudnary condition
+        bc:     string describing a pre-coded boudnary condition
         apriori_limiting:   whether to apply an a priori slope limiter
-            can be None, mpp, or mpp lite
+                            can be None, mpp, or mpp lite
         smooth_extrema_detection:   whether to detect smooth extrema
         aposteriori_limiting:   whether to apply a fallback scheme
         loglen: number of saved states
@@ -45,14 +45,14 @@ class AdvectionSolver(Integrator):
 
     def __init__(
         self,
-        u0_preset: str = "square",
+        u0: str = "square",
         n: int = 32,
         x: tuple = (0, 1),
         T: float = 1,
         a: float = 1,
         courant: float = 0.5,
         order: int = 1,
-        bc_type: str = "periodic",
+        bc: str = "periodic",
         apriori_limiting: str = None,
         smooth_extrema_detection: bool = False,
         aposteriori_limiting: bool = False,
@@ -95,8 +95,9 @@ class AdvectionSolver(Integrator):
         self.t = np.linspace(0, T, num=n_timesteps + 1)
 
         # initial/boundary conditions
-        u0 = initial_condition1d(self.x, u0_preset)
-        self.bc_type = bc_type
+        if isinstance(u0, str):
+            u0 = generate_ic(type=u0, x=self.x)
+        self.bc = bc
 
         # initialize integrator
         super().__init__(u0=u0, t=self.t, loglen=loglen)
@@ -168,7 +169,7 @@ class AdvectionSolver(Integrator):
             u_with_ghost_cells
         """
         negatvie_gw = -gw
-        if self.bc_type == "periodic":
+        if self.bc == "periodic":
             left_ghost_zone = u_without_ghost_cells[negatvie_gw:]
             right_ghost_zone = u_without_ghost_cells[:gw]
             u_with_ghost_cells = np.concatenate(
@@ -249,8 +250,8 @@ class AdvectionSolver(Integrator):
             m = np.minimum(ubar_2gw[:-2], np.minimum(ubar_2gw[1:-1], ubar_2gw[2:]))
             M_i = np.amax(interpolations, axis=0)
             m_i = np.amin(interpolations, axis=0)
-            theta_arg_M = np.abs(M - ubar_1gw) / np.abs(M_i - ubar_1gw)
-            theta_arg_m = np.abs(m - ubar_1gw) / np.abs(m_i - ubar_1gw)
+            theta_arg_M = np.abs(M - ubar_1gw) / (np.abs(M_i - ubar_1gw) + 1e-6)
+            theta_arg_m = np.abs(m - ubar_1gw) / (np.abs(m_i - ubar_1gw) + 1e-6)
             theta_i = np.where(theta_arg_M < theta_i, theta_arg_M, theta_i)
             theta_i = np.where(theta_arg_m < theta_i, theta_arg_m, theta_i)
             if self.smooth_extrema_detection:

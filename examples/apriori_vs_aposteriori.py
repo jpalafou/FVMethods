@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from finite_volume.advection2d import AdvectionSolver
 
 nolimiter = AdvectionSolver(
-    u0_preset="square",
+    u0="square",
     n=64,
     x=(0, 1),
     v=(1, 2),
@@ -26,7 +26,7 @@ print(
 print()
 
 apriori = AdvectionSolver(
-    u0_preset="square",
+    u0="square",
     n=64,
     x=(0, 1),
     v=(1, 2),
@@ -49,7 +49,7 @@ print(
 print()
 
 aposteriori = AdvectionSolver(
-    u0_preset="square",
+    u0="square",
     n=64,
     x=(0, 1),
     v=(1, 2),
