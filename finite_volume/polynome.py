@@ -1,6 +1,5 @@
 import dataclasses
-from finite_volume.mathbasic import gcf, lcm, Fraction
-from finite_volume.lincom import LinearCombination
+from finite_volume.mathematiques import gcf, lcm, Fraction, LinearCombination
 
 
 @dataclasses.dataclass

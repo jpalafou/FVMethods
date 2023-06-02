@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from random import random
 from finite_volume.polynome import Lagrange
-from finite_volume.mathbasic import Fraction
+from finite_volume.mathematiques import Fraction
 from finite_volume.fvscheme import Kernel, ConservativeInterpolation
 
 

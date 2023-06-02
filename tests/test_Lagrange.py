@@ -1,7 +1,7 @@
 # test Polynome class, which also tests the LinearCombination class
 import pytest
 from random import sample, randint
-from finite_volume.mathbasic import Fraction
+from finite_volume.mathematiques import Fraction
 from finite_volume.fvscheme import Kernel
 from finite_volume.polynome import Lagrange
 

@@ -1,9 +1,14 @@
+from abc import abstractmethod
 import dataclasses
 import numpy as np
 import csv
 import os.path
-from finite_volume.mathbasic import lcm, Fraction
-from finite_volume.lincom import LinearCombinationOfFractions, LinearCombination
+from finite_volume.mathematiques import (
+    lcm,
+    Fraction,
+    LinearCombinationOfFractions,
+    LinearCombination,
+)
 from finite_volume.polynome import Lagrange
 
 
@@ -53,13 +58,88 @@ class Kernel:
 
 
 @dataclasses.dataclass
-class ConservativeInterpolation(LinearCombinationOfFractions):
+class Stensil(LinearCombinationOfFractions):
+    """
+    Parent class for stensils which in general can be
+        read from csv
+        written to csv
+        converted to an np array
+        constructed from a kernel
+        constructed from a specified order
+    """
+
+    @classmethod
+    def read_from_csv(cls, path: str):
+        """
+        args:
+            path    str, location of csv
+        returns:
+            Stensil instance
+        """
+        coeffs = {}
+        with open(path, mode="r") as the_file:
+            for row in csv.reader(the_file):
+                if len(row) == 2:  # float weights
+                    coeffs[int(row[0])] = float(row[1])
+                elif len(row) == 3:  # fraction weights
+                    coeffs[int(row[0])] = Fraction(int(row[1]), int(row[2]))
+        return cls(coeffs)
+
+    def write_to_csv(self, path: str):
+        """
+        args:
+            path    str, location of csv
+        returns:
+            writes stensil instance as a csv to path
+        """
+        with open(path, "w+") as the_file:
+            writer = csv.writer(the_file)
+            for key, val in self.coeffs.items():
+                if isinstance(val, int) or isinstance(val, float):
+                    writer.writerow([key, val])
+                elif isinstance(val, Fraction):
+                    writer.writerow([key, val.numerator, val.denominator])
+
+    def nparray(self):
+        """
+        convert a reconstruction scheme to an array of weights
+        """
+        if all(isinstance(i, Fraction) for i in self.coeffs.values()):
+            denoms = [frac.denominator for frac in self.coeffs.values()]
+            denom_lcm = 1
+            for i in denoms:
+                denom_lcm = lcm(denom_lcm, i)
+            mylist = []
+            for i in range(min(self.coeffs.keys()), max(self.coeffs.keys()) + 1):
+                if i in self.coeffs.keys():
+                    mylist.append(
+                        self.coeffs[i].numerator
+                        * denom_lcm
+                        // self.coeffs[i].denominator
+                    )
+                else:
+                    mylist.append(0)
+            return np.array(mylist)
+        elif all(isinstance(i, float) for i in self.coeffs.values()):
+            return np.array([i for i in self.coeffs.values()])
+
+    @classmethod
+    @abstractmethod
+    def construct_from_kernel(cls, kernel: Kernel):
+        ...
+
+    @classmethod
+    @abstractmethod
+    def construct_from_order(cls, order: int):
+        ...
+
+
+@dataclasses.dataclass
+class ConservativeInterpolation(Stensil):
     """
     find the polynomial reconstruction evaluated at a point from a kernel of
     cell averages which conserves u inside the kernel
     """
-
-    coeffs: dict  # {int: Fraction}
 
     @classmethod
     def construct_from_kernel(cls, kernel: Kernel, reconstruct_here: str = "right"):
@@ -134,7 +214,6 @@ class ConservativeInterpolation(LinearCombinationOfFractions):
         cls,
         order: int = 1,
         reconstruct_here: str = "right",
-        printupdate: str = False,
     ):
         """
         generate a stensil to evaluate a kernel at x = reconstruct_here
@@ -147,21 +226,11 @@ class ConservativeInterpolation(LinearCombinationOfFractions):
             reconstruct_here = "left"
         if reconstruct_here == "c" or reconstruct_here == 0:
             reconstruct_here = "center"
-        save_path = stensil_path + f"order{order}_{reconstruct_here}.csv"
+        save_path = (
+            stensil_path + "conservative/" + f"order{order}_{reconstruct_here}.csv"
+        )
         if os.path.isfile(save_path):
-            coeffs = {}
-            with open(save_path, mode="r") as infile:
-                for row in csv.reader(infile):
-                    if isinstance(reconstruct_here, str):
-                        coeffs[int(row[0])] = Fraction(int(row[1]), int(row[2]))
-                    elif isinstance(reconstruct_here, float):
-                        coeffs[int(row[0])] = float(row[1])
-                interface_scheme = cls(coeffs)
-            if printupdate:
-                print(
-                    f"Read a {reconstruct_here} interface reconstruction"
-                    f" scheme of order {order} from {save_path}\n"
-                )
+            interface_scheme = cls.read_from_csv(save_path)
         else:
             if order % 2 != 0:  # odd order
                 kern = Kernel(order // 2, order // 2)
@@ -177,13 +246,7 @@ class ConservativeInterpolation(LinearCombinationOfFractions):
                         Kernel(short_length, long_length), reconstruct_here
                     )
                 ) / 2
-            with open(save_path, "w+") as the_file:
-                writer = csv.writer(the_file)
-                for key, val in interface_scheme.coeffs.items():
-                    if isinstance(reconstruct_here, str):
-                        writer.writerow([key, val.numerator, val.denominator])
-                    elif isinstance(reconstruct_here, float):
-                        writer.writerow([key, val])
+            interface_scheme.write_to_csv(save_path)
             if isinstance(reconstruct_here, str):
                 print(
                     f"Wrote a {reconstruct_here} interface reconstruction "
@@ -195,26 +258,3 @@ class ConservativeInterpolation(LinearCombinationOfFractions):
                     f"of order {order} to {save_path}\n"
                 )
         return interface_scheme
-
-    def nparray(self):
-        """
-        convert a reconstruction scheme to an array of weights
-        """
-        if all(isinstance(i, Fraction) for i in self.coeffs.values()):
-            denoms = [frac.denominator for frac in self.coeffs.values()]
-            denom_lcm = 1
-            for i in denoms:
-                denom_lcm = lcm(denom_lcm, i)
-            mylist = []
-            for i in range(min(self.coeffs.keys()), max(self.coeffs.keys()) + 1):
-                if i in self.coeffs.keys():
-                    mylist.append(
-                        self.coeffs[i].numerator
-                        * denom_lcm
-                        // self.coeffs[i].denominator
-                    )
-                else:
-                    mylist.append(0)
-            return np.array(mylist)
-        elif all(isinstance(i, float) for i in self.coeffs.values()):
-            return np.array([i for i in self.coeffs.values()])

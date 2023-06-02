@@ -1,4 +1,4 @@
-from finite_volume.mathbasic import gcf, lcm
+from finite_volume.mathematiques import gcf, lcm
 
 
 def test_gcf():
