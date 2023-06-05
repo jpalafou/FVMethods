@@ -33,32 +33,38 @@ class Fraction:
     integer denominator
     """
 
-    numerator: int
-    denominator: int
+    def __init__(self, numerator: int, denominator: int):
+        if denominator == 0:
+            raise BaseException("Invalid case: zero denominator.")
+        self.numerator = numerator
+        self.denominator = denominator
+        # convert rational number to real number
+        # return int if possible, otherwise float
+        if numerator % denominator == 0:
+            real = numerator // denominator
+        else:
+            real = numerator / denominator
+        self.real = real
+        self.__post_init__()
 
     def __post_init__(self):
-        if not isinstance(self.numerator, int) or not isinstance(self.denominator, int):
-            raise TypeError("Input is not an int tuple.")
-        if self.denominator == 0:
-            raise BaseException("Invalid case: zero denominator.")
-        if (self.numerator, self.denominator) == (
-            0,
-            1,
-        ):  # zero instance, do nothing
-            pass
-        elif self.numerator == 0 and self.denominator != 1:
+        if self.denominator == 1:
+            # already simplified, do nothing
+            return
+        if self.numerator == 0:
+            # the denominator must be nonzero at this point
             # if the numerator is zero, assign the zero instance
-            object.__setattr__(self, "numerator", 0)
             object.__setattr__(self, "denominator", 1)
-        else:  # reduce fraction if possible
-            factor = gcf([self.numerator, self.denominator])
-            if factor > 1:
-                object.__setattr__(self, "numerator", self.numerator // factor)
-                object.__setattr__(self, "denominator", self.denominator // factor)
+            return
+        if self.denominator < 0:
             # move negative sign from denominator
-            if self.denominator < 0:
-                object.__setattr__(self, "numerator", -self.numerator)
-                object.__setattr__(self, "denominator", abs(self.denominator))
+            object.__setattr__(self, "numerator", -self.numerator)
+            object.__setattr__(self, "denominator", abs(self.denominator))
+        # reduce fraction if possible
+        factor = gcf([self.numerator, self.denominator])
+        if factor > 1:  # reduce fraction if possible
+            object.__setattr__(self, "numerator", self.numerator // factor)
+            object.__setattr__(self, "denominator", self.denominator // factor)
 
     def __str__(self):
         if self.numerator == 1 and self.denominator == 1:
@@ -68,16 +74,46 @@ class Fraction:
         else:
             return str(f"{self.numerator}/{self.denominator}")
 
+    def __repr__(self):
+        return str(self)
+
     @classmethod
     def zero(cls):
         return cls(0, 1)
 
+    @classmethod
+    def one(cls):
+        return cls(1, 1)
+
+    def __int__(self):
+        if isinstance(self.real, int):
+            return self.real
+        raise ValueError(f"{str(self)} cannot be converted to type int")
+
+    def __float__(self):
+        return float(self.real)
+
+    def __eq__(self, other):
+        if isinstance(other, Fraction):
+            return (self.numerator, self.denominator) == (
+                other.numerator,
+                other.denominator,
+            )
+        if isinstance(other, int) or isinstance(other, float):
+            return self.real == other
+
+    def __abs__(self):
+        return self.__class__(abs(self.numerator), abs(self.denominator))
+
     def __add__(self, other):
-        denominator = lcm(self.denominator, other.denominator)
-        numerator = (self.numerator * (denominator // self.denominator)) + (
-            other.numerator * (denominator // other.denominator)
-        )
-        return self.__class__(numerator, denominator)
+        if isinstance(other, Fraction):
+            denominator = lcm(self.denominator, other.denominator)
+            numerator = (self.numerator * (denominator // self.denominator)) + (
+                other.numerator * (denominator // other.denominator)
+            )
+            return self.__class__(numerator, denominator)
+        if isinstance(other, int) or isinstance(other, float):
+            return self.real + other
 
     def __neg__(self):
         return self.__class__(-self.numerator, self.denominator)
@@ -91,10 +127,12 @@ class Fraction:
                 self.numerator * other.numerator,
                 self.denominator * other.denominator,
             )
-        elif isinstance(other, int):
+        if isinstance(other, int):
             return self.__class__(other * self.numerator, self.denominator)
-        TypeError(
-            f"Illegal multiplication between types {self.__class__.__name__}"
+        if isinstance(other, float):
+            return self.real * other
+        NotImplementedError(
+            f"Undefined multiplication between types {self.__class__.__name__}"
             f" and {other.__class__.__name__}."
         )
 
@@ -106,13 +144,14 @@ class Fraction:
                 self.numerator * other.denominator,
                 self.denominator * other.numerator,
             )
-        elif isinstance(other, int):
+        if isinstance(other, int):
             return self.__class__(self.numerator, other * self.denominator)
-        else:
-            TypeError(
-                f"Illegal division between types {self.__class__.__name__}"
-                f" and {other.__class__.__name__}."
-            )
+        if isinstance(other, float):
+            return self.real / other
+        NotImplementedError(
+            f"Undefined division between types {self.__class__.__name__}"
+            f" and {other.__class__.__name__}."
+        )
 
 
 @dataclasses.dataclass
@@ -134,11 +173,8 @@ class LinearCombination:
         """
         if self.coeffs == {0: 0}:
             # self is the zero instance, do nothing
-            pass
-        elif self.coeffs == {} or (
-            all(j == 0 for j in self.coeffs.values())
-            and list(self.coeffs.keys()) != [0]
-        ):
+            return
+        if self.coeffs == {} or all(j == 0 for j in self.coeffs.values()):
             # if coeffs is empty or if all its values are zero and 0 is not
             # the only index
             object.__setattr__(self, "coeffs", {0: 0})
@@ -155,6 +191,9 @@ class LinearCombination:
     def __str__(self):
         strings = [f"{coeff} u_{ind}" for (ind, coeff) in self.coeffs.items()]
         return " + ".join(strings) if strings else str(self.zero())
+
+    def __repr__(self):
+        return str(self)
 
     @classmethod
     def zero(cls):
@@ -179,79 +218,23 @@ class LinearCombination:
         return self + -other
 
     def __mul__(self, other):
-        if type(other) != int:
-            raise TypeError(
-                f"Cannot multiply type {self.__class__.__name__} with type"
-                f" {other.__class__.__name__}."
+        if isinstance(other, int) or isinstance(other, float):
+            return self.__class__(
+                dict([(i, other * j) for i, j in self.coeffs.items()])
             )
-        return self.__class__(dict([(i, other * j) for i, j in self.coeffs.items()]))
-
-    __rmul__ = __mul__
-
-
-@dataclasses.dataclass
-class LinearCombinationOfFractions(LinearCombination):
-    """
-    a class that describes linear combinations of terms
-    a/b u_0 + c/d u_1 + e/f u_2 + ...
-    as a dictionary
-    {0: a/b, 1: c/d, 2: e/f, ...}
-    enables addition and subtraction between linear combinations
-    """
-
-    coeffs: dict[int:Fraction]
-
-    def __post_init__(self):
-        """
-        linear combinations should be sorted and should not contain
-        coefficients of 0 unless they are the zero instance {0: 0}
-        """
-
-        if self.coeffs == {0: Fraction.zero()}:
-            # self is the zero instance, do nothing
-            pass
-        elif self.coeffs == {} or (
-            all(j == 0 for j in self.coeffs.values())
-            and list(self.coeffs.keys()) != [0]
-        ):
-            # if coeffs is empty or if all its values are zero and 0 is not
-            # the only index
-            object.__setattr__(self, "coeffs", {0: Fraction.zero()})
-        else:  # coeffs is nonempty and contains at least one nonzero item
-            # sort by degree
-            sorted_coeffs = dict(sorted(self.coeffs.items()))
-            # remove 0 coefficients if they unless 0x^0 is the only term
-            new_coeffs = {}
-            for deg, coeff in sorted_coeffs.items():
-                if coeff != Fraction.zero():
-                    new_coeffs[deg] = sorted_coeffs[deg]
-            object.__setattr__(self, "coeffs", new_coeffs)
-
-    def __str__(self):
-        strings = [f"{coeff} u_{ind}" for (ind, coeff) in self.coeffs.items()]
-        return " + ".join(strings) if strings else str(self.zero())
-
-    @classmethod
-    def zero(cls):
-        return cls({0: Fraction.zero()})
-
-    def __sub__(self, other):
-        return self + -other
-
-    def __mul__(self, other):
-        if not isinstance(other, int):
-            raise TypeError(
-                f"Cannot multiply type {self.__class__.__name__} with type"
-                f" {other.__class__.__name__}."
-            )
-        return self.__class__(dict([(i, other * j) for i, j in self.coeffs.items()]))
+        raise TypeError(
+            f"Cannot multiply type {self.__class__.__name__} with type"
+            f" {other.__class__.__name__}."
+        )
 
     __rmul__ = __mul__
 
     def __truediv__(self, other):
-        if not isinstance(other, int):
-            raise TypeError(
-                f"Cannot divide type {self.__class__.__name__} by type"
-                f" {other.__class__.__name__}."
+        if isinstance(other, int) or isinstance(other, float):
+            return self.__class__(
+                dict([(i, j / other) for i, j in self.coeffs.items()])
             )
-        return self.__class__(dict([(i, j / other) for i, j in self.coeffs.items()]))
+        raise TypeError(
+            f"Cannot divide type {self.__class__.__name__} by type"
+            f" {other.__class__.__name__}."
+        )

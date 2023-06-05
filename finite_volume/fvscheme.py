@@ -6,10 +6,9 @@ import os.path
 from finite_volume.mathematiques import (
     lcm,
     Fraction,
-    LinearCombinationOfFractions,
     LinearCombination,
 )
-from finite_volume.polynome import Lagrange
+from finite_volume.polynome import Polynome
 
 
 stensil_path = "stensils/"
@@ -56,9 +55,12 @@ class Kernel:
             string = string + " " + str(self.indices[i]) + " |"
         return string
 
+    def __repr__(self):
+        return str(self)
+
 
 @dataclasses.dataclass
-class Stensil(LinearCombinationOfFractions):
+class Stensil(LinearCombination):
     """
     Parent class for stensils which in general can be
         read from csv
@@ -150,18 +152,17 @@ class ConservativeInterpolation(Stensil):
         values will be used for weights.
         """
         x = kernel.x_cell_faces
-        if reconstruct_here == "right" or reconstruct_here == "r":
+        if reconstruct_here == "right":
             x_eval = x[kernel.index_at_center + 1]
-        elif reconstruct_here == "left" or reconstruct_here == "l":
+        elif reconstruct_here == "left":
             x_eval = x[kernel.index_at_center]
-        elif reconstruct_here == "center" or reconstruct_here == "c":
+        elif reconstruct_here == "center":
             x_eval = kernel.x_cell_centers[kernel.index_at_center]
-        elif isinstance(reconstruct_here, float):
-            if reconstruct_here < -0.5 or reconstruct_here > 0.5:
+        elif isinstance(reconstruct_here, int) or isinstance(reconstruct_here, float):
+            if reconstruct_here >= -0.5 and reconstruct_here <= 0.5:
+                x_eval = kernel.h * reconstruct_here
+            else:
                 BaseException("Enter an x value to evaluate between -0.5 and 0.5.")
-            x_eval = kernel.h * reconstruct_here
-        else:
-            BaseException("Must provide an x value for polynomial reconstruction.")
 
         # find the polynomial expression being multiplied to each cell value
         polynomial_weights = {}
@@ -171,42 +172,32 @@ class ConservativeInterpolation(Stensil):
         for i in range(1, len(kernel.x_cell_faces)):
             for j in kernel.indices[:i]:
                 if j in polynomial_weights.keys():
-                    polynomial_weights[j] = polynomial_weights[j] + Lagrange.Lagrange_i(
+                    polynomial_weights[j] = polynomial_weights[j] + Polynome.lagrange(
                         kernel.x_cell_faces, i
                     )
                 else:
-                    polynomial_weights[j] = Lagrange.Lagrange_i(kernel.x_cell_faces, i)
+                    polynomial_weights[j] = Polynome.lagrange(kernel.x_cell_faces, i)
 
         # take the derivative of the polynomials
         polynomial_weights_prime = dict(
-            [(i, polynome.prime()) for i, polynome in polynomial_weights.items()]
+            [
+                (i, polynome.differentiate())
+                for i, polynome in polynomial_weights.items()
+            ]
         )
 
         # evaluate them at the cell face, multiply by h
-        if isinstance(x_eval, int):
-            coeffs = (
-                kernel.h
-                * LinearCombinationOfFractions(
-                    dict(
-                        [
-                            (i, polynome.eval(x_eval, div="fraction"))
-                            for i, polynome in polynomial_weights_prime.items()
-                        ]
-                    )
+        coeffs = (
+            kernel.h
+            * LinearCombination(
+                dict(
+                    [
+                        (i, polynome.eval(x_eval))
+                        for i, polynome in polynomial_weights_prime.items()
+                    ]
                 )
-            ).coeffs
-        elif isinstance(x_eval, float):
-            coeffs = (
-                kernel.h
-                * LinearCombination(
-                    dict(
-                        [
-                            (i, polynome.eval(x_eval, div="true"))
-                            for i, polynome in polynomial_weights_prime.items()
-                        ]
-                    )
-                )
-            ).coeffs
+            )
+        ).coeffs
         return cls(coeffs)
 
     @classmethod
@@ -233,8 +224,8 @@ class ConservativeInterpolation(Stensil):
             interface_scheme = cls.read_from_csv(save_path)
         else:
             if order % 2 != 0:  # odd order
-                kern = Kernel(order // 2, order // 2)
-                interface_scheme = cls.construct_from_kernel(kern, reconstruct_here)
+                kernel = Kernel(order // 2, order // 2)
+                interface_scheme = cls.construct_from_kernel(kernel, reconstruct_here)
             else:  # even order
                 long_length = order // 2  # long length
                 short_length = order // 2 - 1  # short length

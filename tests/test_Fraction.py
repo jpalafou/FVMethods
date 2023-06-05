@@ -1,6 +1,6 @@
 # test the Fraction module
 import pytest
-import numpy as np
+from numpy.random import randint
 from finite_volume.mathematiques import Fraction
 
 
@@ -14,14 +14,23 @@ def frac():
     """
     generate a random fraction
     """
-    numerator = np.random.randint(-max_int - 1, max_int + 1)
-    denominator = np.random.randint(-max_int - 1, max_int + 1)
+    numerator = randint(-max_int - 1, max_int + 1)
+    denominator = randint(-max_int - 1, max_int + 1)
     while denominator == 0:  # denominator can't be 0
-        denominator = np.random.randint(-max_int - 1, max_int + 1)
+        denominator = randint(-max_int - 1, max_int + 1)
     return Fraction(numerator, denominator)
 
 
 # tests
+@pytest.mark.parametrize("unused_parameter", range(n_tests))
+def test_zero(unused_parameter, frac):
+    """
+    fraction with zero numerator
+    """
+    denom = randint(-max_int, max_int)
+    assert Fraction(0, denom) == Fraction.zero()
+
+
 @pytest.mark.parametrize("unused_parameter", range(n_tests))
 def test_addition_and_subtraction(unused_parameter, frac):
     """
@@ -48,7 +57,22 @@ def test_inverse_element(unused_parameter, frac):
     """
     fraction = frac
     while fraction.numerator == 0:
-        fraction.numerator = np.random.randint(-max_int - 1, max_int + 1)
+        fraction.numerator = randint(-max_int - 1, max_int + 1)
     assert (Fraction(1, 1) / fraction) == Fraction(
         fraction.denominator, fraction.numerator
     )
+
+
+@pytest.mark.parametrize("unused_parameter", range(n_tests))
+def test_abs(unused_parameter, frac):
+    """
+    absolute value of a fraction
+    """
+    fraction = frac
+    absfrac = abs(fraction)
+    if fraction.numerator < 0:
+        assert absfrac.numerator == -fraction.numerator
+        assert absfrac.denominator == fraction.denominator
+    else:
+        assert absfrac.numerator == fraction.numerator
+        assert absfrac.denominator == fraction.denominator

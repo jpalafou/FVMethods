@@ -1,5 +1,5 @@
 import dataclasses
-from finite_volume.mathematiques import gcf, lcm, Fraction, LinearCombination
+from finite_volume.mathematiques import Fraction, LinearCombination
 
 
 @dataclasses.dataclass
@@ -10,8 +10,6 @@ class Polynome(LinearCombination):
     as a dictionary
     {n: a, n-1: b, n-2: c, ...}
     """
-
-    coeffs: dict[int:int]
 
     def __post_init__(self):
         """
@@ -64,6 +62,9 @@ class Polynome(LinearCombination):
                 string = string + f"{operator}{value}"
         return string
 
+    def __repr__(self):
+        return str(self)
+
     def one():
         return Polynome({0: 1})
 
@@ -88,19 +89,7 @@ class Polynome(LinearCombination):
 
     __rmul__ = __mul__
 
-    def __floordiv__(self, other: int):
-        if isinstance(other, int):
-            if other == 0:
-                raise BaseException(f"Cannot divide a {self.__class__.__name__} by 0.")
-            return self.__class__(
-                dict([(i, j // other) for i, j in self.coeffs.items()])
-            )
-        else:
-            raise TypeError(
-                f"Cannot divide a {self.__class__.__name__} by a {type(other)}"
-            )
-
-    def prime(self):
+    def differentiate(self):
         """
         returns the first derivative of a polynomial
         """
@@ -110,102 +99,34 @@ class Polynome(LinearCombination):
                 derivative_coeffs[deg - 1] = deg * coeff
         return self.__class__(derivative_coeffs)
 
-    def eval(self, x: float) -> float:
+    def antidifferentiate(self, constant=0):
+        integral_coeffs = {0: constant}
+        for deg, coeff in self.coeffs.items():
+            integral_coeffs[deg + 1] = coeff / (deg + 1)
+        return self.__class__(integral_coeffs)
+
+    def eval(self, x: float, as_fraction: bool = True) -> float:
         """
         returns p(x) as an int/float
         """
+        if all(isinstance(coeff, Fraction) for deg, coeff in self.coeffs.items()):
+            if as_fraction:
+                fracsum = Fraction.zero()
+                for deg, coeff in self.coeffs.items():
+                    fracsum = fracsum + coeff * x**deg
+            else:
+                fracsum = 0
+                for deg, coeff in self.coeffs.items():
+                    fracsum += coeff.real * x**deg
+            return fracsum
+        # assume coeff is int or float
         return sum([coeff * x**deg for deg, coeff in self.coeffs.items()])
 
-
-@dataclasses.dataclass
-class Lagrange(Polynome):
-    """
-    polynomial numerator with an integer denominator
-    allow addition/subtraction between Lagrange polynomials
-    """
-
-    coeffs: dict[int:int]
-    denominator: int
-
-    def __post_init__(self):
-        """
-        denominator should not be negative or zero. gcf of numerator and
-        denominator should be factored out of both when applicable
-        """
-
-        # make sure there is a new_numerator
-        self.numerator = Polynome(self.coeffs)
-
-        # check if denominator type is correct
-        if not isinstance(self.denominator, int):
-            raise BaseException("Invalid denominator type.")
-        # denominator cannot be zero
-        if self.denominator == 0:
-            raise BaseException("Lagrange instance with 0 denominator.")
-        # reformat lagrange
-        if self.denominator != 1 and self.numerator != self.numerator.__class__.zero():
-            # redistribute negative sign if denominator is negative
-            if self.denominator < 0:
-                new_numerator = -self.numerator
-                new_denominator = abs(self.denominator)
-            else:
-                new_numerator = self.numerator
-                new_denominator = self.denominator
-            # factor gcf out of numerator and denominator if it is > 1
-            gcf_fraction = gcf(list(new_numerator.coeffs.values()) + [new_denominator])
-            if gcf_fraction > 1:
-                new_numerator = new_numerator // gcf_fraction
-                new_denominator = new_denominator // gcf_fraction
-            assert new_denominator > 0
-            new_coeffs = new_numerator.coeffs
-            object.__setattr__(self, "numerator", new_numerator)
-            object.__setattr__(self, "coeffs", new_coeffs)
-            object.__setattr__(self, "denominator", new_denominator)
-
-    def __str__(self):
-        return f"({self.numerator})/{self.denominator}"
-
     @classmethod
-    def Lagrange_i(cls, x_values: list[int], i: int):
-        """
-        find the ith Lagrange polynomial from a set of x points
-        """
-        numerator = Polynome.one()
-        denominator = 1
-        for j in range(len(x_values)):
+    def lagrange(cls, x: list, i: int):
+        polynome = cls.one()
+        for j in range(len(x)):
             if j != i:
-                numerator *= Polynome({1: 1, 0: -x_values[j]})
-                denominator *= x_values[i] - x_values[j]
-        return cls(numerator.coeffs, denominator)
-
-    def zero(self):
-        return self.__class__(self.numerator.__class__.zero().coeffs, self.denominator)
-
-    def __add__(self, other):
-        denominator = lcm(self.denominator, other.denominator)
-        numerator = (self.numerator * (denominator // self.denominator)) + (
-            other.numerator * (denominator // other.denominator)
-        )
-        return self.__class__(numerator.coeffs, denominator)
-
-    def __neg__(self):
-        return self.__class__((-self.numerator).coeffs, self.denominator)
-
-    def __sub__(self, other):
-        return self + -other
-
-    def prime(self):
-        return self.__class__(self.numerator.prime().coeffs, self.denominator)
-
-    def eval(self, x: float, div: str = "true") -> float:
-        """
-        returns the result of the polynomial fraction evaluated at x
-        """
-        if div == "true":
-            return self.numerator.eval(x) / self.denominator
-        elif div == "floor":
-            return self.numerator.eval(x) // self.denominator
-        elif div == "fraction":
-            return Fraction(self.numerator.eval(x), self.denominator)
-        else:
-            raise BaseException("Invalid division type.")
+                denom = x[i] - x[j]
+                polynome *= cls({1: Fraction(1, denom), 0: Fraction(-x[j], denom)})
+        return polynome
