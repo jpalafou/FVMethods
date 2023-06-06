@@ -13,11 +13,11 @@ solution = AdvectionSolver(
     x=(-1, 1),
     T=2 * np.pi,
     v=vortex,
-    courant=0.16,
-    order=4,
+    courant=0.0833,
+    order=6,
+    flux_strategy="transverse",
     apriori_limiting="mpp",
     aposteriori_limiting=False,
-    loglen=None,
 )
 solution.rk4()
 print(f"global max: {np.max(solution.u):.2e}, global min: {np.min(solution.u):.2e}")

@@ -5,8 +5,8 @@ from csv import writer
 from finite_volume.advection2d import AdvectionSolver
 
 # configurations
-flux_strategy = "transverse"
-order_list = [1, 2, 3, 4, 5]
+flux_strategy = "gauss-legendre"
+order_list = [1, 2, 3, 4, 5, 6, 7, 8]
 n_list = [16, 32, 64, 128]
 u0 = "sinus"
 courant = 0.5
@@ -113,7 +113,7 @@ for order in sorted(order_list):
             [h_list[triangle_index], h_list[triangle_index - 1]],
             [error_list[triangle_index], error_list[triangle_index - 1]],
         )
-        if triangle_index == len(h_list) - 3:
+        if triangle_index == len(h_list) - 2:
             triangle_index = 2
         else:
             triangle_index += 1

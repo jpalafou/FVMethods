@@ -61,24 +61,24 @@ def apply_stensil(u: np.ndarray, stensil: np.ndarray):
     return np.sum(u * stensilcopy, axis=0) / sum(stensilcopy)
 
 
-def trim2d(u: np.ndarray, cut: int, dim: str = "x"):
+def trim2d(u: np.ndarray, axis: tuple, cut_length: tuple):
     """
     args:
-        u       (m, n)
-        cut     amount by which to trim array
-        dim     'x', 'y', or 'xy'
+        u           np array of arbitrary dimension
+        axis        tuple or int
+        cut_length  same length as axis
     returns:
-        u       (m, n - 2cut) if dim = 'x'
-                (m - 2cut, n) if dim = 'y'
-                (m - 2cut, n - 2cut) if dim = 'xy'
+        u           symmetrically cut at the ends along axis by cut_length
     """
-    trimmed_u = u.copy()
-    anticut = -cut
-    if "x" in dim and cut > 0:
-        trimmed_u = trimmed_u[:, cut:anticut]
-    if "y" in dim and cut > 0:
-        trimmed_u = trimmed_u[cut:anticut, :]
-    return trimmed_u
+    if isinstance(axis, int):
+        axis = (axis,)  # Convert single axis to a tuple
+    if isinstance(cut_length, int):
+        cut_length = (cut_length,) * len(axis)  # Convert cut_length to a tuple
+    slices = [slice(None)] * u.ndim
+    for ax, cl in zip(axis, cut_length):
+        if cl != 0:
+            slices[ax] = slice(cl, -cl)
+    return u[tuple(slices)]
 
 
 # class definition
@@ -172,6 +172,8 @@ class AdvectionSolver(Integrator):
         # initial/boundary conditions
         if isinstance(u0, str):
             u0 = generate_ic(type=u0, x=self.x, y=self.y)
+        if callable(u0):
+            u0 = u0(x=self.x, y=self.y)
         self.bc = bc
 
         # initialize integrator
@@ -222,11 +224,7 @@ class AdvectionSolver(Integrator):
             self.cell_center_stensil = self.list_of_line_stensils[N_G // 2]
 
         # stensils for reconstructing pointwise values along a line average
-        self.apriori_limiting = (
-            apriori_limiting
-            if order > 1 and flux_strategy == "gauss-legendre"
-            else None
-        )
+        self.apriori_limiting = apriori_limiting
         list_of_GL_stensils = []
         if self.apriori_limiting is not None and N_GL > 2:
             # interpolating values along line segments
@@ -268,6 +266,10 @@ class AdvectionSolver(Integrator):
                 + list_of_GL_stensils
                 + [right_interface_stensil]
             )
+        if flux_strategy == "transverse":
+            self.list_of_pointwise_stensils = [left_interface_stensil] + [
+                right_interface_stensil
+            ]
 
         # transverse integral stensil
         if flux_strategy == "transverse":
@@ -317,8 +319,8 @@ class AdvectionSolver(Integrator):
         if callable(v):
             x_EW_midpoints, y_EW_midpoints = np.meshgrid(self.x_interface, self.y)
             x_NS_midpoints, y_NS_midpoints = np.meshgrid(self.x, self.y_interface)
-            self.v_EW_midpoints = v(x_EW_midpoints, y_EW_midpoints)
-            self.v_NS_midpoints = v(x_NS_midpoints, y_NS_midpoints)
+            self.v_EW_midpoints = v(x_EW_midpoints, y_EW_midpoints)[0]
+            self.v_NS_midpoints = v(x_NS_midpoints, y_NS_midpoints)[1]
         if flux_strategy == "transverse":
             self.v_EW_midpoints_gw = self.apply_bc(
                 self.v_EW_midpoints, self._transverse_k, "y"
@@ -438,16 +440,15 @@ class AdvectionSolver(Integrator):
                 for NS_stack in NS_stacks
             ]
         )
-
         # apply slope limiter
         (north_points, south_points, east_points, west_points,) = self.apriori_limiter(
             horizontal_points,
             vertical_points,
-            horizontal_line_averages,
-            vertical_line_averages,
+            trim2d(horizontal_line_averages, axis=2, cut_length=self._conservative_k),
+            trim2d(vertical_line_averages, axis=1, cut_length=self._conservative_k),
             u,
+            gw=1,
         )
-
         # reimann problem to solve fluxes at each face
         NS_pointwise_fluxes = self.riemann(
             self.v_NS_interface,
@@ -474,7 +475,7 @@ class AdvectionSolver(Integrator):
             u   array of volume averages (ny, nx)
         overwrites:
             self.NS_fluxes  (ny + 1, nx)
-            self.EW_fluxes  (ny, nx + 1)
+            self.EW_fluxes  (ny, nx + 1)s
         """
         # construct an extended array with ghost zones and apply bc
         u_extended = self.apply_bc(u, gw=self.gw, dim="xy")
@@ -492,20 +493,41 @@ class AdvectionSolver(Integrator):
             vertical_line_average, self._conservative_stensil_size, direction="y"
         )
         # pointwise reconstruction
-        north_points = apply_stensil(NS_stack, self.right_interface_stensil)
-        south_points = apply_stensil(NS_stack, self.left_interface_stensil)
-        east_points = apply_stensil(EW_stack, self.right_interface_stensil)
-        west_points = apply_stensil(EW_stack, self.left_interface_stensil)
+        horizontal_points = np.asarray(
+            [
+                apply_stensil(EW_stack, stensil)
+                for stensil in self.list_of_pointwise_stensils
+            ]
+        )
+        vertical_points = np.asarray(
+            [
+                apply_stensil(NS_stack, stensil)
+                for stensil in self.list_of_pointwise_stensils
+            ]
+        )
+        # apply slope limiter
+        (north_points, south_points, east_points, west_points,) = self.apriori_limiter(
+            horizontal_points[np.newaxis],
+            vertical_points[np.newaxis],
+            trim2d(horizontal_line_average, axis=1, cut_length=self._conservative_k)[
+                np.newaxis
+            ],
+            trim2d(vertical_line_average, axis=0, cut_length=self._conservative_k)[
+                np.newaxis
+            ],
+            u,
+            gw=self._transverse_k + 1,
+        )
         # reimann problem to solve fluxes at each face
         NS_pointwise_fluxes = self.riemann(
             self.v_NS_midpoints_gw,
-            trim2d(north_points[:, 1:-1], self._transverse_k, "y")[:-1, :],
-            trim2d(south_points[:, 1:-1], self._transverse_k, "y")[1:, :],
+            trim2d(north_points[0], axis=0, cut_length=self._transverse_k)[:-1, 1:-1],
+            trim2d(south_points[0], axis=0, cut_length=self._transverse_k)[1:, 1:-1],
         )
         EW_pointwise_fluxes = self.riemann(
             self.v_EW_midpoints_gw,
-            trim2d(east_points[1:-1, :], self._transverse_k, "x")[:, :-1],
-            trim2d(west_points[1:-1, :], self._transverse_k, "x")[:, 1:],
+            trim2d(east_points[0], axis=1, cut_length=self._transverse_k)[1:-1, :-1],
+            trim2d(west_points[0], axis=1, cut_length=self._transverse_k)[1:-1, 1:],
         )
         # transverse integral stensil
         EW_stack = stack3d(NS_pointwise_fluxes, self._transverse_stensil_size, "x")
@@ -515,11 +537,12 @@ class AdvectionSolver(Integrator):
 
     def no_limiter(
         self,
-        horizontal_points,
-        vertical_points,
-        horizontal_line_averages,
-        vertical_line_averages,
-        u,
+        horizontal_points: np.ndarray,
+        vertical_points: np.ndarray,
+        horizontal_line_averages: np.ndarray,
+        vertical_line_averages: np.ndarray,
+        u: np.ndarray,
+        gw: int,
     ):
         """
         return mpp slope limited pointwise interpolations along cell borders
@@ -531,6 +554,7 @@ class AdvectionSolver(Integrator):
             horizontal_line_averages    (# horizontal lines, ny + 2, nx + 2 * gw)
             vertical_line_averages      (# vertical lines, ny + 2 * gw, nx + 2)
             u                           (ny, nx)
+            gw                          # of ghost cells entering the slope limiter
         returns:
             north_points    (# vertical lines, ny + 2, nx + 2)
             south_points    (# vertical lines, ny + 2, nx + 2)
@@ -545,11 +569,12 @@ class AdvectionSolver(Integrator):
 
     def mpp_limiter(
         self,
-        horizontal_points,
-        vertical_points,
-        horizontal_line_averages,
-        vertical_line_averages,
-        u,
+        horizontal_points: np.ndarray,
+        vertical_points: np.ndarray,
+        horizontal_line_averages: np.ndarray,
+        vertical_line_averages: np.ndarray,
+        u: np.ndarray,
+        gw: int,
     ):
         """
         return mpp slope limited pointwise interpolations along cell borders
@@ -561,6 +586,7 @@ class AdvectionSolver(Integrator):
             horizontal_line_averages    (# horizontal lines, ny + 2, nx + 2 * gw)
             vertical_line_averages      (# vertical lines, ny + 2 * gw, nx + 2)
             u                           (ny, nx)
+            gw                          # of ghost cells entering the slope limiter
         returns:
             north_points    (# vertical lines, ny + 2, nx + 2)
             south_points    (# vertical lines, ny + 2, nx + 2)
@@ -573,23 +599,24 @@ class AdvectionSolver(Integrator):
             horizontal_line_averages,
             vertical_line_averages,
             u,
+            gw,
         )
         # max and min of 9 neighbors
-        u_2gw = self.apply_bc(u, gw=2, dim="xy")  # u with a ghost width of 2
-        u_1gw = u_2gw[1:-1, 1:-1]  # u with a ghost width of 1
+        u_gw_plus_1 = self.apply_bc(u, gw=gw + 1, dim="xy")  # u with a ghost width of 2
+        u_gw = u_gw_plus_1[1:-1, 1:-1]  # u with a ghost width of 1
         list_of_9_neighbors = [
-            u_1gw,
-            u_2gw[:-2, 1:-1],
-            u_2gw[2:, 1:-1],
-            u_2gw[1:-1, :-2],
-            u_2gw[1:-1, 2:],
-            u_2gw[2:, 2:],
-            u_2gw[2:, :-2],
-            u_2gw[:-2, 2:],
-            u_2gw[:-2, :-2],
+            u_gw,
+            u_gw_plus_1[:-2, 1:-1],
+            u_gw_plus_1[2:, 1:-1],
+            u_gw_plus_1[1:-1, :-2],
+            u_gw_plus_1[1:-1, 2:],
+            u_gw_plus_1[2:, 2:],
+            u_gw_plus_1[2:, :-2],
+            u_gw_plus_1[:-2, 2:],
+            u_gw_plus_1[:-2, :-2],
         ]
         M = np.maximum.reduce(list_of_9_neighbors)
-        m = np.minimum.reduce(list_of_9_neighbors + [1e-12 * np.ones(u_1gw.shape)])
+        m = np.minimum.reduce(list_of_9_neighbors + [1e-12 * np.ones(u_gw.shape)])
         # max and min of u evaluated at quadrature points
         M_ij = np.maximum(
             np.amax(horizontal_points, axis=(0, 1)),
@@ -600,16 +627,14 @@ class AdvectionSolver(Integrator):
             np.amin(vertical_points, axis=(0, 1)),
         )
         # evaluate slope limiter
-        theta = np.ones(u_1gw.shape)
-        M_arg = np.abs(M - u_1gw) / (np.abs(M_ij - u_1gw) + 1e-12)
-        m_arg = np.abs(m - u_1gw) / (np.abs(m_ij - u_1gw) + 1e-12)
+        theta = np.ones(u_gw.shape)
+        M_arg = np.abs(M - u_gw) / ((np.abs(M_ij - u_gw) + 1e-12))
+        m_arg = np.abs(m - u_gw) / ((np.abs(m_ij - u_gw) + 1e-12))
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
         # limit flux points
-        _k = self._conservative_k
-        _minus_k = -self._conservative_k
-        horizontal_fallback = horizontal_line_averages[:, :, _k:_minus_k]
-        vertical_fallback = vertical_line_averages[:, _k:_minus_k, :]
+        horizontal_fallback = horizontal_line_averages
+        vertical_fallback = vertical_line_averages
         north_points = (
             theta[np.newaxis, ...] * (north_points - vertical_fallback)
             + vertical_fallback
