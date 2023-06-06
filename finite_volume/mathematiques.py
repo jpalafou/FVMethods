@@ -102,6 +102,30 @@ class Fraction:
         if isinstance(other, int) or isinstance(other, float):
             return self.real == other
 
+    def __gt__(self, other):
+        if isinstance(other, Fraction):
+            return self.real > other.real
+        if isinstance(other, int) or isinstance(other, float):
+            return self.real > other
+
+    def __lt__(self, other):
+        if isinstance(other, Fraction):
+            return self.real < other.real
+        if isinstance(other, int) or isinstance(other, float):
+            return self.real < other
+
+    def __ge__(self, other):
+        if isinstance(other, Fraction):
+            return self.real >= other.real
+        if isinstance(other, int) or isinstance(other, float):
+            return self.real >= other
+
+    def __le__(self, other):
+        if isinstance(other, Fraction):
+            return self.real <= other.real
+        if isinstance(other, int) or isinstance(other, float):
+            return self.real <= other
+
     def __abs__(self):
         return self.__class__(abs(self.numerator), abs(self.denominator))
 

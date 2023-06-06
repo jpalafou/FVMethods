@@ -27,8 +27,9 @@ def test_zero(unused_parameter, frac):
     """
     fraction with zero numerator
     """
-    denom = randint(-max_int, max_int)
-    assert Fraction(0, denom) == Fraction.zero()
+    fraction = frac
+    fraction = fraction - fraction
+    assert fraction == Fraction.zero()
 
 
 @pytest.mark.parametrize("unused_parameter", range(n_tests))

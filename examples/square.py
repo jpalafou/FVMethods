@@ -9,6 +9,7 @@ solution = AdvectionSolver(
     T=1,
     courant=0.16,
     order=4,
+    flux_strategy="transverse",
     apriori_limiting=None,
     aposteriori_limiting=True,
 )

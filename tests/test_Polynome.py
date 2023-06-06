@@ -172,5 +172,5 @@ def test_lagrange(unused_parameter):
     x = list(range(-max_coeff // 2, max_coeff // 2 + 1))
     i = randint(0, len(x) - 1)
     p = Polynome.lagrange(x, i)
-    assert all(float(p.eval(x[j])) == 0 for j in range(len(x)) if j != i)
-    assert float(p.eval(x[i])) == 1
+    assert all(p.eval(x[j], as_fraction=True) == 0 for j in range(len(x)) if j != i)
+    assert p.eval(x[i], as_fraction=True) == 1

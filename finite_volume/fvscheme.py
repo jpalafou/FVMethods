@@ -192,7 +192,7 @@ class ConservativeInterpolation(Stensil):
             * LinearCombination(
                 dict(
                     [
-                        (i, polynome.eval(x_eval))
+                        (i, polynome.eval(x_eval, as_fraction=True))
                         for i, polynome in polynomial_weights_prime.items()
                     ]
                 )
@@ -218,7 +218,9 @@ class ConservativeInterpolation(Stensil):
         if reconstruct_here == "c" or reconstruct_here == 0:
             reconstruct_here = "center"
         save_path = (
-            stensil_path + "conservative/" + f"order{order}_{reconstruct_here}.csv"
+            stensil_path
+            + "conservative interpolation/"
+            + f"order{order}_{reconstruct_here}.csv"
         )
         if os.path.isfile(save_path):
             interface_scheme = cls.read_from_csv(save_path)
@@ -249,3 +251,46 @@ class ConservativeInterpolation(Stensil):
                     f"of order {order} to {save_path}\n"
                 )
         return interface_scheme
+
+
+dataclasses.dataclass
+
+
+class TransverseIntegral(Stensil):
+    """
+    find the polynomial reconstruction evaluated at a point from a kernel of
+    cell averages which conserves u inside the kernel
+    """
+
+    @classmethod
+    def construct_from_kernel(cls, kernel: Kernel):
+        coeffs = {}
+        for i in range(len(kernel.indices)):
+            # form lagrange basis polynonmial and antidifferentiate
+            polynome = Polynome.lagrange(kernel.x_cell_centers, i).antidifferentiate()
+            # evaluate at either cell face
+            right_face = polynome.eval(
+                x=kernel.x_cell_faces[kernel.index_at_center + 1], as_fraction=True
+            )
+            left_face = polynome.eval(
+                x=kernel.x_cell_faces[kernel.index_at_center],
+                as_fraction=True,
+            )
+            # each weight is the difference of these two
+            coeffs[kernel.indices[i]] = (right_face - left_face) / kernel.h
+        return cls(coeffs)
+
+    @classmethod
+    def construct_from_order(cls, order: int):
+        save_path = stensil_path + "transverse integral/" + f"order{order}.csv"
+        if os.path.isfile(save_path):
+            integral_scheme = cls.read_from_csv(save_path)
+        else:
+            kernel = Kernel(int((order - 1) / 2), int(np.ceil((order - 1) / 2)))
+            integral_scheme = cls.construct_from_kernel(kernel)
+            integral_scheme.write_to_csv(save_path)
+            print(
+                "Wrote a transverse integral scheme of order ",
+                f"{order} to {save_path}\n",
+            )
+        return integral_scheme

@@ -4,7 +4,7 @@ from matplotlib import gridspec
 import matplotlib.pyplot as plt
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
-from finite_volume.fvscheme import ConservativeInterpolation
+from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
 from finite_volume.aposteriori.simple_trouble_detection2d import (
     trouble_detection2d,
     compute_second_order_fluxes,
@@ -57,8 +57,28 @@ def apply_stensil(u: np.ndarray, stensil: np.ndarray):
         linear combination of u along first dimension
         2d np array (m, n)
     """
-    stensilcopy = stensil if stensil.ndim == 3 else stensil.reshape(-1, 1, 1)
+    stensilcopy = stensil.copy() if stensil.ndim == 3 else stensil.reshape(-1, 1, 1)
     return np.sum(u * stensilcopy, axis=0) / sum(stensilcopy)
+
+
+def trim2d(u: np.ndarray, cut: int, dim: str = "x"):
+    """
+    args:
+        u       (m, n)
+        cut     amount by which to trim array
+        dim     'x', 'y', or 'xy'
+    returns:
+        u       (m, n - 2cut) if dim = 'x'
+                (m - 2cut, n) if dim = 'y'
+                (m - 2cut, n - 2cut) if dim = 'xy'
+    """
+    trimmed_u = u.copy()
+    anticut = -cut
+    if "x" in dim and cut > 0:
+        trimmed_u = trimmed_u[:, cut:anticut]
+    if "y" in dim and cut > 0:
+        trimmed_u = trimmed_u[cut:anticut, :]
+    return trimmed_u
 
 
 # class definition
@@ -75,7 +95,7 @@ class AdvectionSolver(Integrator):
         courant                 stability condition
         order                   accuracy requirement for polynomial interpolation
         bc                      string describing a pre-coded boudnary condition
-        interpolation_method    'legendre' or 'transverse'
+        flux_strategy           'gauss-legendre' or 'transverse'
         apriori_limiting        None, 'mpp', or 'mpp lite'
         aposteriori_limiting    bool
         loglen                  number of saved states
@@ -95,7 +115,7 @@ class AdvectionSolver(Integrator):
         courant: float = 0.5,
         order: int = 1,
         bc: str = "periodic",
-        interpolation_method: str = "gauss-legendre",
+        flux_strategy: str = "gauss-legendre",
         apriori_limiting: str = None,
         aposteriori_limiting: bool = False,
         loglen: int = 21,
@@ -164,13 +184,15 @@ class AdvectionSolver(Integrator):
         right_interface_stensil = ConservativeInterpolation.construct_from_order(
             order, "right"
         ).nparray()
-        self._stensil_size = len(left_interface_stensil)
-        self.k = int(np.floor(len(left_interface_stensil) / 2))  # cell reach of stensil
-        self.gw = self.k + 1  # ghost width
+        self._conservative_stensil_size = len(left_interface_stensil)
+        self._conservative_k = int(
+            np.floor(len(left_interface_stensil) / 2)
+        )  # cell reach of stensil
 
         # quadrature points setup
         p = order - 1  # degree of reconstructed polynomial
         N_G = int(np.ceil((p + 1) / 2))  # number of gauss-legendre quadrature points
+        N_G = N_G + 1 if N_G % 2 == 0 and flux_strategy == "transverse" else N_G
         N_GL = int(np.ceil((p + 3) / 2))  # number of gauss-lobatto quadrature points
 
         # stensils for reconstructing the average along a line segment within a cell
@@ -188,13 +210,23 @@ class AdvectionSolver(Integrator):
         for x in gauss_quadr_points:
             stensil = ConservativeInterpolation.construct_from_order(order, x).nparray()
             # if the stensil is short, assume it needs a 0 on either end
-            while len(stensil) < self._stensil_size:
+            while len(stensil) < self._conservative_stensil_size:
                 stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
-            assert len(stensil) == self._stensil_size
+            assert len(stensil) == self._conservative_stensil_size
             self.list_of_line_stensils.append(stensil)  # ordered from left to right
 
+        # simplified list of line stensils for transverse flux
+        if flux_strategy == "transverse":
+            self.left_interface_stensil = left_interface_stensil
+            self.right_interface_stensil = right_interface_stensil
+            self.cell_center_stensil = self.list_of_line_stensils[N_G // 2]
+
         # stensils for reconstructing pointwise values along a line average
-        self.apriori_limiting = apriori_limiting if order > 1 else None
+        self.apriori_limiting = (
+            apriori_limiting
+            if order > 1 and flux_strategy == "gauss-legendre"
+            else None
+        )
         list_of_GL_stensils = []
         if self.apriori_limiting is not None and N_GL > 2:
             # interpolating values along line segments
@@ -215,9 +247,9 @@ class AdvectionSolver(Integrator):
                     order, x
                 ).nparray()
                 # if the stensil is short, assume it needs a 0 on either end
-                while len(stensil) < self._stensil_size:
+                while len(stensil) < self._conservative_stensil_size:
                     stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
-                assert len(stensil) == self._stensil_size
+                assert len(stensil) == self._conservative_stensil_size
                 list_of_GL_stensils.append(stensil)
             # check if timestep is small enough for mpp
             if (
@@ -230,9 +262,28 @@ class AdvectionSolver(Integrator):
                 )
 
         # assort list of stensils for pointwise interpolation
-        self.list_of_pointwise_stensils = (
-            [left_interface_stensil] + list_of_GL_stensils + [right_interface_stensil]
-        )
+        if flux_strategy == "gauss-legendre":
+            self.list_of_pointwise_stensils = (
+                [left_interface_stensil]
+                + list_of_GL_stensils
+                + [right_interface_stensil]
+            )
+
+        # transverse integral stensil
+        if flux_strategy == "transverse":
+            self.integral_stensil = TransverseIntegral.construct_from_order(
+                order
+            ).nparray()
+            self._transverse_stensil_size = len(self.integral_stensil)
+            self._transverse_k = int(
+                np.floor(len(self.integral_stensil) / 2)
+            )  # cell reach of stensil
+
+        # ghost width
+        if flux_strategy == "gauss-legendre":
+            self.gw = self._conservative_k + 1
+        elif flux_strategy == "transverse":
+            self.gw = self._transverse_k + self._conservative_k + 1
 
         # x and y values at quadrature points
         na = np.newaxis
@@ -268,21 +319,30 @@ class AdvectionSolver(Integrator):
             x_NS_midpoints, y_NS_midpoints = np.meshgrid(self.x, self.y_interface)
             self.v_EW_midpoints = v(x_EW_midpoints, y_EW_midpoints)
             self.v_NS_midpoints = v(x_NS_midpoints, y_NS_midpoints)
+        if flux_strategy == "transverse":
+            self.v_EW_midpoints_gw = self.apply_bc(
+                self.v_EW_midpoints, self._transverse_k, "y"
+            )
+            self.v_NS_midpoints_gw = self.apply_bc(
+                self.v_NS_midpoints, self._transverse_k, "x"
+            )
 
         # fluxes
         self.NS_fluxes = np.zeros((ny + 1, nx))
         self.EW_fluxes = np.zeros((ny, nx + 1))
 
         # dynamic function assignment
-        self.interpolation_method = interpolation_method
-        if self.interpolation_method == "gauss-legendre":
+        self.flux_strategy = flux_strategy
+        if self.flux_strategy == "gauss-legendre":
             self.compute_high_order_fluxes = self.legendre_fluxes
-        elif self.interpolation_method == "transverse":
+        elif self.flux_strategy == "transverse":
             self.compute_high_order_fluxes = self.transverse_fluxes
+
         if self.apriori_limiting is None:
             self.apriori_limiter = self.no_limiter
         else:
             self.apriori_limiter = self.mpp_limiter
+
         if self.aposteriori_limiting:
             self.aposteriori_limiter = self.revise_solution
         else:
@@ -336,8 +396,8 @@ class AdvectionSolver(Integrator):
         # construct an extended array with ghost zones and apply bc
         u_extended = self.apply_bc(u, gw=self.gw, dim="xy")
         # stack volume arrays NS/EW to prepare for guass stensil operation
-        EW_stack = stack3d(u_extended, self._stensil_size, direction="x")
-        NS_stack = stack3d(u_extended, self._stensil_size, direction="y")
+        EW_stack = stack3d(u_extended, self._conservative_stensil_size, direction="x")
+        NS_stack = stack3d(u_extended, self._conservative_stensil_size, direction="y")
         # line average reconstruction, first dimension is guass-legendre point
         vertical_line_averages = np.asarray(
             [apply_stensil(EW_stack, stensil) for stensil in self.list_of_line_stensils]
@@ -348,13 +408,13 @@ class AdvectionSolver(Integrator):
         # stack line average arrays to prepare for guass-lobatto stensil operation
         EW_stacks = np.asarray(
             [
-                stack3d(i, self._stensil_size, direction="x")
+                stack3d(i, self._conservative_stensil_size, direction="x")
                 for i in horizontal_line_averages
             ]
         )
         NS_stacks = np.asarray(
             [
-                stack3d(i, self._stensil_size, direction="y")
+                stack3d(i, self._conservative_stensil_size, direction="y")
                 for i in vertical_line_averages
             ]
         )
@@ -408,7 +468,50 @@ class AdvectionSolver(Integrator):
         )
 
     def transverse_fluxes(self, u: np.ndarray):
-        ...
+        """
+        compute fluxes with the transverse method
+        args:
+            u   array of volume averages (ny, nx)
+        overwrites:
+            self.NS_fluxes  (ny + 1, nx)
+            self.EW_fluxes  (ny, nx + 1)
+        """
+        # construct an extended array with ghost zones and apply bc
+        u_extended = self.apply_bc(u, gw=self.gw, dim="xy")
+        # stack volume arrays NS/EW to prepare for guass stensil operation
+        EW_stack = stack3d(u_extended, self._conservative_stensil_size, direction="x")
+        NS_stack = stack3d(u_extended, self._conservative_stensil_size, direction="y")
+        # line average reconstruction
+        vertical_line_average = apply_stensil(EW_stack, self.cell_center_stensil)
+        horizontal_line_average = apply_stensil(NS_stack, self.cell_center_stensil)
+        # stack for endpoint reconstruction
+        EW_stack = stack3d(
+            horizontal_line_average, self._conservative_stensil_size, direction="x"
+        )
+        NS_stack = stack3d(
+            vertical_line_average, self._conservative_stensil_size, direction="y"
+        )
+        # pointwise reconstruction
+        north_points = apply_stensil(NS_stack, self.right_interface_stensil)
+        south_points = apply_stensil(NS_stack, self.left_interface_stensil)
+        east_points = apply_stensil(EW_stack, self.right_interface_stensil)
+        west_points = apply_stensil(EW_stack, self.left_interface_stensil)
+        # reimann problem to solve fluxes at each face
+        NS_pointwise_fluxes = self.riemann(
+            self.v_NS_midpoints_gw,
+            trim2d(north_points[:, 1:-1], self._transverse_k, "y")[:-1, :],
+            trim2d(south_points[:, 1:-1], self._transverse_k, "y")[1:, :],
+        )
+        EW_pointwise_fluxes = self.riemann(
+            self.v_EW_midpoints_gw,
+            trim2d(east_points[1:-1, :], self._transverse_k, "x")[:, :-1],
+            trim2d(west_points[1:-1, :], self._transverse_k, "x")[:, 1:],
+        )
+        # transverse integral stensil
+        EW_stack = stack3d(NS_pointwise_fluxes, self._transverse_stensil_size, "x")
+        NS_stack = stack3d(EW_pointwise_fluxes, self._transverse_stensil_size, "y")
+        self.NS_fluxes[...] = apply_stensil(EW_stack, self.integral_stensil)
+        self.EW_fluxes[...] = apply_stensil(NS_stack, self.integral_stensil)
 
     def no_limiter(
         self,
@@ -503,8 +606,8 @@ class AdvectionSolver(Integrator):
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
         # limit flux points
-        _k = self.k
-        _minus_k = -self.k
+        _k = self._conservative_k
+        _minus_k = -self._conservative_k
         horizontal_fallback = horizontal_line_averages[:, :, _k:_minus_k]
         vertical_fallback = vertical_line_averages[:, _k:_minus_k, :]
         north_points = (

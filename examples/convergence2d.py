@@ -5,6 +5,7 @@ from csv import writer
 from finite_volume.advection2d import AdvectionSolver
 
 # configurations
+flux_strategy = "transverse"
 order_list = [1, 2, 3, 4, 5]
 n_list = [16, 32, 64, 128]
 u0 = "sinus"
@@ -72,6 +73,7 @@ for order in sorted(order_list):
             T=T,
             x=x,
             v=v,
+            flux_strategy=flux_strategy,
         )
         solution.rkorder()  # time integration
         # append error to list of error

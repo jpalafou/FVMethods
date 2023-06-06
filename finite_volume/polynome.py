@@ -105,26 +105,31 @@ class Polynome(LinearCombination):
             integral_coeffs[deg + 1] = coeff / (deg + 1)
         return self.__class__(integral_coeffs)
 
-    def eval(self, x: float, as_fraction: bool = True) -> float:
+    def eval(self, x: float, as_fraction: bool = False) -> float:
         """
         returns p(x) as an int/float
         """
-        if all(isinstance(coeff, Fraction) for deg, coeff in self.coeffs.items()):
-            if as_fraction:
-                fracsum = Fraction.zero()
+        if as_fraction:
+            out = Fraction.zero()
+            if all(isinstance(coeff, Fraction) for deg, coeff in self.coeffs.items()):
                 for deg, coeff in self.coeffs.items():
-                    fracsum = fracsum + coeff * x**deg
+                    out += coeff * x**deg
+            elif all(isinstance(coeff, int) for deg, coeff in self.coeffs.items()):
+                for deg, coeff in self.coeffs.items():
+                    out += Fraction(coeff, 1) * x**deg
+        else:
+            out = 0
+            if all(isinstance(coeff, Fraction) for deg, coeff in self.coeffs.items()):
+                for deg, coeff in self.coeffs.items():
+                    out += coeff.real * x**deg
             else:
-                fracsum = 0
                 for deg, coeff in self.coeffs.items():
-                    fracsum += coeff.real * x**deg
-            return fracsum
-        # assume coeff is int or float
-        return sum([coeff * x**deg for deg, coeff in self.coeffs.items()])
+                    out += coeff * x**deg
+        return out
 
     @classmethod
     def lagrange(cls, x: list, i: int):
-        polynome = cls.one()
+        polynome = cls({0: Fraction.one()})
         for j in range(len(x)):
             if j != i:
                 denom = x[i] - x[j]
