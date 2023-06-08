@@ -7,13 +7,15 @@ solution = AdvectionSolver(
     x=(0, 1),
     v=(1, 2),
     T=1,
-    courant=0.16,
-    order=3,
-    flux_strategy="transverse",
-    # flux_strategy="gauss-legendre",
+    courant=0.5,
+    order=5,
+    # flux_strategy="transverse",
+    flux_strategy="gauss-legendre",
     apriori_limiting="mpp",
     aposteriori_limiting=False,
+    cause_trouble=False,
 )
+
 solution.ssprk3()
 print(f"global max: {np.max(solution.u):.2e}, global min: {np.min(solution.u):.2e}")
 print(

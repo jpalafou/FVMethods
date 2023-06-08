@@ -51,17 +51,17 @@ def stack3d(u: np.ndarray, s: int, direction: str):
     return np.asarray(list_of_smaller_arrays)
 
 
-def apply_stensil(u: np.ndarray, stensil: np.ndarray):
+def apply_stencil(u: np.ndarray, stencil: np.ndarray):
     """
     args:
         u       3d np array (s, m, n)
-        stensil 1d np array
+        stencil 1d np array
     returns:
         linear combination of u along first dimension
         2d np array (m, n)
     """
-    stensilcopy = stensil.copy() if stensil.ndim == 3 else stensil.reshape(-1, 1, 1)
-    return np.sum(u * stensilcopy, axis=0) / sum(stensilcopy)
+    stencilcopy = stencil.copy() if stencil.ndim == 3 else stencil.reshape(-1, 1, 1)
+    return np.sum(u * stencilcopy, axis=0) / sum(stencilcopy)
 
 
 def trim2d(u: np.ndarray, axis: tuple, cut_length: tuple):
@@ -100,7 +100,8 @@ class AdvectionSolver(Integrator):
         bc                      string describing a pre-coded boudnary condition
         flux_strategy           'gauss-legendre' or 'transverse'
         apriori_limiting        None, 'mpp', or 'mpp lite'
-        aposteriori_limiting    bool
+        aposteriori_limiting    whether to call trouble detection and 2d fallback
+        cause_trouble           set all cells to be troubled, forcing 2d fallback
         loglen                  number of saved states
         adujst_time_step        whether to reduce timestep for order >4
         load                    whether to load precalculated solution or do it again
@@ -122,6 +123,7 @@ class AdvectionSolver(Integrator):
         flux_strategy: str = "gauss-legendre",
         apriori_limiting: str = None,
         aposteriori_limiting: bool = False,
+        cause_trouble: bool = False,
         loglen: int = 21,
         adujst_time_step: bool = False,
         load: bool = True,
@@ -143,6 +145,7 @@ class AdvectionSolver(Integrator):
             flux_strategy,
             apriori_limiting,
             aposteriori_limiting,
+            cause_trouble,
             loglen,
             adujst_time_step,
         ]
@@ -207,17 +210,17 @@ class AdvectionSolver(Integrator):
         # initialize integrator
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
-        # stensils: right/left interpolation from a volume or line segment
-        left_interface_stensil = ConservativeInterpolation.construct_from_order(
+        # stencils: right/left interpolation from a volume or line segment
+        left_interface_stencil = ConservativeInterpolation.construct_from_order(
             order, "left"
         ).nparray()
-        right_interface_stensil = ConservativeInterpolation.construct_from_order(
+        right_interface_stencil = ConservativeInterpolation.construct_from_order(
             order, "right"
         ).nparray()
-        self._conservative_stensil_size = len(left_interface_stensil)
+        self._conservative_stencil_size = len(left_interface_stencil)
         self._conservative_k = int(
-            np.floor(len(left_interface_stensil) / 2)
-        )  # cell reach of stensil
+            np.floor(len(left_interface_stencil) / 2)
+        )  # cell reach of stencil
 
         # quadrature points setup
         p = order - 1  # degree of reconstructed polynomial
@@ -225,8 +228,8 @@ class AdvectionSolver(Integrator):
         N_G = N_G + 1 if N_G % 2 == 0 and flux_strategy == "transverse" else N_G
         N_GL = int(np.ceil((p + 3) / 2))  # number of gauss-lobatto quadrature points
 
-        # stensils for reconstructing the average along a line segment within a cell
-        self.list_of_line_stensils = []
+        # stencils for reconstructing the average along a line segment within a cell
+        self.list_of_line_stencils = []
         # guass-legendre quadrature
         (
             gauss_quadr_points,
@@ -238,45 +241,47 @@ class AdvectionSolver(Integrator):
         self.gauss_quadr_weights = gauss_quadr_weights  # for evaluating line integrals
         # reconstruct polynomial and evaluate at each quadrature point
         for x in gauss_quadr_points:
-            stensil = ConservativeInterpolation.construct_from_order(order, x).nparray()
-            # if the stensil is short, assume it needs a 0 on either end
-            while len(stensil) < self._conservative_stensil_size:
-                stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
-            assert len(stensil) == self._conservative_stensil_size
-            self.list_of_line_stensils.append(stensil)  # ordered from left to right
+            stencil = ConservativeInterpolation.construct_from_order(order, x).nparray()
+            # if the stencil is short, assume it needs a 0 on either end
+            while len(stencil) < self._conservative_stencil_size:
+                stencil = np.concatenate((np.zeros(1), stencil, np.zeros(1)))
+            assert len(stencil) == self._conservative_stencil_size
+            self.list_of_line_stencils.append(stencil)  # ordered from left to right
 
-        # simplified list of line stensils for transverse flux
+        # simplified list of line stencils for transverse flux
         if flux_strategy == "transverse":
-            self.left_interface_stensil = left_interface_stensil
-            self.right_interface_stensil = right_interface_stensil
-            self.cell_center_stensil = self.list_of_line_stensils[N_G // 2]
+            self.left_interface_stencil = left_interface_stencil
+            self.right_interface_stencil = right_interface_stencil
+            self.cell_center_stencil = self.list_of_line_stencils[N_G // 2]
 
-        # stensils for reconstructing pointwise values along a line average
+        # stencils for reconstructing pointwise values along a line average
         self.apriori_limiting = apriori_limiting
-        list_of_GL_stensils = []
+        list_of_GL_stencils = []
         if self.apriori_limiting is not None and N_GL > 2:
             # interpolating values along line segments
             (
                 interior_GL_quadr_points,
                 _,
             ) = np.polynomial.legendre.leggauss(N_GL - 2)
-            endpoint_GL_quadr_weights = 2 / (N_GL * (N_GL - 1))
             # scale to cell of width 1
             interior_GL_quadr_points /= 2
-            endpoint_GL_quadr_weights /= 2
             # mpp lite
             if self.apriori_limiting == "mpp lite":
                 interior_GL_quadr_points = np.array([])
-            # generate stensils two are given
+            # generate stencils two are given
             for x in interior_GL_quadr_points:
-                stensil = ConservativeInterpolation.construct_from_order(
+                stencil = ConservativeInterpolation.construct_from_order(
                     order, x
                 ).nparray()
-                # if the stensil is short, assume it needs a 0 on either end
-                while len(stensil) < self._conservative_stensil_size:
-                    stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
-                assert len(stensil) == self._conservative_stensil_size
-                list_of_GL_stensils.append(stensil)
+                # if the stencil is short, assume it needs a 0 on either end
+                while len(stencil) < self._conservative_stencil_size:
+                    stencil = np.concatenate((np.zeros(1), stencil, np.zeros(1)))
+                assert len(stencil) == self._conservative_stencil_size
+                list_of_GL_stencils.append(stencil)
+        if self.apriori_limiting:
+            # endpoint GL quadrature weights
+            endpoint_GL_quadr_weights = 2 / (N_GL * (N_GL - 1))
+            endpoint_GL_quadr_weights /= 2  # scale to cell of width 1
             # check if timestep is small enough for mpp
             if (
                 self.Dt * (vx_max / self.hx + vy_max / self.hy)
@@ -287,27 +292,27 @@ class AdvectionSolver(Integrator):
                     f"courant condition less than {endpoint_GL_quadr_weights}\n",
                 )
 
-        # assort list of stensils for pointwise interpolation
+        # assort list of stencils for pointwise interpolation
         if flux_strategy == "gauss-legendre":
-            self.list_of_pointwise_stensils = (
-                [left_interface_stensil]
-                + list_of_GL_stensils
-                + [right_interface_stensil]
+            self.list_of_pointwise_stencils = (
+                [left_interface_stencil]
+                + list_of_GL_stencils
+                + [right_interface_stencil]
             )
         if flux_strategy == "transverse":
-            self.list_of_pointwise_stensils = [left_interface_stensil] + [
-                right_interface_stensil
+            self.list_of_pointwise_stencils = [left_interface_stencil] + [
+                right_interface_stencil
             ]
 
-        # transverse integral stensil
+        # transverse integral stencil
         if flux_strategy == "transverse":
-            self.integral_stensil = TransverseIntegral.construct_from_order(
+            self.integral_stencil = TransverseIntegral.construct_from_order(
                 order
             ).nparray()
-            self._transverse_stensil_size = len(self.integral_stensil)
+            self._transverse_stencil_size = len(self.integral_stencil)
             self._transverse_k = int(
-                np.floor(len(self.integral_stensil) / 2)
-            )  # cell reach of stensil
+                np.floor(len(self.integral_stencil) / 2)
+            )  # cell reach of stencil
 
         # ghost width
         if flux_strategy == "gauss-legendre":
@@ -340,6 +345,7 @@ class AdvectionSolver(Integrator):
 
         # initialize a posteriori limiting
         self.aposteriori_limiting = aposteriori_limiting
+        self.cause_trouble = cause_trouble
         # define normal velocity at midpoints of cell interfaces
         if isinstance(v, tuple):
             self.v_EW_midpoints = v[0] * np.ones((ny, nx + 1))
@@ -425,26 +431,26 @@ class AdvectionSolver(Integrator):
         """
         # construct an extended array with ghost zones and apply bc
         u_extended = self.apply_bc(u, gw=self.gw, dim="xy")
-        # stack volume arrays NS/EW to prepare for guass stensil operation
-        EW_stack = stack3d(u_extended, self._conservative_stensil_size, direction="x")
-        NS_stack = stack3d(u_extended, self._conservative_stensil_size, direction="y")
+        # stack volume arrays NS/EW to prepare for guass stencil operation
+        EW_stack = stack3d(u_extended, self._conservative_stencil_size, direction="x")
+        NS_stack = stack3d(u_extended, self._conservative_stencil_size, direction="y")
         # line average reconstruction, first dimension is guass-legendre point
         vertical_line_averages = np.asarray(
-            [apply_stensil(EW_stack, stensil) for stensil in self.list_of_line_stensils]
+            [apply_stencil(EW_stack, stencil) for stencil in self.list_of_line_stencils]
         )
         horizontal_line_averages = np.asarray(
-            [apply_stensil(NS_stack, stensil) for stensil in self.list_of_line_stensils]
+            [apply_stencil(NS_stack, stencil) for stencil in self.list_of_line_stencils]
         )
-        # stack line average arrays to prepare for guass-lobatto stensil operation
+        # stack line average arrays to prepare for guass-lobatto stencil operation
         EW_stacks = np.asarray(
             [
-                stack3d(i, self._conservative_stensil_size, direction="x")
+                stack3d(i, self._conservative_stencil_size, direction="x")
                 for i in horizontal_line_averages
             ]
         )
         NS_stacks = np.asarray(
             [
-                stack3d(i, self._conservative_stensil_size, direction="y")
+                stack3d(i, self._conservative_stencil_size, direction="y")
                 for i in vertical_line_averages
             ]
         )
@@ -453,8 +459,8 @@ class AdvectionSolver(Integrator):
         horizontal_points = np.asarray(
             [
                 [
-                    apply_stensil(EW_stack, stensil)
-                    for stensil in self.list_of_pointwise_stensils
+                    apply_stencil(EW_stack, stencil)
+                    for stencil in self.list_of_pointwise_stencils
                 ]
                 for EW_stack in EW_stacks
             ]
@@ -462,8 +468,8 @@ class AdvectionSolver(Integrator):
         vertical_points = np.asarray(
             [
                 [
-                    apply_stensil(NS_stack, stensil)
-                    for stensil in self.list_of_pointwise_stensils
+                    apply_stencil(NS_stack, stencil)
+                    for stencil in self.list_of_pointwise_stencils
                 ]
                 for NS_stack in NS_stacks
             ]
@@ -489,10 +495,10 @@ class AdvectionSolver(Integrator):
             west_points[:, 1:-1, 1:],
         )
         # guass quadrature integral approximation
-        self.NS_fluxes[...] = apply_stensil(
+        self.NS_fluxes[...] = apply_stencil(
             NS_pointwise_fluxes, self.gauss_quadr_weights
         )
-        self.EW_fluxes[...] = apply_stensil(
+        self.EW_fluxes[...] = apply_stencil(
             EW_pointwise_fluxes, self.gauss_quadr_weights
         )
 
@@ -507,30 +513,30 @@ class AdvectionSolver(Integrator):
         """
         # construct an extended array with ghost zones and apply bc
         u_extended = self.apply_bc(u, gw=self.gw, dim="xy")
-        # stack volume arrays NS/EW to prepare for guass stensil operation
-        EW_stack = stack3d(u_extended, self._conservative_stensil_size, direction="x")
-        NS_stack = stack3d(u_extended, self._conservative_stensil_size, direction="y")
+        # stack volume arrays NS/EW to prepare for guass stencil operation
+        EW_stack = stack3d(u_extended, self._conservative_stencil_size, direction="x")
+        NS_stack = stack3d(u_extended, self._conservative_stencil_size, direction="y")
         # line average reconstruction
-        vertical_line_average = apply_stensil(EW_stack, self.cell_center_stensil)
-        horizontal_line_average = apply_stensil(NS_stack, self.cell_center_stensil)
+        vertical_line_average = apply_stencil(EW_stack, self.cell_center_stencil)
+        horizontal_line_average = apply_stencil(NS_stack, self.cell_center_stencil)
         # stack for endpoint reconstruction
         EW_stack = stack3d(
-            horizontal_line_average, self._conservative_stensil_size, direction="x"
+            horizontal_line_average, self._conservative_stencil_size, direction="x"
         )
         NS_stack = stack3d(
-            vertical_line_average, self._conservative_stensil_size, direction="y"
+            vertical_line_average, self._conservative_stencil_size, direction="y"
         )
         # pointwise reconstruction
         horizontal_points = np.asarray(
             [
-                apply_stensil(EW_stack, stensil)
-                for stensil in self.list_of_pointwise_stensils
+                apply_stencil(EW_stack, stencil)
+                for stencil in self.list_of_pointwise_stencils
             ]
         )
         vertical_points = np.asarray(
             [
-                apply_stensil(NS_stack, stensil)
-                for stensil in self.list_of_pointwise_stensils
+                apply_stencil(NS_stack, stencil)
+                for stencil in self.list_of_pointwise_stencils
             ]
         )
         # apply slope limiter
@@ -557,11 +563,11 @@ class AdvectionSolver(Integrator):
             trim2d(east_points[0], axis=1, cut_length=self._transverse_k)[1:-1, :-1],
             trim2d(west_points[0], axis=1, cut_length=self._transverse_k)[1:-1, 1:],
         )
-        # transverse integral stensil
-        EW_stack = stack3d(NS_pointwise_fluxes, self._transverse_stensil_size, "x")
-        NS_stack = stack3d(EW_pointwise_fluxes, self._transverse_stensil_size, "y")
-        self.NS_fluxes[...] = apply_stensil(EW_stack, self.integral_stensil)
-        self.EW_fluxes[...] = apply_stensil(NS_stack, self.integral_stensil)
+        # transverse integral stencil
+        EW_stack = stack3d(NS_pointwise_fluxes, self._transverse_stencil_size, "x")
+        NS_stack = stack3d(EW_pointwise_fluxes, self._transverse_stencil_size, "y")
+        self.NS_fluxes[...] = apply_stencil(EW_stack, self.integral_stencil)
+        self.EW_fluxes[...] = apply_stencil(NS_stack, self.integral_stencil)
 
     def no_limiter(
         self,
@@ -721,6 +727,8 @@ class AdvectionSolver(Integrator):
         troubled_cells = trouble_detection2d(
             u0_2gw, ucandidate_2gw, hx=self.hx, hy=self.hy
         )
+        if self.cause_trouble:
+            troubled_cells = np.ones(u0.shape)
         NS_troubled_faces = np.zeros(self.NS_fluxes.shape)[np.newaxis]
         EW_troubled_faces = np.zeros(self.EW_fluxes.shape)[np.newaxis]
 
@@ -806,13 +814,15 @@ class AdvectionSolver(Integrator):
                 self.u = loaded_instance.u
             return False
         # otherwise proceed to integration
+        print("New solution instance...")
         return True
 
     def post_integrate(self):
         # Save the instance to a file
-        with open(self.filepath, "wb") as thisfile:
-            pickle.dump(self, thisfile)
-        print(f"Wrote a solution instance to {self.filepath}\n")
+        if self.load:
+            with open(self.filepath, "wb") as thisfile:
+                pickle.dump(self, thisfile)
+            print(f"Wrote a solution instance to {self.filepath}\n")
 
     def periodic_error(self, norm: str = "l1"):
         """

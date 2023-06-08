@@ -197,10 +197,10 @@ def test_nparray():
 
 
 @pytest.mark.parametrize("unused_parameter", range(n_tests))
-def test_stensil_construction_for_floating_point_evalation(unused_parameter):
+def test_stencil_construction_for_floating_point_evalation(unused_parameter):
     # def test_float_evalation():
     """
-    construct a stensil for a 3 cell kernel with a known solution
+    construct a stencil for a 3 cell kernel with a known solution
     verify that floating point evaluations hold
     """
     kernel = Kernel(1, 1)
@@ -215,12 +215,12 @@ def test_stensil_construction_for_floating_point_evalation(unused_parameter):
     u_bar = np.array([random() * u_bar_max for _ in range(3)])
     # 5 reconstruction points
     exes = [random() - 0.5 for _ in range(5)]
-    # construct stensil
-    stensils = [
+    # construct stencil
+    stencils = [
         ConservativeInterpolation.construct_from_kernel(kernel, x).nparray()
         for x in exes
     ]
-    stensil_evaluations = [u_bar @ stensil / sum(stensil) for stensil in stensils]
+    stencil_evaluations = [u_bar @ stencil / sum(stencil) for stencil in stencils]
     true_evaluations = [
         h
         * u_bar
@@ -233,4 +233,4 @@ def test_stensil_construction_for_floating_point_evalation(unused_parameter):
         )
         for x in exes
     ]
-    assert stensil_evaluations == pytest.approx(true_evaluations)
+    assert stencil_evaluations == pytest.approx(true_evaluations)

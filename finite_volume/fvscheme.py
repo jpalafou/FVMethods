@@ -11,7 +11,7 @@ from finite_volume.mathematiques import (
 from finite_volume.polynome import Polynome
 
 
-stensil_path = "stensils/"
+stencil_path = "stencils/"
 
 
 class Kernel:
@@ -60,9 +60,9 @@ class Kernel:
 
 
 @dataclasses.dataclass
-class Stensil(LinearCombination):
+class stencil(LinearCombination):
     """
-    Parent class for stensils which in general can be
+    Parent class for stencils which in general can be
         read from csv
         written to csv
         converted to an np array
@@ -76,7 +76,7 @@ class Stensil(LinearCombination):
         args:
             path    str, location of csv
         returns:
-            Stensil instance
+            stencil instance
         """
         coeffs = {}
         with open(path, mode="r") as the_file:
@@ -92,7 +92,7 @@ class Stensil(LinearCombination):
         args:
             path    str, location of csv
         returns:
-            writes stensil instance as a csv to path
+            writes stencil instance as a csv to path
         """
         with open(path, "w+") as the_file:
             writer = csv.writer(the_file)
@@ -137,7 +137,7 @@ class Stensil(LinearCombination):
 
 
 @dataclasses.dataclass
-class ConservativeInterpolation(Stensil):
+class ConservativeInterpolation(stencil):
     """
     find the polynomial reconstruction evaluated at a point from a kernel of
     cell averages which conserves u inside the kernel
@@ -146,8 +146,8 @@ class ConservativeInterpolation(Stensil):
     @classmethod
     def construct_from_kernel(cls, kernel: Kernel, reconstruct_here: str = "right"):
         """
-        generate a stensil to evaluate a kernel at x = reconstruct_here
-        if reconstruct_here = left, right, or center, the stensil will
+        generate a stencil to evaluate a kernel at x = reconstruct_here
+        if reconstruct_here = left, right, or center, the stencil will
         be in terms of integer fractions. otherwise, floating point
         values will be used for weights.
         """
@@ -207,7 +207,7 @@ class ConservativeInterpolation(Stensil):
         reconstruct_here: str = "right",
     ):
         """
-        generate a stensil to evaluate a kernel at x = reconstruct_here
+        generate a stencil to evaluate a kernel at x = reconstruct_here
         from a given order of accuracy. asymmetric kernels will be
         averaged with their inverses to form a symmetric kernel
         """
@@ -218,7 +218,7 @@ class ConservativeInterpolation(Stensil):
         if reconstruct_here == "c" or reconstruct_here == 0:
             reconstruct_here = "center"
         save_path = (
-            stensil_path
+            stencil_path
             + "conservative interpolation/"
             + f"order{order}_{reconstruct_here}.csv"
         )
@@ -256,7 +256,7 @@ class ConservativeInterpolation(Stensil):
 dataclasses.dataclass
 
 
-class TransverseIntegral(Stensil):
+class TransverseIntegral(stencil):
     """
     find the polynomial reconstruction evaluated at a point from a kernel of
     cell averages which conserves u inside the kernel
@@ -282,7 +282,7 @@ class TransverseIntegral(Stensil):
 
     @classmethod
     def construct_from_order(cls, order: int):
-        save_path = stensil_path + "transverse integral/" + f"order{order}.csv"
+        save_path = stencil_path + "transverse integral/" + f"order{order}.csv"
         if os.path.isfile(save_path):
             integral_scheme = cls.read_from_csv(save_path)
         else:

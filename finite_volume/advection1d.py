@@ -103,41 +103,41 @@ class AdvectionSolver(Integrator):
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
         # interpolating values at cell interfaces
-        left_interface_stensil = ConservativeInterpolation.construct_from_order(
+        left_interface_stencil = ConservativeInterpolation.construct_from_order(
             order, "left"
         ).nparray()
-        right_interface_stensil = ConservativeInterpolation.construct_from_order(
+        right_interface_stencil = ConservativeInterpolation.construct_from_order(
             order, "right"
         ).nparray()
-        self._stensil_size = len(left_interface_stensil)  # assume symmetric stensils
-        k = int(np.floor(len(left_interface_stensil) / 2))  # length of stensil arms
+        self._stencil_size = len(left_interface_stencil)  # assume symmetric stencils
+        k = int(np.floor(len(left_interface_stencil) / 2))  # length of stencil arms
         self.gw = k + 1
 
         # interpolating values inside cells
         p = order - 1  # polynomial degree p
         q = int(np.ceil((p + 1) / 2)) + 1  # of required quadrature points
-        interior_stensils = []
+        interior_stencils = []
         if apriori_limiting and q > 2:
             if apriori_limiting == "mpp lite":
                 # lite version of mpp uses only the cell center as a free absicca
-                cell_center_stensil = ConservativeInterpolation.construct_from_order(
+                cell_center_stencil = ConservativeInterpolation.construct_from_order(
                     order, "center"
                 ).nparray()
-                interior_stensils.append(cell_center_stensil)
+                interior_stencils.append(cell_center_stencil)
             elif apriori_limiting == "mpp":
-                # full version requires a stensil for each Guass-Lobatto point
+                # full version requires a stencil for each Guass-Lobatto point
                 free_abscissas, _ = np.polynomial.legendre.leggauss(q - 2)
                 # transform to cell coordinate
                 free_abscissas /= 2
                 for x in free_abscissas:
-                    stensil = ConservativeInterpolation.construct_from_order(
+                    stencil = ConservativeInterpolation.construct_from_order(
                         order, x
                     ).nparray()
-                    # if the stensil is short, assume it needs a 0 on either end
-                    while len(stensil) < self._stensil_size:
-                        stensil = np.concatenate((np.zeros(1), stensil, np.zeros(1)))
-                    assert len(stensil) == self._stensil_size
-                    interior_stensils.append(stensil)
+                    # if the stencil is short, assume it needs a 0 on either end
+                    while len(stencil) < self._stencil_size:
+                        stencil = np.concatenate((np.zeros(1), stencil, np.zeros(1)))
+                    assert len(stencil) == self._stencil_size
+                    interior_stencils.append(stencil)
             # quadrature weight at endpoints
             # https://mathworld.wolfram.com/LobattoQuadrature.html
             endpoint_weight = 2 / (q * (q - 1))
@@ -151,9 +151,9 @@ class AdvectionSolver(Integrator):
                     f" Courant condition of {C_for_mpp}.",
                 )
 
-        # complete list of interpolation stensils going from left to right
-        self.list_of_stensils = (
-            [left_interface_stensil] + interior_stensils + [right_interface_stensil]
+        # complete list of interpolation stencils going from left to right
+        self.list_of_stencils = (
+            [left_interface_stencil] + interior_stencils + [right_interface_stencil]
         )
 
         # array to store interpolations at each cell
@@ -230,16 +230,16 @@ class AdvectionSolver(Integrator):
         ubar_extended = self.apply_bc(u, self.gw)
         n, nwg = len(u), len(ubar_extended)
         # construct an array of staggered state vectors such that a matrix operation
-        # with a stensil multiplies weights by their referenced cells
+        # with a stencil multiplies weights by their referenced cells
         list_of_windows = []
-        for i in range(self._stensil_size):
-            right_ind = i + nwg - (self._stensil_size - 1)
+        for i in range(self._stencil_size):
+            right_ind = i + nwg - (self._stencil_size - 1)
             list_of_windows.append(ubar_extended[i:right_ind])
         array_of_windows = np.array(list_of_windows).T
         # interpolate each x value in each cell
         list_of_interpolations = []
-        for stensil in self.list_of_stensils:
-            list_of_interpolations.append(array_of_windows @ stensil / sum(stensil))
+        for stencil in self.list_of_stencils:
+            list_of_interpolations.append(array_of_windows @ stencil / sum(stencil))
         interpolations = np.array(list_of_interpolations)
         # slope limiter
         theta_i = np.ones(n + 2)

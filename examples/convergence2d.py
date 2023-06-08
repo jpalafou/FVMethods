@@ -6,7 +6,7 @@ from finite_volume.advection2d import AdvectionSolver
 
 # configurations
 flux_strategy = "gauss-legendre"
-order_list = [1, 2, 3, 4, 5, 6, 7, 8]
+order_list = [1, 2, 4, 8]
 n_list = [16, 32, 64, 128]
 u0 = "sinus"
 courant = 0.5
@@ -18,7 +18,7 @@ v = (1, 2)
 # file locations
 plot_path = "figures/"
 data_path = "data/convergence/"
-project_name = "error_convergence_2d_advection"
+project_name = "error_convergence_2d_advection_gauss"
 
 # create folders if they don't exist
 if not os.path.exists(plot_path):
