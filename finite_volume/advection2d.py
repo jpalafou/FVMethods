@@ -2,6 +2,9 @@
 import numpy as np
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
+import os
+import pickle
+import inspect
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
@@ -100,6 +103,7 @@ class AdvectionSolver(Integrator):
         aposteriori_limiting    bool
         loglen                  number of saved states
         adujst_time_step        whether to reduce timestep for order >4
+        load                    whether to load precalculated solution or do it again
     returns:
         u   array of saved states
     """
@@ -120,7 +124,31 @@ class AdvectionSolver(Integrator):
         aposteriori_limiting: bool = False,
         loglen: int = 21,
         adujst_time_step: bool = False,
+        load: bool = True,
     ):
+        # create filename out of the initialization arguments
+        self.load = load
+        u0_str = u0.__name__ if callable(u0) else str(u0)
+        v_str = v.__name__ if callable(v) else str(v)
+        filename_components = [
+            u0_str,
+            n,
+            x,
+            y,
+            T,
+            v_str,
+            courant,
+            order,
+            bc,
+            flux_strategy,
+            apriori_limiting,
+            aposteriori_limiting,
+            loglen,
+            adujst_time_step,
+        ]
+        self._filename = "_".join(str(component) for component in filename_components)
+        self._solution_path = "data/solutions/"
+
         # spatial discretization in x
         self.n = (n, n) if isinstance(n, int) else n
         ny, nx = self.n
@@ -761,6 +789,30 @@ class AdvectionSolver(Integrator):
             self.rk2()
         else:
             self.euler()
+
+    def pre_integrate(self):
+        # create solution path if it doesn't exist
+        if not os.path.exists(self._solution_path):
+            os.makedirs(self._solution_path)
+        # get name of time integrator method
+        frame = inspect.currentframe().f_back
+        method_name = frame.f_code.co_name
+        self._filename = self._filename + "_" + method_name + ".pkl"
+        self.filepath = self._solution_path + self._filename
+        # load the solution if it already exists
+        if os.path.isfile(self.filepath) and self.load:
+            with open(self.filepath, "rb") as thisfile:
+                loaded_instance = pickle.load(thisfile)
+                self.u = loaded_instance.u
+            return False
+        # otherwise proceed to integration
+        return True
+
+    def post_integrate(self):
+        # Save the instance to a file
+        with open(self.filepath, "wb") as thisfile:
+            pickle.dump(self, thisfile)
+        print(f"Wrote a solution instance to {self.filepath}\n")
 
     def periodic_error(self, norm: str = "l1"):
         """

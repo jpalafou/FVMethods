@@ -51,19 +51,37 @@ class Integrator:
         if i + 1 in self._ilog:
             self.u[self._ilog.index(i + 1)] = self.u1
 
+    def pre_integrate(self):
+        """
+        any producedures that are to be executed before time integration
+        returns true or false for whether or not to proceed
+        """
+        return True
+
+    def post_integrate(self):
+        """
+        any producedures that are to be executed after time integration
+        """
+        return
+
     # integrators
     def one_euler_step(self):
         """
         1st order forward Euler integrator
         """
+        if not self.pre_integrate()():
+            return
         dt = self.findDt(0)
         # one stage with posteriori check
         self.u1 = self.u0 + dt * self.udot(self.u0, self._t[0])
+        self.post_integrate()
 
     def euler(self):
         """
         1st order forward Euler integrator
         """
+        if not self.pre_integrate():
+            return
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # one stage with posteriori check
@@ -71,11 +89,14 @@ class Integrator:
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
+        self.post_integrate()
 
     def rk2(self):
         """
         2nd order Runge-Kutta integrator
         """
+        if not self.pre_integrate():
+            return
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # first stage with posteriori check
@@ -87,11 +108,14 @@ class Integrator:
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
+        self.post_integrate()
 
     def rk3(self):
         """
         3rd order Runge-Kutta integrator
         """
+        if not self.pre_integrate():
+            return
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # first stage with posteriori check
@@ -106,11 +130,14 @@ class Integrator:
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
+        self.post_integrate()
 
     def rk4(self):
         """
         4th order Runge-Kutta integrator
         """
+        if not self.pre_integrate():
+            return
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # first stage with posteriori check
@@ -128,11 +155,14 @@ class Integrator:
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
+        self.post_integrate()
 
     def ssprk2(self):
         """
         2nd order strong stability preserving Runge-Kutta integrator
         """
+        if not self.pre_integrate():
+            return
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             x1 = self.u0
@@ -140,11 +170,14 @@ class Integrator:
             self.u1 = (1 / 2) * x1 + (1 / 2) * (x2 + dt * self.udot(x2, self._t[i], dt))
             self.logupdate(i)
             self.u0 = self.u1
+        self.post_integrate()
 
     def ssprk3(self):
         """
         3rd order strong stability preserving Runge-Kutta integrator
         """
+        if not self.pre_integrate():
+            return
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             x1 = self.u0
@@ -153,3 +186,4 @@ class Integrator:
             self.u1 = (1 / 3) * x1 + (2 / 3) * (x3 + dt * self.udot(x3, self._t[i], dt))
             self.logupdate(i)
             self.u0 = self.u1
+        self.post_integrate()

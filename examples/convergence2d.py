@@ -17,7 +17,7 @@ v = (1, 2)
 
 # file locations
 plot_path = "figures/"
-data_path = "data/"
+data_path = "data/convergence/"
 project_name = "error_convergence_2d_advection"
 
 # create folders if they don't exist

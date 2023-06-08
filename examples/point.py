@@ -2,13 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from finite_volume.advection2d import AdvectionSolver
 
-def ic(x,y):
+
+def ic(x, y):
     m, n = len(y), len(x)
     i = int(m / 2)
     j = int(n / 2)
     u = np.zeros((m, n))
-    u[i, j] = 1.
+    u[i, j] = 1.0
     return u
+
 
 solution = AdvectionSolver(
     u0="sinus",
@@ -27,7 +29,7 @@ solution.euler()
 
 fig, ax = plt.subplots(figsize=(6, 6))
 ind = 1
-pos = ax.imshow(solution.u[ind], cmap='hot', interpolation='none')
+pos = ax.imshow(solution.u[ind], cmap="hot", interpolation="none")
 fig.colorbar(pos, ax=ax)
 plt.title("solution after one timestep")
 print(f"min: {np.min(solution.u[ind])}")

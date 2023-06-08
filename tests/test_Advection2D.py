@@ -25,6 +25,7 @@ def test_meshsize_convergence(flux_strategy, order):
             flux_strategy=flux_strategy,
             apriori_limiting=None,
             aposteriori_limiting=False,
+            load=False,
         )
         solution.rkorder()
         errorlist = np.append(errorlist, solution.periodic_error("l1"))
@@ -50,6 +51,7 @@ def test_order_convergence(flux_strategy, n):
             flux_strategy=flux_strategy,
             apriori_limiting=None,
             aposteriori_limiting=False,
+            load=False,
         )
         solution.rkorder()
         errorlist = np.append(errorlist, solution.periodic_error("l1"))
