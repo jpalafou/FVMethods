@@ -85,9 +85,6 @@ def compute_min(A, Amin, dim):
         Amin[..., 1:] = np.where(
             A[..., :-1] < Amin[..., 1:], A[..., :-1], Amin[..., 1:]
         )
-        # if s.BC[0] == "periodic":
-        #    Amin[...,-1] = np.where(A[..., 0]<Amin[...,-1],A[..., 0],Amin[...,-1])
-        #    Amin[..., 0] = np.where(A[...,-1]<Amin[..., 0],A[...,-1],Amin[..., 0])
     elif dim == 1:
         Amin[..., :-1, :] = np.where(
             A[..., :-1, :] < A[..., 1:, :], A[..., :-1, :], A[..., 1:, :]
@@ -95,13 +92,9 @@ def compute_min(A, Amin, dim):
         Amin[..., 1:, :] = np.where(
             A[..., :-1, :] < Amin[..., 1:, :], A[..., :-1, :], Amin[..., 1:, :]
         )
-        # if s.BC[1] == "periodic":
-        #    Amin[...,-1,:] = np.where(A[..., 0,:]<Amin[...,-1,:],A[..., 0,:],Amin[...,-1,:])
-        #    Amin[..., 0,:] = np.where(A[...,-1,:]<Amin[..., 0,:],A[...,-1,:],Amin[..., 0,:])
 
 
 def first_order_derivative(U, dim, h):
-    na = np.newaxis
     if dim == 0:
         # dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
         dU = (U[:, :, 2:] - U[:, :, :-2]) / (2 * h)
@@ -113,7 +106,6 @@ def first_order_derivative(U, dim, h):
 
 
 def compute_smooth_extrema(U, dim, h):
-    na = np.newaxis
     eps = 0
     if dim == "x":
         # First derivative dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
@@ -140,34 +132,6 @@ def compute_smooth_extrema(U, dim, h):
         compute_min(alphaR, alphaL, 0)
         alpha = alphaL
 
-    if dim == "y":
-        ...
-        # dU = first_order_derivative(U, s.dm.y_cv, 1)
-        # d2U = first_order_derivative(dU, s.dm.y_cv[1:-1], 1)
-
-        # dv = 0.5 * (s.dm.y_fp[na, 3:-2, na] - s.dm.y_fp[na, 2:-3, na]) * d2U
-        # # vL = dU(j-1)-dU(j)
-        # vL = dU[..., :-2, :] - dU[..., 1:-1, :]
-        # # alphaL = min(1,max(vL,0)/(-dv)),1,min(1,min(vL,0)/(-dv)) for dv<0,dv=0,dv>0
-        # alphaL = (
-        #     -np.where(dv < 0, np.where(vL > 0, vL, 0), np.where(vL < 0, vL, 0))
-        #     / dv
-        # )
-        # alphaL = np.where(np.abs(dv) <= eps, 1, alphaL)
-        # alphaL = np.where(alphaL < 1, alphaL, 1)
-        # # vR = dU(j+1)-dU(j)
-        # vR = dU[..., 2:, :] - dU[..., 1:-1, :]
-        # # alphaR = min(1,max(vR,0)/(dv)),1,min(1,min(vR,0)/(dv)) for dv>0,dv=0,dv<0
-        # alphaR = (
-        #     np.where(dv > 0, np.where(vR > 0, vR, 0), np.where(vR < 0, vR, 0))
-        #     / dv
-        # )
-        # alphaR = np.where(np.abs(dv) <= eps, 1, alphaR)
-        # alphaR = np.where(alphaR < 1, alphaR, 1)
-        # alphaR = np.where(alphaR < alphaL, alphaR, alphaL)
-        # compute_min(s, alphaR, alphaL, 1)
-        # alpha = alphaL
-
     return alpha
 
 
@@ -182,8 +146,10 @@ def compute_W_min(W, dim):
 def minmod(SlopeL, SlopeR):
     # First compute ratio between slopes SlopeR/SlopeL
     # Then limit the ratio to be lower than 1
-    # Finally, limit the ratio be positive and multiply by SlopeL to get the limited slope at the cell center
-    # We use where instead of maximum/minimum as it doesn't propagte the NaNs caused when SlopeL=0
+    # Finally, limit the ratio be positive and multiply by SlopeL to get the limited
+    # slope at the cell center
+    # We use where instead of maximum/minimum as it doesn't propagte the NaNs caused
+    # when SlopeL=0
     ratio = SlopeR / SlopeL
     ratio = np.where(ratio < 1, ratio, 1)
     return np.where(ratio > 0, ratio, 0) * SlopeL
@@ -198,7 +164,6 @@ def moncen(dU_L, dU_R):
 
 
 def compute_slopes_x(dU, slope_limiter="moncen"):
-    na = np.newaxis
     if slope_limiter == "minmod":
         return minmod(dU[:, :, :-1], dU[:, :, 1:])
 
@@ -208,7 +173,6 @@ def compute_slopes_x(dU, slope_limiter="moncen"):
 
 def compute_second_order_fluxes(u0):
     # u0 has gw=2
-    na = np.newaxis
     ########################
     # X-Direction
     ########################

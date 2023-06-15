@@ -6,24 +6,38 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-def trouble_detection2d(u0, unew, hx, hy):
+def trouble_detection2d(
+    u0: np.ndarray,
+    unew: np.ndarray,
+    hx: float,
+    hy: float,
+    PAD: tuple,
+    mpp_tolerance: float,
+    visualization_tolerance: float,
+):
     """
     args:
         u0      previous state array (1, ny + 4, nx + 4)
         unew    candidate state array (1, ny + 4, nx + 4)
+        hx      mesh size in x
+        hy      mesh size in y
+        PAD     tuple of physically admissable values (min, max)
+        mpp_tolerance   tolerance for flagging
+        visualization_tolerance
     returns:
         trouble binary array indicating troubled cells (1, ny, nx)
     """
-    tolerance_ptge = 0
+    u0_range = np.max(u0) - np.min(u0)
 
+    # NAD
     W_max = compute_W_max(u0, "xy")[:, 2:-2, 2:-2]
     W_min = compute_W_min(u0, "xy")[:, 2:-2, 2:-2]
-
-    W_min -= np.abs(W_min) * tolerance_ptge
-    W_max += np.abs(W_max) * tolerance_ptge
-
-    possible_trouble = np.where(unew[:, 2:-2, 2:-2] >= W_min, 0, 1)
-    possible_trouble = np.where(unew[:, 2:-2, 2:-2] <= W_max, possible_trouble, 1)
+    lower_differences = unew[:, 2:-2, 2:-2] - W_min
+    upper_differences = unew[:, 2:-2, 2:-2] - W_max
+    possible_trouble = np.where(lower_differences < -u0_range * mpp_tolerance, 1, 0)
+    possible_trouble = np.where(
+        upper_differences > u0_range * mpp_tolerance, 1, possible_trouble
+    )
 
     # Now check for smooth extrema and relax the criteria for such cases
     trouble = np.zeros(possible_trouble.shape)
@@ -34,9 +48,27 @@ def trouble_detection2d(u0, unew, hx, hy):
         trouble = np.where(
             possible_trouble == 1, np.where(alpha < 1, 1, trouble), trouble
         )
-    # switch for later
-    # trouble = np.ones(possible_trouble.shape)
-    return trouble
+
+    # PAD
+    trouble = np.where(
+        np.logical_or(unew[:, 2:-2, 2:-2] < PAD[0], unew[:, 2:-2, 2:-2] > PAD[1]),
+        1,
+        trouble,
+    )
+
+    # visualization of troubled cells
+    visualize_troubled_cells = np.where(
+        lower_differences < -u0_range * visualization_tolerance, 1, 0
+    )
+    visualize_troubled_cells = np.where(
+        upper_differences > u0_range * visualization_tolerance,
+        1,
+        visualize_troubled_cells,
+    )
+    # only keep visualize troubled cells which passed smooth extrema detection
+    visualize_troubled_cells = np.where(trouble, visualize_troubled_cells, 0)
+
+    return trouble, visualize_troubled_cells
 
 
 def compute_W_ex(W, dim, case):
@@ -71,7 +103,7 @@ def compute_W_ex(W, dim, case):
             W_f[:, :-1, :] = f(W[:, :-1, :], W[:, 1:, :])
             # Now comparing W_max(j) and W_(j-1)
             W_f[:, 1:, :] = f(W_f[:, 1:, :], W[:, :-1, :])
-    return W_f
+    return W_f.astype("double")
 
 
 def compute_W_max(W, dim):
@@ -96,9 +128,6 @@ def compute_min(A, Amin, dim):
         Amin[..., 1:] = np.where(
             A[..., :-1] < Amin[..., 1:], A[..., :-1], Amin[..., 1:]
         )
-        # if s.BC[0] == "periodic":
-        #    Amin[...,-1] = np.where(A[..., 0]<Amin[...,-1],A[..., 0],Amin[...,-1])
-        #    Amin[..., 0] = np.where(A[...,-1]<Amin[..., 0],A[...,-1],Amin[..., 0])
     elif dim == 1:
         Amin[..., :-1, :] = np.where(
             A[..., :-1, :] < A[..., 1:, :], A[..., :-1, :], A[..., 1:, :]
@@ -106,9 +135,6 @@ def compute_min(A, Amin, dim):
         Amin[..., 1:, :] = np.where(
             A[..., :-1, :] < Amin[..., 1:, :], A[..., :-1, :], Amin[..., 1:, :]
         )
-        # if s.BC[1] == "periodic":
-        #    Amin[...,-1,:] = np.where(A[..., 0,:]<Amin[...,-1,:],A[..., 0,:],Amin[...,-1,:])
-        #    Amin[..., 0,:] = np.where(A[...,-1,:]<Amin[..., 0,:],A[...,-1,:],Amin[..., 0,:])
 
 
 def first_order_derivative(U, dim, h):
@@ -121,7 +147,6 @@ def first_order_derivative(U, dim, h):
         dU  (1, m, n - 2) if dim = 0
             (1, m - 2, n) if dim = 1
     """
-    na = np.newaxis
     if dim == 0:
         # dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
         dU = (U[:, :, 2:] - U[:, :, :-2]) / (2 * h)
@@ -143,7 +168,6 @@ def compute_smooth_extrema(U, dim, h):
                 (1, ny + 4, nx) if dim = 'x'
                 (1, ny, nx + 4) if dim = 'y'
     """
-    na = np.newaxis
     eps = 0
     if dim == "x":
         # First derivative dUdx(i) = [U(i+1)-U(i-1)]/[x_cv(i+1)-x_cv(i-1)]
@@ -206,8 +230,10 @@ def minmod(SlopeL, SlopeR):
     """
     # First compute ratio between slopes SlopeR/SlopeL
     # Then limit the ratio to be lower than 1
-    # Finally, limit the ratio be positive and multiply by SlopeL to get the limited slope at the cell center
-    # We use where instead of maximum/minimum as it doesn't propagte the NaNs caused when SlopeL=0
+    # Finally, limit the ratio be positive and multiply by SlopeL to get the limited
+    # slope at the cell center
+    # We use where instead of maximum/minimum as it doesn't propagte the NaNs caused
+    # when SlopeL=0
     ratio = SlopeR / SlopeL
     ratio = np.where(ratio < 1, ratio, 1)
     return np.where(ratio > 0, ratio, 0) * SlopeL
@@ -238,7 +264,6 @@ def compute_slopes(dU, slope_limiter="moncen", dim="x"):
         slopes  (1, m, n - 1) if dim = 'x'
                 (1, m - 1, n) if dim = 'y'
     """
-    na = np.newaxis
     if dim == "x":
         dU_left = dU[:, :, :-1]
         dU_right = dU[:, :, 1:]
@@ -262,7 +287,6 @@ def compute_second_order_fluxes(u0, dim):
                         (1, ny + 2, nx) if dim = 'y'
     """
     # u0 has gw=2
-    na = np.newaxis
     ########################
     # X-Direction
     ########################

@@ -102,6 +102,10 @@ class AdvectionSolver(Integrator):
         apriori_limiting        None, 'mpp', or 'mpp lite'
         aposteriori_limiting    whether to call trouble detection and 2d fallback
         cause_trouble           set all cells to be troubled, forcing 2d fallback
+        mpp_tolerance           simulation trouble detection tolerance
+                                set to None or +inf to disable NAD detection
+        visualization_tolerance set to None or -inf to visuazalize simulation values
+        PAD                     physical admissibility detection (lower, upper)
         loglen                  number of saved states
         adujst_time_step        whether to reduce timestep for order >4
         load                    whether to load precalculated solution or do it again
@@ -124,6 +128,9 @@ class AdvectionSolver(Integrator):
         apriori_limiting: str = None,
         aposteriori_limiting: bool = False,
         cause_trouble: bool = False,
+        mpp_tolerance: float = 0,
+        visualization_tolerance: float = None,
+        PAD: tuple = None,
         loglen: int = 21,
         adujst_time_step: bool = False,
         load: bool = True,
@@ -146,6 +153,9 @@ class AdvectionSolver(Integrator):
             apriori_limiting,
             aposteriori_limiting,
             cause_trouble,
+            mpp_tolerance,
+            visualization_tolerance,
+            PAD,
             loglen,
             adujst_time_step,
         ]
@@ -210,6 +220,36 @@ class AdvectionSolver(Integrator):
         # initialize integrator
         super().__init__(u0=u0, t=self.t, loglen=loglen)
 
+        # initialize a priori limiting
+        self.apriori_limiting = apriori_limiting
+        if apriori_limiting:
+            self.theta = np.ones(self.u0.shape)
+            self.theta_history = np.zeros(self.u.shape)
+            self.theta_history[0] = self.theta
+            self.visualize_theta = np.zeros(self.u0.shape)
+            self.visualize_theta_history = np.zeros(self.u.shape)
+            self.logupdate = self.logupdate_with_theta
+        # initialize a posteriori limiting
+        self.aposteriori_limiting = aposteriori_limiting
+        if aposteriori_limiting:
+            self.troubled_cells = np.zeros(self.u0.shape)
+            self.troubled_cell_history = np.zeros(self.u.shape)
+            self.visualize_troubled_cells = np.zeros(self.u0.shape)
+            self.visualize_troubled_cell_history = np.zeros(self.u.shape)
+            self.logupdate = self.logupdate_with_troubled_cells
+        # initialize cause_trouble and udot_evaluation_count
+        self.cause_trouble = 1 if cause_trouble else 0
+        self.udot_evaluation_count = 0
+        # initialize tolerances
+        self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
+        self.visualization_tolerance = (
+            -np.inf
+            if visualization_tolerance is None or cause_trouble
+            else visualization_tolerance
+        )
+        # initialize PAD
+        self.PAD = (-np.inf, np.inf) if PAD is None else PAD
+
         # stencils: right/left interpolation from a volume or line segment
         left_interface_stencil = ConservativeInterpolation.construct_from_order(
             order, "left"
@@ -255,7 +295,6 @@ class AdvectionSolver(Integrator):
             self.cell_center_stencil = self.list_of_line_stencils[N_G // 2]
 
         # stencils for reconstructing pointwise values along a line average
-        self.apriori_limiting = apriori_limiting
         list_of_GL_stencils = []
         if self.apriori_limiting is not None and N_GL > 2:
             # interpolating values along line segments
@@ -343,9 +382,6 @@ class AdvectionSolver(Integrator):
             self.v_EW_interface = v(EW_qaudr_points_x, EW_qaudr_points_y)[0]
             self.v_NS_interface = v(NS_qaudr_points_x, NS_qaudr_points_y)[1]
 
-        # initialize a posteriori limiting
-        self.aposteriori_limiting = aposteriori_limiting
-        self.cause_trouble = cause_trouble
         # define normal velocity at midpoints of cell interfaces
         if isinstance(v, tuple):
             self.v_EW_midpoints = v[0] * np.ones((ny, nx + 1))
@@ -393,6 +429,7 @@ class AdvectionSolver(Integrator):
         returns:
             dudt    (ny, nx) at t_i
         """
+        self.udot_evaluation_count += 1
         self.compute_high_order_fluxes(u=u)
         self.aposteriori_limiter(u0=u, dt=dt)
         return self.get_dynamics()
@@ -478,8 +515,6 @@ class AdvectionSolver(Integrator):
         (north_points, south_points, east_points, west_points,) = self.apriori_limiter(
             horizontal_points,
             vertical_points,
-            trim2d(horizontal_line_averages, axis=2, cut_length=self._conservative_k),
-            trim2d(vertical_line_averages, axis=1, cut_length=self._conservative_k),
             u,
             gw=1,
         )
@@ -543,12 +578,6 @@ class AdvectionSolver(Integrator):
         (north_points, south_points, east_points, west_points,) = self.apriori_limiter(
             horizontal_points[np.newaxis],
             vertical_points[np.newaxis],
-            trim2d(horizontal_line_average, axis=1, cut_length=self._conservative_k)[
-                np.newaxis
-            ],
-            trim2d(vertical_line_average, axis=0, cut_length=self._conservative_k)[
-                np.newaxis
-            ],
             u,
             gw=self._transverse_k + 1,
         )
@@ -573,8 +602,6 @@ class AdvectionSolver(Integrator):
         self,
         horizontal_points: np.ndarray,
         vertical_points: np.ndarray,
-        horizontal_line_averages: np.ndarray,
-        vertical_line_averages: np.ndarray,
         u: np.ndarray,
         gw: int,
     ):
@@ -585,8 +612,6 @@ class AdvectionSolver(Integrator):
                                         ny + 2, nx + 2)
             vertical_points             (# vertical lines, # points per line,
                                         ny + 2, nx + 2)
-            horizontal_line_averages    (# horizontal lines, ny + 2, nx + 2 * gw)
-            vertical_line_averages      (# vertical lines, ny + 2 * gw, nx + 2)
             u                           (ny, nx)
             gw                          # of ghost cells entering the slope limiter
         returns:
@@ -605,8 +630,6 @@ class AdvectionSolver(Integrator):
         self,
         horizontal_points: np.ndarray,
         vertical_points: np.ndarray,
-        horizontal_line_averages: np.ndarray,
-        vertical_line_averages: np.ndarray,
         u: np.ndarray,
         gw: int,
     ):
@@ -617,8 +640,6 @@ class AdvectionSolver(Integrator):
                                         ny + 2, nx + 2)
             vertical_points             (# vertical lines, # points per line,
                                         ny + 2, nx + 2)
-            horizontal_line_averages    (# horizontal lines, ny + 2, nx + 2 * gw)
-            vertical_line_averages      (# vertical lines, ny + 2 * gw, nx + 2)
             u                           (ny, nx)
             gw                          # of ghost cells entering the slope limiter
         returns:
@@ -630,8 +651,6 @@ class AdvectionSolver(Integrator):
         north_points, south_points, east_points, west_points = self.no_limiter(
             horizontal_points,
             vertical_points,
-            horizontal_line_averages,
-            vertical_line_averages,
             u,
             gw,
         )
@@ -650,7 +669,7 @@ class AdvectionSolver(Integrator):
             u_gw_plus_1[:-2, :-2],
         ]
         M = np.maximum.reduce(list_of_9_neighbors)
-        m = np.minimum.reduce(list_of_9_neighbors + [1e-12 * np.ones(u_gw.shape)])
+        m = np.minimum.reduce(list_of_9_neighbors)
         # max and min of u evaluated at quadrature points
         M_ij = np.maximum(
             np.amax(horizontal_points, axis=(0, 1)),
@@ -660,31 +679,30 @@ class AdvectionSolver(Integrator):
             np.amin(horizontal_points, axis=(0, 1)),
             np.amin(vertical_points, axis=(0, 1)),
         )
+        # evaluate visualization tolerance
+        self.visualize_theta = np.where(
+            np.logical_or(
+                trim2d(M_ij, axis=(0, 1), cut_length=gw)
+                > trim2d(M, axis=(0, 1), cut_length=gw) + self.visualization_tolerance,
+                trim2d(m_ij, axis=(0, 1), cut_length=gw)
+                < trim2d(m, axis=(0, 1), cut_length=gw) - self.visualization_tolerance,
+            ),
+            1,
+            self.visualize_theta,
+        )
         # evaluate slope limiter
         theta = np.ones(u_gw.shape)
-        M_arg = np.abs(M - u_gw) / ((np.abs(M_ij - u_gw) + 1e-12))
-        m_arg = np.abs(m - u_gw) / ((np.abs(m_ij - u_gw) + 1e-12))
+        M_arg = np.abs(M - u_gw) / ((np.abs(M_ij - u_gw)))
+        m_arg = np.abs(m - u_gw) / ((np.abs(m_ij - u_gw)))
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
+        # store theta
+        self.theta += trim2d(theta, axis=(0, 1), cut_length=gw)
         # limit flux points
-        horizontal_fallback = horizontal_line_averages
-        vertical_fallback = vertical_line_averages
-        north_points = (
-            theta[np.newaxis, ...] * (north_points - vertical_fallback)
-            + vertical_fallback
-        )
-        south_points = (
-            theta[np.newaxis, ...] * (south_points - vertical_fallback)
-            + vertical_fallback
-        )
-        east_points = (
-            theta[np.newaxis, ...] * (east_points - horizontal_fallback)
-            + horizontal_fallback
-        )
-        west_points = (
-            theta[np.newaxis, ...] * (west_points - horizontal_fallback)
-            + horizontal_fallback
-        )
+        north_points = theta[np.newaxis, ...] * (north_points - u_gw) + u_gw
+        south_points = theta[np.newaxis, ...] * (south_points - u_gw) + u_gw
+        east_points = theta[np.newaxis, ...] * (east_points - u_gw) + u_gw
+        west_points = theta[np.newaxis, ...] * (west_points - u_gw) + u_gw
         return north_points, south_points, east_points, west_points
 
     def riemann(
@@ -724,14 +742,27 @@ class AdvectionSolver(Integrator):
         u0_2gw = u0_2gw[np.newaxis]
         ucandidate_2gw = ucandidate_2gw[np.newaxis]
         # find troubled cells
-        troubled_cells = trouble_detection2d(
-            u0_2gw, ucandidate_2gw, hx=self.hx, hy=self.hy
+        troubled_cells, visualize_troubled_cells = trouble_detection2d(
+            u0_2gw,
+            ucandidate_2gw,
+            hx=self.hx,
+            hy=self.hy,
+            PAD=self.PAD,
+            mpp_tolerance=self.mpp_tolerance,
+            visualization_tolerance=self.visualization_tolerance,
         )
-        if self.cause_trouble:
-            troubled_cells = np.ones(u0.shape)
+        # set troubled cells to 1 if cause_trouble = True
+        troubled_cells = (
+            1 - self.cause_trouble
+        ) * troubled_cells + self.cause_trouble * np.ones(u0.shape)
+        # store history of troubled cells
+        self.troubled_cells += troubled_cells[0]
+        self.visualize_troubled_cells = np.where(
+            visualize_troubled_cells, 1, self.visualize_troubled_cells
+        )
+        # flag faces of troubled cells as troubled faces
         NS_troubled_faces = np.zeros(self.NS_fluxes.shape)[np.newaxis]
         EW_troubled_faces = np.zeros(self.EW_fluxes.shape)[np.newaxis]
-
         # find troubled faces
         if np.any(troubled_cells):
             EW_troubled_faces[:, :, :-1] = troubled_cells
@@ -771,6 +802,38 @@ class AdvectionSolver(Integrator):
                 EW_fluxes_2nd_order[0],
                 self.EW_fluxes,
             )
+
+    def logupdate_with_theta(self, i):
+        """
+        store data in u every time the time index is a log index
+        """
+        if i + 1 in self._ilog:
+            self.u[self._ilog.index(i + 1)] = self.u1
+            self.theta_history[self._ilog.index(i + 1)] = (
+                self.theta / self.udot_evaluation_count
+            )
+            self.visualize_theta_history[self._ilog.index(i + 1)] = self.visualize_theta
+        # clear theta sum, visualize_theta and evaluation count
+        self.theta = np.zeros(self.theta.shape)
+        self.visualize_theta = np.zeros(self.visualize_theta.shape)
+        self.udot_evaluation_count = 0
+
+    def logupdate_with_troubled_cells(self, i):
+        """
+        store data in u every time the time index is a log index
+        """
+        if i + 1 in self._ilog:
+            self.u[self._ilog.index(i + 1)] = self.u1
+            self.troubled_cell_history[self._ilog.index(i + 1)] = (
+                self.troubled_cells / self.udot_evaluation_count
+            )
+            self.visualize_troubled_cell_history[
+                self._ilog.index(i + 1)
+            ] = self.visualize_troubled_cells
+        # clear troubled cell sum and evaluation count
+        self.troubled_cells = np.zeros(self.troubled_cells.shape)
+        self.visualize_troubled_cells = np.zeros(self.visualize_troubled_cells.shape)
+        self.udot_evaluation_count = 0
 
     def dont_revise_solution(self, u0: np.ndarray, dt: float):
         return
@@ -812,6 +875,10 @@ class AdvectionSolver(Integrator):
             with open(self.filepath, "rb") as thisfile:
                 loaded_instance = pickle.load(thisfile)
                 self.u = loaded_instance.u
+                if self.apriori_limiting:
+                    self.theta_history = loaded_instance.theta_history
+                if self.aposteriori_limiting:
+                    self.troubled_cell_history = loaded_instance.troubled_cell_history
             return False
         # otherwise proceed to integration
         print("New solution instance...")
@@ -840,18 +907,51 @@ class AdvectionSolver(Integrator):
         if norm == "inf":
             return np.max(np.abs(approx - truth))
 
-    def plot(self):
+    def plot(self, data="solution"):
         # global max and min
-        hmin, hmax = np.min(self.u), np.max(self.u)
         bounds = [self.x[0], self.x[-1], self.y[0], self.y[-1]]
 
         # select plot frames
-        data1 = np.flipud(self.u[0])
-        data2 = np.flipud(self.u[int(0.25 * self.loglen)])
-        data3 = np.flipud(self.u[int(0.5 * self.loglen)])
-        data4 = np.flipud(self.u[int(0.75 * self.loglen)])
-        data5 = np.flipud(self.u[-1])
-        data6 = np.flipud(self.u[-1] - self.u[0])
+        idx1 = 0
+        idx2 = int(0.25 * self.loglen)
+        idx3 = int(0.5 * self.loglen)
+        idx4 = int(0.75 * self.loglen)
+        idx5 = -1
+        if data == "solution":
+            hmin, hmax = np.min(self.u), np.max(self.u)
+            heat_map_tolerance = 1e-5
+            u = np.where(self.u > 1 + heat_map_tolerance, np.nan, self.u)
+            u = np.where(u < -heat_map_tolerance, np.nan, u)
+            data1 = np.flipud(u[idx1])
+            data2 = np.flipud(u[idx2])
+            data3 = np.flipud(u[idx3])
+            data4 = np.flipud(u[idx4])
+            data5 = np.flipud(u[idx5])
+            data6 = np.flipud(self.u[idx5] - self.u[idx1])
+        if data == "limiting" and self.apriori_limiting:
+            hmin, hmax = 0, 1
+            theta_history = np.where(
+                self.visualize_theta_history, self.theta_history, 1
+            )
+            data1 = np.flipud(1 - theta_history[idx1])
+            data2 = np.flipud(1 - theta_history[idx2])
+            data3 = np.flipud(1 - theta_history[idx3])
+            data4 = np.flipud(1 - theta_history[idx4])
+            data5 = np.flipud(1 - theta_history[idx5])
+            data6 = None
+        if data == "limiting" and self.aposteriori_limiting:
+            if self.apriori_limiting:
+                print("Warning: Theta data overwritten by troubled cell data.")
+            hmin, hmax = 0, 1
+            troubled_cell_history = np.where(
+                self.visualize_troubled_cell_history, self.troubled_cell_history, 0
+            )
+            data1 = np.flipud(troubled_cell_history[idx1])
+            data2 = np.flipud(troubled_cell_history[idx2])
+            data3 = np.flipud(troubled_cell_history[idx3])
+            data4 = np.flipud(troubled_cell_history[idx4])
+            data5 = np.flipud(troubled_cell_history[idx5])
+            data6 = None
 
         # 2x3 grid of subplots
         fig = plt.figure(figsize=(10, 6.5))
@@ -868,15 +968,11 @@ class AdvectionSolver(Integrator):
         axs[0, 2].imshow(data3, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
         axs[1, 0].imshow(data4, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
         axs[1, 1].imshow(data5, cmap="cool", vmin=hmin, vmax=hmax, extent=bounds)
-        im6 = axs[1, 2].imshow(data6, cmap="hot", extent=bounds)
 
-        # color bars
+        # first color bar
         cbar1 = fig.add_subplot(gs[0, 3])
         plt.colorbar(im1, cax=cbar1)
         cbar1.yaxis.set_ticks_position("right")
-        cbar2 = fig.add_subplot(gs[1, 3])
-        plt.colorbar(im6, cax=cbar2)
-        cbar2.yaxis.set_ticks_position("right")
 
         # Add titles to the plots
         axs[0, 0].set_title(f"t = {self.t[0]:.3f}")
@@ -884,10 +980,22 @@ class AdvectionSolver(Integrator):
         axs[0, 2].set_title(f"t = {self.t[int(0.5 * self.loglen)]:.3f}")
         axs[1, 0].set_title(f"t = {self.t[int(0.75 * self.loglen)]:.3f}")
         axs[1, 1].set_title(f"t = {self.t[-1]:.3f}")
-        axs[1, 2].set_title(f"u(t = {self.t[-1]:.3f}) - u(t = {self.t[0]:.3f})")
+
+        if data6 is not None:
+            im6 = axs[1, 2].imshow(data6, cmap="hot", extent=bounds)
+            axs[1, 2].set_title(f"u(t = {self.t[-1]:.3f}) - u(t = {self.t[0]:.3f})")
+            # second color bar
+            cbar2 = fig.add_subplot(gs[1, 3])
+            plt.colorbar(im6, cax=cbar2)
+            cbar2.yaxis.set_ticks_position("right")
 
         # Add a title to the entire figure
-        fig.suptitle("Heatmap Grid")
+        if data == "solution":
+            fig.suptitle("Solution")
+        if data == "limiting" and self.apriori_limiting:
+            fig.suptitle("1 - Averaged Theta")
+        if data == "limiting" and self.aposteriori_limiting:
+            fig.suptitle("Averaged Troubled Cells")
 
         # Show the plot
         plt.show()
