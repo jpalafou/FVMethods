@@ -7,13 +7,13 @@ solution = AdvectionSolver(
     x=(0, 1),
     v=(1, 2),
     T=1,
-    courant=0.5,
-    order=5,
-    # flux_strategy="transverse",
+    courant=0.166,
+    order=4,
     flux_strategy="gauss-legendre",
-    apriori_limiting="mpp",
-    aposteriori_limiting=False,
+    apriori_limiting=True,
+    aposteriori_limiting=True,
     cause_trouble=False,
+    load=False,
 )
 
 solution.ssprk3()

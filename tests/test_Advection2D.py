@@ -7,6 +7,46 @@ order_list = [1, 2, 3, 4, 5]
 C_for_mpp = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833}
 
 
+@pytest.mark.parametrize("order", order_list)
+@pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
+@pytest.mark.parametrize("apriori_limiting", [False, True])
+@pytest.mark.parametrize("aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("NAD", [None, 0, 1e-3])
+@pytest.mark.parametrize("PAD", [None, (0, 1)])
+@pytest.mark.parametrize("cause_trouble", [False, True])
+def test_zero_velocity(
+    order,
+    flux_strategy,
+    apriori_limiting,
+    aposteriori_limiting,
+    NAD,
+    PAD,
+    cause_trouble,
+):
+    """
+    solution at t=T should be exactly the initial condition if v=(0,0)
+    for any initialization
+    """
+    solution = AdvectionSolver(
+        u0="square",
+        n=64,
+        x=(0, 1),
+        v=(0, 0),
+        T=1,
+        courant=0.5,
+        order=order,
+        flux_strategy=flux_strategy,
+        apriori_limiting=True,
+        aposteriori_limiting=False,
+        NAD=NAD,
+        PAD=PAD,
+        cause_trouble=cause_trouble,
+        load=False,
+    )
+    solution.rk4()
+    assert np.all(solution.u[-1] == solution.u[0])
+
+
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("order", order_list)
 def test_meshsize_convergence(flux_strategy, order):

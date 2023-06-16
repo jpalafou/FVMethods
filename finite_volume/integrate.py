@@ -69,7 +69,7 @@ class Integrator:
         """
         1st order forward Euler integrator
         """
-        if not self.pre_integrate()():
+        if not self.pre_integrate():
             return
         dt = self.findDt(0)
         # one stage with posteriori check

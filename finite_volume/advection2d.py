@@ -99,13 +99,16 @@ class AdvectionSolver(Integrator):
         order                   accuracy requirement for polynomial interpolation
         bc                      string describing a pre-coded boudnary condition
         flux_strategy           'gauss-legendre' or 'transverse'
-        apriori_limiting        None, 'mpp', or 'mpp lite'
+        apriori_limiting        whether to follow zhang and shu mpp limiting
         aposteriori_limiting    whether to call trouble detection and 2d fallback
         cause_trouble           set all cells to be troubled, forcing 2d fallback
-        mpp_tolerance           simulation trouble detection tolerance
-                                set to None or +inf to disable NAD detection
-        visualization_tolerance set to None or -inf to visuazalize simulation values
-        PAD                     physical admissibility detection (lower, upper)
+        NAD                     simulation NAD tolerance
+                                set to None or +inf to disable NAD
+        PAD                     physical admissibility detection bounds (lower, upper)
+                                set to None or (-inf, +inf) to disable PAD
+        visualization_tolerance tolerance for whether to visualize theta or a troubled
+                                cell based on some violation
+                                set to None or -inf to visualize simulation values
         loglen                  number of saved states
         adujst_time_step        whether to reduce timestep for order >4
         load                    whether to load precalculated solution or do it again
@@ -125,12 +128,12 @@ class AdvectionSolver(Integrator):
         order: int = 1,
         bc: str = "periodic",
         flux_strategy: str = "gauss-legendre",
-        apriori_limiting: str = None,
+        apriori_limiting: bool = False,
         aposteriori_limiting: bool = False,
         cause_trouble: bool = False,
-        mpp_tolerance: float = 0,
-        visualization_tolerance: float = None,
+        NAD: float = 0,
         PAD: tuple = None,
+        visualization_tolerance: float = None,
         loglen: int = 21,
         adujst_time_step: bool = False,
         load: bool = True,
@@ -153,9 +156,9 @@ class AdvectionSolver(Integrator):
             apriori_limiting,
             aposteriori_limiting,
             cause_trouble,
-            mpp_tolerance,
-            visualization_tolerance,
+            NAD,
             PAD,
+            visualization_tolerance,
             loglen,
             adujst_time_step,
         ]
@@ -193,7 +196,11 @@ class AdvectionSolver(Integrator):
         self.courant = courant
         self.adujst_time_step = adujst_time_step
         self.order = order
-        Dt = courant / (vx_max / self.hx + vy_max / self.hy)
+        v_over_h = vx_max / self.hx + vy_max / self.hy
+        if v_over_h == 0:
+            print("0 velocity case: setting v / h to 10 / T")
+            v_over_h = 10 / T
+        Dt = courant / v_over_h
         Dt_adjustment = None
         if adujst_time_step and order > 4:
             Dt_adjustment_x = rk4_Dt_adjust(self.hx, self.Lx, order)
@@ -241,7 +248,7 @@ class AdvectionSolver(Integrator):
         self.cause_trouble = 1 if cause_trouble else 0
         self.udot_evaluation_count = 0
         # initialize tolerances
-        self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
+        self.NAD = np.inf if NAD is None else NAD
         self.visualization_tolerance = (
             -np.inf
             if visualization_tolerance is None or cause_trouble
@@ -296,7 +303,7 @@ class AdvectionSolver(Integrator):
 
         # stencils for reconstructing pointwise values along a line average
         list_of_GL_stencils = []
-        if self.apriori_limiting is not None and N_GL > 2:
+        if self.apriori_limiting and N_GL > 2:
             # interpolating values along line segments
             (
                 interior_GL_quadr_points,
@@ -304,9 +311,6 @@ class AdvectionSolver(Integrator):
             ) = np.polynomial.legendre.leggauss(N_GL - 2)
             # scale to cell of width 1
             interior_GL_quadr_points /= 2
-            # mpp lite
-            if self.apriori_limiting == "mpp lite":
-                interior_GL_quadr_points = np.array([])
             # generate stencils two are given
             for x in interior_GL_quadr_points:
                 stencil = ConservativeInterpolation.construct_from_order(
@@ -322,10 +326,7 @@ class AdvectionSolver(Integrator):
             endpoint_GL_quadr_weights = 2 / (N_GL * (N_GL - 1))
             endpoint_GL_quadr_weights /= 2  # scale to cell of width 1
             # check if timestep is small enough for mpp
-            if (
-                self.Dt * (vx_max / self.hx + vy_max / self.hy)
-                > endpoint_GL_quadr_weights
-            ):
+            if self.Dt * v_over_h > endpoint_GL_quadr_weights:
                 print(
                     "WARNING: Maximum principle preserving not satisfied.\nTry a ",
                     f"courant condition less than {endpoint_GL_quadr_weights}\n",
@@ -344,6 +345,7 @@ class AdvectionSolver(Integrator):
             ]
 
         # transverse integral stencil
+        self._transverse_k = 0
         if flux_strategy == "transverse":
             self.integral_stencil = TransverseIntegral.construct_from_order(
                 order
@@ -354,10 +356,9 @@ class AdvectionSolver(Integrator):
             )  # cell reach of stencil
 
         # ghost width
-        if flux_strategy == "gauss-legendre":
-            self.gw = self._conservative_k + 1
-        elif flux_strategy == "transverse":
-            self.gw = self._transverse_k + self._conservative_k + 1
+        self.effective_trans_gw = max(self._transverse_k - 1, 0)
+        self.excess_trans_gw = max(1 - self._transverse_k, 0)
+        self.gw = self._conservative_k + 1 + self.effective_trans_gw
 
         # x and y values at quadrature points
         na = np.newaxis
@@ -410,10 +411,10 @@ class AdvectionSolver(Integrator):
         elif self.flux_strategy == "transverse":
             self.compute_high_order_fluxes = self.transverse_fluxes
 
-        if self.apriori_limiting is None:
-            self.apriori_limiter = self.no_limiter
-        else:
+        if self.apriori_limiting:
             self.apriori_limiter = self.mpp_limiter
+        else:
+            self.apriori_limiter = self.no_limiter
 
         if self.aposteriori_limiting:
             self.aposteriori_limiter = self.revise_solution
@@ -579,18 +580,34 @@ class AdvectionSolver(Integrator):
             horizontal_points[np.newaxis],
             vertical_points[np.newaxis],
             u,
-            gw=self._transverse_k + 1,
+            gw=self.effective_trans_gw + 1,
         )
         # reimann problem to solve fluxes at each face
         NS_pointwise_fluxes = self.riemann(
             self.v_NS_midpoints_gw,
-            trim2d(north_points[0], axis=0, cut_length=self._transverse_k)[:-1, 1:-1],
-            trim2d(south_points[0], axis=0, cut_length=self._transverse_k)[1:, 1:-1],
+            trim2d(
+                north_points[0],
+                axis=(0, 1),
+                cut_length=(self.effective_trans_gw, self.excess_trans_gw),
+            )[:-1, :],
+            trim2d(
+                south_points[0],
+                axis=(0, 1),
+                cut_length=(self.effective_trans_gw, self.excess_trans_gw),
+            )[1:, :],
         )
         EW_pointwise_fluxes = self.riemann(
             self.v_EW_midpoints_gw,
-            trim2d(east_points[0], axis=1, cut_length=self._transverse_k)[1:-1, :-1],
-            trim2d(west_points[0], axis=1, cut_length=self._transverse_k)[1:-1, 1:],
+            trim2d(
+                east_points[0],
+                axis=(0, 1),
+                cut_length=(self.excess_trans_gw, self.effective_trans_gw),
+            )[:, :-1],
+            trim2d(
+                west_points[0],
+                axis=(0, 1),
+                cut_length=(self.excess_trans_gw, self.effective_trans_gw),
+            )[:, 1:],
         )
         # transverse integral stencil
         EW_stack = stack3d(NS_pointwise_fluxes, self._transverse_stencil_size, "x")
@@ -747,8 +764,8 @@ class AdvectionSolver(Integrator):
             ucandidate_2gw,
             hx=self.hx,
             hy=self.hy,
+            NAD_tolerance=self.NAD,
             PAD=self.PAD,
-            mpp_tolerance=self.mpp_tolerance,
             visualization_tolerance=self.visualization_tolerance,
         )
         # set troubled cells to 1 if cause_trouble = True

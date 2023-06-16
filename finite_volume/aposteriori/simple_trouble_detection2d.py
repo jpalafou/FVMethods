@@ -11,8 +11,8 @@ def trouble_detection2d(
     unew: np.ndarray,
     hx: float,
     hy: float,
+    NAD_tolerance: float,
     PAD: tuple,
-    mpp_tolerance: float,
     visualization_tolerance: float,
 ):
     """
@@ -21,8 +21,8 @@ def trouble_detection2d(
         unew    candidate state array (1, ny + 4, nx + 4)
         hx      mesh size in x
         hy      mesh size in y
+        NAD_tolerance   tolerance for flagging
         PAD     tuple of physically admissable values (min, max)
-        mpp_tolerance   tolerance for flagging
         visualization_tolerance
     returns:
         trouble binary array indicating troubled cells (1, ny, nx)
@@ -34,9 +34,9 @@ def trouble_detection2d(
     W_min = compute_W_min(u0, "xy")[:, 2:-2, 2:-2]
     lower_differences = unew[:, 2:-2, 2:-2] - W_min
     upper_differences = unew[:, 2:-2, 2:-2] - W_max
-    possible_trouble = np.where(lower_differences < -u0_range * mpp_tolerance, 1, 0)
+    possible_trouble = np.where(lower_differences < -u0_range * NAD_tolerance, 1, 0)
     possible_trouble = np.where(
-        upper_differences > u0_range * mpp_tolerance, 1, possible_trouble
+        upper_differences > u0_range * NAD_tolerance, 1, possible_trouble
     )
 
     # Now check for smooth extrema and relax the criteria for such cases
