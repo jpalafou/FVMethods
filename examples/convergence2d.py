@@ -2,11 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from csv import writer
-from finite_volume.advection2d import AdvectionSolver
+from finite_volume.advection import AdvectionSolver
 
 # configurations
 flux_strategy = "gauss-legendre"
-order_list = [1, 2, 4, 8]
+order_list = [1, 2, 3, 4, 5]
 n_list = [16, 32, 64, 128]
 u0 = "sinus"
 courant = 0.5
@@ -65,11 +65,11 @@ for order in sorted(order_list):
         print(f"\tn = {n}")
         # initialize solution
         solution = AdvectionSolver(
-            n=n,
+            n=(n,),
             order=order,
             u0=u0,
             courant=courant,
-            adujst_time_step=True,
+            adjust_time_step=True,
             T=T,
             x=x,
             v=v,
@@ -87,18 +87,10 @@ for order in sorted(order_list):
             time_message = f"rk{solution.order}"
         elif solution.order >= 4:
             time_message = "rk4"
-        if solution.adujst_time_step and solution.order > 4:
+        if solution.adjust_time_step and solution.order > 4:
             time_message += (
                 " + " + r"$\Delta t$" + f" * {round(solution.Dt_adjustment, 5)}"
             )
-        # limiter_message = (
-        #     solution.apriori_limiting if solution.apriori_limiting else "no"
-        # ) + " limiter"
-        # if solution.smooth_extrema_detection:
-        #     limiter_message += " with smooth extrema detection"
-        # label = (
-        #     f"{limiter_message} order {solution.order}" f" + {time_message}"
-        # )
         label = f"order {solution.order}" f" + {time_message}"
         # data logging
         with open(data_path + project_name + ".csv", "a") as f_object:

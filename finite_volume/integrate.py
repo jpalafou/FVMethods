@@ -19,6 +19,7 @@ class Integrator:
     ):
         self._t = t
         self.loglen = len(t) if loglen is None else loglen
+        self.loglen = len(t) if self.loglen > len(t) or loglen is None else self.loglen
         self._ilog = [int(i) for i in np.linspace(0, len(t) - 1, self.loglen)]
         assert len(self._ilog) == len(
             set(self._ilog)
@@ -35,7 +36,7 @@ class Integrator:
 
     # helper functions
     @abc.abstractmethod
-    def udot(self, u: np.ndarray, t_i: float) -> np.ndarray:
+    def udot(self, u: np.ndarray, t_i: float, dt: float) -> np.ndarray:
         """
         the state derivate at a given value of time
         """
@@ -73,7 +74,7 @@ class Integrator:
             return
         dt = self.findDt(0)
         # one stage with posteriori check
-        self.u1 = self.u0 + dt * self.udot(self.u0, self._t[0])
+        self.u1 = self.u0 + dt * self.udot(self.u0, self._t[0], dt)
         self.post_integrate()
 
     def euler(self):
@@ -85,7 +86,7 @@ class Integrator:
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # one stage with posteriori check
-            self.u1 = self.u0 + dt * self.udot(self.u0, self._t[i])
+            self.u1 = self.u0 + dt * self.udot(self.u0, self._t[i], dt)
             # clean up
             self.logupdate(i)
             self.u0 = self.u1
@@ -100,10 +101,10 @@ class Integrator:
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # first stage with posteriori check
-            k0 = self.udot(self.u0, self._t[i])
+            k0 = self.udot(self.u0, self._t[i], dt)
             stage1 = self.u0 + dt * k0
             # second stage with posteriori check
-            k1 = self.udot(stage1, self._t[i] + dt)
+            k1 = self.udot(stage1, self._t[i] + dt, dt)
             self.u1 = self.u0 + (1 / 2) * (k0 + k1) * dt
             # clean up
             self.logupdate(i)
@@ -119,13 +120,13 @@ class Integrator:
         for i in range(len(self._t) - 1):
             dt = self.findDt(i)
             # first stage with posteriori check
-            k0 = self.udot(self.u0, self._t[i])
+            k0 = self.udot(self.u0, self._t[i], dt)
             stage1 = self.u0 + (1 / 3) * dt * k0
             # second stage with posteriori check
-            k1 = self.udot(stage1, self._t[i] + (1 / 3) * dt)
+            k1 = self.udot(stage1, self._t[i] + (1 / 3) * dt, dt)
             stage2 = self.u0 + (2 / 3) * dt * k1
             # third stage with posteriori check
-            k2 = self.udot(stage2, self._t[i] + (2 / 3) * dt)
+            k2 = self.udot(stage2, self._t[i] + (2 / 3) * dt, dt)
             self.u1 = self.u0 + (1 / 4) * (k0 + 3 * k2) * dt
             # clean up
             self.logupdate(i)

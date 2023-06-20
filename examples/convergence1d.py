@@ -2,14 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from csv import writer
-from finite_volume.advection1d import AdvectionSolver
+from finite_volume.advection import AdvectionSolver
 
 # configurations
-order_list = [1, 2, 3, 4, 5, 6]
-n_list = [16, 32, 64, 128, 256, 512]
+order_list = [1, 2, 3, 4, 5]
+n_list = [16, 32, 64, 128, 256]
 u0 = "sinus"
 courant = 0.5
 T = 2
+v = 1
 
 # file locations
 plot_path = "figures/"
@@ -65,13 +66,14 @@ for order in sorted(order_list):
             order=order,
             u0=u0,
             courant=courant,
-            adujst_time_step=True,
+            adjust_time_step=True,
             T=T,
+            v=v,
         )
         solution.rkorder()  # time integration
         # append error to list of error
-        error = solution.find_error("l1")
-        h_list.append(solution.h)
+        error = solution.periodic_error("l1")
+        h_list.append(solution.hx)
         error_list.append(error)
         # label generation
         if solution.order == 1:
@@ -80,23 +82,15 @@ for order in sorted(order_list):
             time_message = f"rk{solution.order}"
         elif solution.order >= 4:
             time_message = "rk4"
-        if solution.adujst_time_step and solution.order > 4:
+        if solution.adjust_time_step and solution.order > 4:
             time_message += (
                 " + " + r"$\Delta t$" + f" * {round(solution.Dt_adjustment, 5)}"
             )
-        limiter_message = (
-            solution.apriori_limiting if solution.apriori_limiting else "no"
-        ) + " limiter"
-        limiter_message += (
-            " with smooth extrema detection"
-            if solution.smooth_extrema_detection
-            else ""
-        )
-        label = f"{limiter_message} order {solution.order}" f" + {time_message}"
+        label = f"order {solution.order}" f" + {time_message}"
         # data logging
         with open(data_path + project_name + ".csv", "a") as f_object:
             writer_object = writer(f_object)
-            writer_object.writerow([label, solution.h, error])
+            writer_object.writerow([label, solution.hx, error])
             f_object.close()
     # plot the error on loglog
     plt.loglog(h_list, error_list, "-*", label=label)

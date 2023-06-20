@@ -11,7 +11,7 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         initial condition defined on xy mesh (m, n)
     """
     if type == "composite":
-        return composite(x)
+        return composite(x, y)
     if type == "disk":
         return disk(x, y)
     if type == "gauss":
@@ -22,7 +22,7 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         return square(x, y)
 
 
-def composite(x):
+def composite(x, y):
     # only defined for 1d
     u = np.zeros(len(x))
     for i in range(len(x)):

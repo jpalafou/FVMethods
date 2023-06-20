@@ -3,7 +3,7 @@ import numpy as np
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation
-from finite_volume.aposteriori.simple_trouble_detection1d import (
+from finite_volume.a_posteriori.simple_trouble_detection1d import (
     trouble_detection1d,
     compute_second_order_fluxes,
 )
@@ -38,7 +38,7 @@ class AdvectionSolver(Integrator):
         smooth_extrema_detection:   whether to detect smooth extrema
         aposteriori_limiting:   whether to apply a fallback scheme
         loglen: number of saved states
-        adujst_time_step:   whether to reduce timestep for order >4
+        adjust_time_step:   whether to reduce timestep for order >4
     returns:
         u   array of saved states
     """
@@ -57,14 +57,14 @@ class AdvectionSolver(Integrator):
         smooth_extrema_detection: bool = False,
         aposteriori_limiting: bool = False,
         loglen: int = 11,
-        adujst_time_step: bool = False,
+        adjust_time_step: bool = False,
     ):
         # misc. attributes
         self.order = order
         self.apriori_limiting = apriori_limiting
         self.smooth_extrema_detection = smooth_extrema_detection
         self.aposteriori_limiting = aposteriori_limiting
-        self.adujst_time_step = adujst_time_step
+        self.adjust_time_step = adjust_time_step
         if apriori_limiting not in (None, "mpp", "mpp lite"):
             raise BaseException(f"Invalid apriori limiting type: {apriori_limiting}")
 
@@ -82,7 +82,7 @@ class AdvectionSolver(Integrator):
         self.courant = courant
         Dt = courant * self.h / max(np.abs(a), 1e-6)
         Dt_adjustment = 1
-        if self.adujst_time_step and order > 4:
+        if self.adjust_time_step and order > 4:
             Dt_adjustment = rk4_Dt_adjust(self.h, self.L, order)
             Dt = Dt * Dt_adjustment
             print(
