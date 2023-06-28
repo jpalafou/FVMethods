@@ -2,7 +2,6 @@
 import numpy as np
 import os
 import pickle
-import inspect
 import warnings
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
@@ -13,12 +12,12 @@ from finite_volume.trouble_detection import (
     compute_fallback_faces,
 )
 from finite_volume.utils import (
-    rk4_Dt_adjust,
+    rk4_dt_adjust,
     stack,
     apply_stencil,
     chop,
     f_of_3_neighbors,
-    f_of_9_neighbors,
+    f_of_4_neighbors,
 )
 
 
@@ -62,14 +61,15 @@ class AdvectionSolver(Integrator):
     def __init__(
         self,
         u0: str = "square",
+        bc: str = "periodic",
         n: tuple = (32, 32),
         x: tuple = (0, 1),
         y: tuple = None,
+        t0: float = 0,
         T: float = 1,
         v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,
-        bc: str = "periodic",
         const: float = None,
         flux_strategy: str = "gauss-legendre",
         apriori_limiting: bool = False,
@@ -79,8 +79,9 @@ class AdvectionSolver(Integrator):
         NAD: float = 0.0,
         PAD: tuple = None,
         visualization_tolerance: float = None,
-        loglen: int = 21,
+        log_every: int = 10,
         adjust_time_step: bool = False,
+        modify_time_step: bool = False,
         load: bool = True,
         load_directory: str = "data/solutions/",
     ):
@@ -90,14 +91,15 @@ class AdvectionSolver(Integrator):
         v_str = v.__name__ if callable(v) else str(v)
         filename_components = [
             u0_str,
+            bc,
             n,
             x,
             y,
+            t0,
             T,
             v_str,
             courant,
             order,
-            bc,
             const,
             flux_strategy,
             apriori_limiting,
@@ -107,8 +109,9 @@ class AdvectionSolver(Integrator):
             NAD,
             PAD,
             visualization_tolerance,
-            loglen,
+            log_every,
             adjust_time_step,
+            modify_time_step,
         ]
         self._filename = "_".join(str(component) for component in filename_components)
         self._load_directory = load_directory
@@ -173,22 +176,21 @@ class AdvectionSolver(Integrator):
         if v_over_h == 0:
             print("0 velocity case: setting v / h to 10 / T")
             v_over_h = 10 / T
-        Dt = courant / v_over_h
-        Dt_adjustment = None
+        dt = courant / v_over_h
+        dt_adjustment = None
         if adjust_time_step and order > 4:
-            Dt_adjustment_x = rk4_Dt_adjust(self.hx, self.Lx, order)
-            Dt_adjustment_y = rk4_Dt_adjust(self.hy, self.Ly, order)
-            Dt_adjustment = min(Dt_adjustment_x, Dt_adjustment_y)
-            Dt = Dt * Dt_adjustment
+            dt_adjustment_x = rk4_dt_adjust(self.hx, self.Lx, order)
+            dt_adjustment_y = rk4_dt_adjust(self.hy, self.Ly, order)
+            dt_adjustment = min(dt_adjustment_x, dt_adjustment_y)
+            dt = dt * dt_adjustment
             print(
-                f"Decreasing timestep by a factor of {Dt_adjustment} to maintain",
+                f"Decreasing timestep by a factor of {dt_adjustment} to maintain",
                 f" order {order} with rk4",
             )
-        self.Dt_adjustment = Dt_adjustment
-        # round to nearest integer number of timesteps
-        n_timesteps = int(np.ceil(T / Dt))
-        self.Dt = T / n_timesteps
-        self.t = np.linspace(0, T, num=n_timesteps + 1)
+        self.dt_adjustment = dt_adjustment
+
+        if modify_time_step:
+            self.looks_good = self.check_mpp
 
         # initial condition
         if isinstance(u0, str):
@@ -198,6 +200,11 @@ class AdvectionSolver(Integrator):
                 u0 = u0(x=self.x)
             if self.ndim == 2:
                 u0 = u0(x=self.x, y=self.y)
+        self.u0_min = np.min(u0)
+        self.u0_max = np.max(u0)
+
+        # initialize integrator
+        super().__init__(u0=u0, T=T, dt=dt, t0=t0, log_every=log_every)
 
         # boundary conditon
         if bc == "periodic":
@@ -205,9 +212,6 @@ class AdvectionSolver(Integrator):
         if bc == "neumann":
             self.apply_bc = self.apply_neumann_bc
         self.const = const
-
-        # initialize integrator
-        super().__init__(u0=u0, t=self.t, loglen=loglen)
 
         # initialize limiting
         self.apriori_limiting = apriori_limiting
@@ -319,7 +323,7 @@ class AdvectionSolver(Integrator):
                 endpoint_GL_quadr_weights = 2 / (N_GL * (N_GL - 1))
                 endpoint_GL_quadr_weights /= 2  # scale to cell of width 1
                 # check if timestep is small enough for mpp
-                if self.Dt * v_over_h > endpoint_GL_quadr_weights:
+                if self.dt * v_over_h > endpoint_GL_quadr_weights:
                     print(
                         "WARNING: Maximum principle preserving not satisfied.\nTry a ",
                         f"courant condition less than {endpoint_GL_quadr_weights}\n",
@@ -421,7 +425,7 @@ class AdvectionSolver(Integrator):
             self.revise_fluxes = self.revise_fluxes_1d
         if self.ndim == 2:
             self.get_fluxes = self.get_fluxes_2d
-            self.f_of_neighbors = f_of_9_neighbors
+            self.f_of_neighbors = f_of_4_neighbors
             self.compute_alpha = self.compute_alpha_2d
             self.revise_fluxes = self.revise_fluxes_2d
 
@@ -455,7 +459,7 @@ class AdvectionSolver(Integrator):
             self.f[..., 1:] - self.f[..., :-1]
         ) + -self.hy_recip * (self.g[1:, ...] - self.g[:-1, ...])
 
-    def udot(self, u: np.ndarray, t_i: float = None, dt: float = None) -> np.ndarray:
+    def udot(self, u: np.ndarray, t: float = None, dt: float = None) -> np.ndarray:
         """
         args:
             u       (ny, nx)
@@ -840,6 +844,9 @@ class AdvectionSolver(Integrator):
         self.f[:] = np.where(EW_troubled_faces, EW_fallback_fluxes, self.f)
         self.g[:] = np.where(NS_troubled_faces, NS_fallback_fluxes, self.g)
 
+    def check_mpp(self, u):
+        return not np.logical_or(np.any(u < self.u0_min), np.any(u > self.u0_max))
+
     def rkorder(self):
         """
         rk integrate to an order that matches the spatial order
@@ -869,36 +876,34 @@ class AdvectionSolver(Integrator):
         if norm == "inf":
             return np.max(np.abs(approx - truth))
 
-    def logupdate(self, i):
-        """
-        store data in u every time the time index is a log index
-        """
-        if i + 1 in self._ilog:
-            self.u[self._ilog.index(i + 1)] = self.u1
-            self.theta_history[self._ilog.index(i + 1)] = (
-                self.theta / self.udot_evaluation_count
-            )
-            self.visualize_theta_history[self._ilog.index(i + 1)] = self.visualize_theta
-            self.trouble_history[self._ilog.index(i + 1)] = (
-                self.trouble / self.udot_evaluation_count
-            )
-            self.visualize_trouble_history[
-                self._ilog.index(i + 1)
-            ] = self.visualize_trouble
-        # clear theta sum, troubled cell sum, and evaluation count
-        self.theta[:] = 0.0
-        self.visualize_theta[:] = 0
-        self.trouble[:] = 0
-        self.visualize_trouble[:] = 0
-        self.udot_evaluation_count = 0
+    # def logupdate(self, i):
+    #     """
+    #     store data in u every time the time index is a log index
+    #     """
+    #     if i + 1 in self._ilog:
+    #         self.u[self._ilog.index(i + 1)] = self.u1
+    #         self.theta_history[self._ilog.index(i + 1)] = (
+    #             self.theta / self.udot_evaluation_count
+    #         )
+    #         self.visualize_theta_history[self._ilog.index(i + 1)]
+    # = self.visualize_theta
+    #         self.trouble_history[self._ilog.index(i + 1)] = (
+    #             self.trouble / self.udot_evaluation_count
+    #         )
+    #         self.visualize_trouble_history[
+    #             self._ilog.index(i + 1)
+    #         ] = self.visualize_trouble
+    #     # clear theta sum, troubled cell sum, and evaluation count
+    #     self.theta[:] = 0.0
+    #     self.visualize_theta[:] = 0
+    #     self.trouble[:] = 0
+    #     self.visualize_trouble[:] = 0
+    #     self.udot_evaluation_count = 0
 
-    def pre_integrate(self):
+    def pre_integrate(self, method_name):
         # create solution path if it doesn't exist
         if not os.path.exists(self._load_directory):
             os.makedirs(self._load_directory)
-        # get name of time integrator method
-        frame = inspect.currentframe().f_back
-        method_name = frame.f_code.co_name
         self._filename = self._filename + "_" + method_name + ".pkl"
         self.filepath = self._load_directory + self._filename
         # load the solution if it already exists
@@ -906,10 +911,10 @@ class AdvectionSolver(Integrator):
             with open(self.filepath, "rb") as thisfile:
                 loaded_instance = pickle.load(thisfile)
                 self.u = loaded_instance.u
-                if self.apriori_limiting:
-                    self.theta_history = loaded_instance.theta_history
-                if self.aposteriori_limiting:
-                    self.trouble_history = loaded_instance.trouble_history
+                # if self.apriori_limiting:
+                #     self.theta_history = loaded_instance.theta_history
+                # if self.aposteriori_limiting:
+                #     self.trouble_history = loaded_instance.trouble_history
             return False
         # otherwise proceed to integration
         print("New solution instance...")
@@ -921,3 +926,7 @@ class AdvectionSolver(Integrator):
             with open(self.filepath, "wb") as thisfile:
                 pickle.dump(self, thisfile)
             print(f"Wrote a solution instance to {self.filepath}\n")
+
+    def minmax(self):
+        print(f"global min: {np.min(self.u)}, max: {np.max(self.u)}")
+        print(f" final min: {np.min(self.u[-1])}, max: {np.max(self.u[-1])}")

@@ -89,7 +89,7 @@ for order in sorted(order_list):
             time_message = "rk4"
         if solution.adjust_time_step and solution.order > 4:
             time_message += (
-                " + " + r"$\Delta t$" + f" * {round(solution.Dt_adjustment, 5)}"
+                " + " + r"$\Delta t$" + f" * {round(solution.dt_adjustment, 5)}"
             )
         label = f"order {solution.order}" f" + {time_message}"
         # data logging

@@ -84,7 +84,7 @@ def test_udot(
         PAD=PAD,
         load_directory=test_directory,
     )
-    solution.udot(solution.u[0], t_i=solution.t[0], dt=solution.Dt)
+    solution.udot(solution.u[0], t=solution.t[0], dt=solution.dt)
 
 
 @pytest.mark.parametrize("n", n_list)

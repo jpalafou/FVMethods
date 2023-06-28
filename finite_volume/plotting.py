@@ -3,6 +3,21 @@ from matplotlib import gridspec
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcol
 
+colors = {
+    "blue": "#1f77b4",
+    "orange": "#ff7f0e",
+    "green": "#2ca02c",
+    "red": "#d62728",
+    "purple": "#9467bd",
+    "brown": "#8c564b",
+    "pink": "#e377c2",
+    "gray": "#7f7f7f",
+    "olive": "#bcbd22",
+    "cyan": "#17becf",
+}
+
+color_list = list(colors.values())
+
 
 def lineplot(
     solution_dictionary_in,
@@ -14,7 +29,7 @@ def lineplot(
     if isinstance(solution_dictionary_in, dict):
         solution_dictionary = solution_dictionary_in.copy()
     else:
-        solution_dictionary = {"t = T": solution_dictionary_in}
+        solution_dictionary = {"data1": solution_dictionary_in}
 
     plt.figure()
     first_solution = list(solution_dictionary.values())[0]
@@ -180,7 +195,7 @@ def contour(solution):
     plt.show()
 
 
-def cubeplot(solution, k: int = -1):
+def cube(solution, k: int = -1):
     # Create a 3D figure
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
@@ -202,3 +217,62 @@ def cubeplot(solution, k: int = -1):
     # Show the plot
     ax.set_box_aspect([1, 1, 0.5])  # Adjust the scaling factors as desired
     plt.show()
+
+
+def minmax(
+    solution_dictionary_in,
+    show: bool = True,
+    zeroline: bool = True,
+    savepath: str = None,
+):
+    if isinstance(solution_dictionary_in, dict):
+        solution_dictionary = solution_dictionary_in.copy()
+    else:
+        solution_dictionary = {"data1": solution_dictionary_in}
+
+    fig, axs = plt.subplots(2, 1, sharex="col", figsize=(10, 6))
+
+    first_solution = list(solution_dictionary.values())[0]
+
+    if zeroline:
+        T = first_solution.t[-1]
+        axs[0].plot([0, T], [0, 0], "--", color="grey")
+        axs[1].plot([0, T], [0, 0], "--", color="grey")
+
+    idx = 0
+    for label, solution in solution_dictionary.items():
+        if solution.ndim == 1:
+            minaxis = 1
+        elif solution.ndim == 2:
+            minaxis = (1, 2)
+        if label[:2] == "--":
+            linestyle = "--"
+            current_label = label[2:]
+        else:
+            linestyle = "-"
+            current_label = label
+        axs[0].plot(
+            solution.t,
+            np.amax(solution.u, axis=minaxis) - 1,
+            color=color_list[idx],
+            linestyle=linestyle,
+            label=current_label,
+        )
+        axs[1].plot(
+            solution.t,
+            np.amin(solution.u, axis=minaxis),
+            color=color_list[idx],
+            linestyle=linestyle,
+            label=current_label,
+        )
+        idx += 1
+    axs[0].set_ylabel("max(u(t)) - 1")
+    axs[1].set_ylabel("min(u(t))")
+    axs[1].set_xlabel("t")
+    axs[1].legend()
+
+    if savepath:
+        plt.savefig(savepath, dpi=300)
+
+    if show:
+        plt.show()

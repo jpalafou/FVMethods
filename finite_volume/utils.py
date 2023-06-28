@@ -1,14 +1,14 @@
 import numpy as np
 
 
-def rk4_Dt_adjust(h, L, order):
+def rk4_dt_adjust(h, L, order):
     """
     args:
         h:  cell size
         L:  1d domain size
         order:  accuracy requirement
     returns:
-        Dt multiplication factor for rk4 to satisfy an order of accuracy
+        dt multiplication factor for rk4 to satisfy an order of accuracy
     """
     return (h / L) ** max((order - 4) / 4, 0)
 
@@ -95,6 +95,24 @@ def f_of_3_neighbors(u: np.array, f):
         u[..., 2:],
     ]
     return f.reduce(list_of_3_neighbors)
+
+
+def f_of_4_neighbors(u: np.array, f):
+    """
+    apply a function f (np.minimum or np.maximum) to each cell and it's 8 neighbors
+    args:
+        u   (m, n)
+    returns:
+        out (m - 2, n - 2)
+    """
+    list_of_9_neighbors = [
+        u[..., 1:-1, 1:-1],
+        u[..., :-2, 1:-1],
+        u[..., 2:, 1:-1],
+        u[..., 1:-1, :-2],
+        u[..., 1:-1, 2:],
+    ]
+    return f.reduce(list_of_9_neighbors)
 
 
 def f_of_9_neighbors(u: np.array, f):

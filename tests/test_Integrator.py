@@ -15,6 +15,7 @@ def test_damped_oscillator(unused_parameter):
     x_ddot + b x_dot + (k / m) = 0 at t = T
     """
     T = 5
+    dt = 0.001
     m = 1
     b = random.randint(0, 2)
     k = random.randint(0, 5)
@@ -22,7 +23,6 @@ def test_damped_oscillator(unused_parameter):
     udot0 = random.randint(-1, 1)
     while k == b**2 / (4 * m) or (k / m <= (b**2 / (4 * m**2))):
         k = random.randint(0, 5)
-    t = np.arange(0, T + 0.001, 0.001)
     omega = np.sqrt((k / m) - (b**2 / (4 * m**2)))
 
     # find analytical solution
@@ -41,11 +41,11 @@ def test_damped_oscillator(unused_parameter):
         state vector: (u, udot)
         """
 
-        def udot(self, u, t_i, dt=None):
+        def udot(self, u, t=None, dt=None):
             return np.array([u[1], -b * u[1] - (k / m) * u[0]])
 
-    dho = DampedOscillatorTest(np.array([u0, udot0]), t)
+    dho = DampedOscillatorTest(u0=np.array([u0, udot0]), T=T, dt=dt)
     dho.rk4()
 
     # compare
-    assert dho.u[-1][0] == pytest.approx(analytical_solution(t[-1]))
+    assert dho.u[-1][0] == pytest.approx(analytical_solution(T))
