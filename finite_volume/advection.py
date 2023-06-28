@@ -224,14 +224,14 @@ class AdvectionSolver(Integrator):
         # arrays for storing theta
         self.theta = np.zeros_like(self.u0, dtype="float64")
         self.theta_history = np.ones_like(self.u, dtype="float64")
-        self.visualize_theta = np.zeros_like(self.u0, dtype="int")
-        self.visualize_theta_history = np.zeros_like(self.u, dtype="int")
+        self.visualize_theta = np.ones_like(self.u0, dtype="int")
+        self.visualize_theta_history = np.ones_like(self.u, dtype="int")
 
         # arrays for storing troubled cells
         self.trouble = np.zeros_like(self.u0, dtype="int")
         self.trouble_history = np.zeros_like(self.u, dtype="float64")
-        self.visualize_trouble = np.zeros_like(self.u0, dtype="int")
-        self.visualize_trouble_history = np.zeros_like(self.u, dtype="int")
+        self.visualize_trouble = np.ones_like(self.u0, dtype="int")
+        self.visualize_trouble_history = np.ones_like(self.u, dtype="int")
 
         # initialize cause_trouble and udot_evaluation_count
         self.cause_trouble = 1 if cause_trouble else 0
@@ -556,7 +556,7 @@ class AdvectionSolver(Integrator):
         fallback = fallback[2:-2]  # remove extra gw for for computing smooth extrema
         m = self.f_of_neighbors(fallback, f=np.minimum)
         M = self.f_of_neighbors(fallback, f=np.maximum)
-        self.m[:], self.M[:] = m[1:-1], M[1:-1]
+        self.m[...], self.M[...] = m[1:-1], M[1:-1]
         fallback = fallback[1:-1]  # remove extra gw for computing m and M
         theta, visualize_theta = self.apriori_limiter(
             points=points, u=fallback, m=m, M=M
@@ -565,7 +565,7 @@ class AdvectionSolver(Integrator):
         theta = np.where(alpha < 1, theta, 1.0)
         # store theta visualization
         self.theta += theta[1:-1]
-        self.visualize_theta[:] = np.where(
+        self.visualize_theta[...] = np.where(
             visualize_theta[1:-1], 1, self.visualize_theta
         )
         # limit slopes
@@ -613,8 +613,12 @@ class AdvectionSolver(Integrator):
         fallback = fallback[2:-2, 2:-2]  # remove extra gw for for computing SE
         m = self.f_of_neighbors(fallback, f=np.minimum)
         M = self.f_of_neighbors(fallback, f=np.maximum)
-        self.m[:] = chop(m, chop_size=self.riemann_zone, axis=[0, 1])  # store for later
-        self.M[:] = chop(M, chop_size=self.riemann_zone, axis=[0, 1])  # store for later
+        self.m[...] = chop(
+            m, chop_size=self.riemann_zone, axis=[0, 1]
+        )  # store for later
+        self.M[...] = chop(
+            M, chop_size=self.riemann_zone, axis=[0, 1]
+        )  # store for later
         fallback = fallback[1:-1, 1:-1]  # remove extra gw for computing m and M
         theta, visualize_theta = self.apriori_limiter(
             points=np.array([horizontal_points, vertical_points]), u=fallback, m=m, M=M
@@ -627,7 +631,7 @@ class AdvectionSolver(Integrator):
         visualize_theta = chop(visualize_theta, self.riemann_zone, axis=0)
         visualize_theta = chop(visualize_theta, self.riemann_zone, axis=1)
         self.theta += stored_theta
-        self.visualize_theta[:] = np.where(visualize_theta, 1, self.visualize_theta)
+        self.visualize_theta[...] = np.where(visualize_theta, 1, self.visualize_theta)
         # limit slopes
         horizontal_points = theta * (horizontal_points - fallback) + fallback
         vertical_points = theta * (vertical_points - fallback) + fallback
@@ -717,7 +721,7 @@ class AdvectionSolver(Integrator):
         visualize_theta = np.where(
             m_ij - m < -self.visualization_tolerance * u_range, 1, 0
         )
-        visualize_theta[:] = np.where(
+        visualize_theta[...] = np.where(
             M_ij - M > self.visualization_tolerance * u_range, 1, visualize_theta
         )
         # evaluate slope limiter
@@ -768,14 +772,14 @@ class AdvectionSolver(Integrator):
         # store history of troubled cells
         self.trouble += trouble
         visualize_trouble = np.where(
-            lower_differences < -self.visualization_tolerance * u_range, trouble, 0
+            lower_differences < -self.visualization_tolerance * u_range, 1, 0
         )
         visualize_trouble = np.where(
             upper_differences > self.visualization_tolerance * u_range,
+            1,
             visualize_trouble,
-            0,
         )
-        self.visualize_trouble[:] = np.where(
+        self.visualize_trouble[...] = np.where(
             visualize_trouble, 1, self.visualize_trouble
         )
 
@@ -805,7 +809,7 @@ class AdvectionSolver(Integrator):
         fallback_fluxes = self.riemann(
             v=self.a, left_value=right_face[:-1], right_value=left_face[1:]
         )
-        self.f[:] = np.where(troubled_faces, fallback_fluxes, self.f)
+        self.f[...] = np.where(troubled_faces, fallback_fluxes, self.f)
 
     def revise_fluxes_2d(self, u, trouble):
         """
@@ -841,8 +845,8 @@ class AdvectionSolver(Integrator):
             left_value=east_face[:, :-1],
             right_value=west_face[:, 1:],
         )
-        self.f[:] = np.where(EW_troubled_faces, EW_fallback_fluxes, self.f)
-        self.g[:] = np.where(NS_troubled_faces, NS_fallback_fluxes, self.g)
+        self.f[...] = np.where(EW_troubled_faces, EW_fallback_fluxes, self.f)
+        self.g[...] = np.where(NS_troubled_faces, NS_fallback_fluxes, self.g)
 
     def check_mpp(self, u):
         return not np.logical_or(np.any(u < self.u0_min), np.any(u > self.u0_max))
@@ -876,29 +880,36 @@ class AdvectionSolver(Integrator):
         if norm == "inf":
             return np.max(np.abs(approx - truth))
 
-    # def logupdate(self, i):
-    #     """
-    #     store data in u every time the time index is a log index
-    #     """
-    #     if i + 1 in self._ilog:
-    #         self.u[self._ilog.index(i + 1)] = self.u1
-    #         self.theta_history[self._ilog.index(i + 1)] = (
-    #             self.theta / self.udot_evaluation_count
-    #         )
-    #         self.visualize_theta_history[self._ilog.index(i + 1)]
-    # = self.visualize_theta
-    #         self.trouble_history[self._ilog.index(i + 1)] = (
-    #             self.trouble / self.udot_evaluation_count
-    #         )
-    #         self.visualize_trouble_history[
-    #             self._ilog.index(i + 1)
-    #         ] = self.visualize_trouble
-    #     # clear theta sum, troubled cell sum, and evaluation count
-    #     self.theta[:] = 0.0
-    #     self.visualize_theta[:] = 0
-    #     self.trouble[:] = 0
-    #     self.visualize_trouble[:] = 0
-    #     self.udot_evaluation_count = 0
+    def logupdate(self):
+        """
+        self.t0 has been overwritten with t0 + dt
+        self.u0 has been overwritten with the state at t0 + dt
+        """
+        if self.iteration_count % self.log_every == 0 or self.t0 == self.T:
+            na = np.newaxis
+            self.t = np.append(self.t, self.t0)
+            self.u = np.append(self.u, self.u0[na], axis=0)
+            self.theta_history = np.append(
+                self.theta_history, self.theta[na] / self.udot_evaluation_count, axis=0
+            )
+            self.visualize_theta_history = np.append(
+                self.visualize_theta_history, self.visualize_theta[na], axis=0
+            )
+            self.trouble_history = np.append(
+                self.trouble_history,
+                self.trouble[na] / self.udot_evaluation_count,
+                axis=0,
+            )
+            self.visualize_trouble_history = np.append(
+                self.visualize_trouble_history, self.visualize_trouble[na], axis=0
+            )
+            self.loglen += 1
+        # clear theta sum, troubled cell sum, and evaluation count
+        self.theta[...] = 0.0
+        self.visualize_theta[...] = 0
+        self.trouble[...] = 0
+        self.visualize_trouble[...] = 0
+        self.udot_evaluation_count = 0
 
     def pre_integrate(self, method_name):
         # create solution path if it doesn't exist
@@ -910,11 +921,16 @@ class AdvectionSolver(Integrator):
         if os.path.isfile(self.filepath) and self.load:
             with open(self.filepath, "rb") as thisfile:
                 loaded_instance = pickle.load(thisfile)
+                self.t = loaded_instance.t
                 self.u = loaded_instance.u
-                # if self.apriori_limiting:
-                #     self.theta_history = loaded_instance.theta_history
-                # if self.aposteriori_limiting:
-                #     self.trouble_history = loaded_instance.trouble_history
+                self.theta_history = loaded_instance.theta_history
+                self.visualize_theta_history = loaded_instance.visualize_theta_history
+                self.trouble_history = loaded_instance.trouble_history
+                self.visualize_trouble_history = (
+                    loaded_instance.visualize_trouble_history
+                )
+                self.loglen = loaded_instance.loglen
+                self.solution_time = loaded_instance.solution_time
             return False
         # otherwise proceed to integration
         print("New solution instance...")

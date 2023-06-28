@@ -83,51 +83,35 @@ def lineplot(
         plt.show()
 
 
-def heatmap(solution, fig=None, decorate=False, show=False):
+def heatmap(solution, fig=None, data="solution"):
     # global max and min
     bounds = [solution.x[0], solution.x[-1], solution.y[0], solution.y[-1]]
 
     # select plot indices for the first 5 frames
-    idx1 = 0
-    idx2 = int(0.25 * solution.loglen)
-    idx3 = int(0.5 * solution.loglen)
-    idx4 = int(0.75 * solution.loglen)
-    idx5 = -1
+    n = solution.loglen
+    idxs = [0, int(0.25 * n), int(0.5 * n), int(0.75 * n), -1]
 
     # gather data
+    t = solution.t[idxs]
+    if data == "solution":
+        u = solution.u[idxs]
+    elif data == "theta":
+        visualize_history = solution.visualize_theta_history[idxs]
+        theta = solution.theta_history[idxs]
+        u = 1.0 - np.where(visualize_history, theta, 1.0)
+    elif data == "trouble":
+        visualize_history = solution.visualize_trouble_history[idxs]
+        trouble = solution.trouble_history[idxs]
+        u = np.where(visualize_history, trouble, 0.0)
     hmin, hmax = np.min(solution.u), np.max(solution.u)
-    u = solution.u
-    data1 = np.flipud(u[idx1])
-    data2 = np.flipud(u[idx2])
-    data3 = np.flipud(u[idx3])
-    data4 = np.flipud(u[idx4])
-    data5 = np.flipud(u[idx5])
-    data6 = np.flipud(solution.u[idx5] - solution.u[idx1])
-
-    # if data == "limiting" and self.apriori_limiting:
-    #     hmin, hmax = 0, 1
-    #     theta_history = np.where(
-    #         self.visualize_theta_history, self.theta_history, 1
-    #     )
-    #     data1 = np.flipud(1 - theta_history[idx1])
-    #     data2 = np.flipud(1 - theta_history[idx2])
-    #     data3 = np.flipud(1 - theta_history[idx3])
-    #     data4 = np.flipud(1 - theta_history[idx4])
-    #     data5 = np.flipud(1 - theta_history[idx5])
-    #     data6 = None
-    # if data == "limiting" and self.aposteriori_limiting:
-    #     if self.apriori_limiting:
-    #         print("Warning: Theta data overwritten by troubled cell data.")
-    #     hmin, hmax = 0, 1
-    #     troubled_cell_history = np.where(
-    #         self.visualize_troubled_cell_history, self.troubled_cell_history, 0
-    #     )
-    #     data1 = np.flipud(troubled_cell_history[idx1])
-    #     data2 = np.flipud(troubled_cell_history[idx2])
-    #     data3 = np.flipud(troubled_cell_history[idx3])
-    #     data4 = np.flipud(troubled_cell_history[idx4])
-    #     data5 = np.flipud(troubled_cell_history[idx5])
-    #     data6 = None
+    data1 = np.flipud(u[0])
+    data2 = np.flipud(u[1])
+    data3 = np.flipud(u[2])
+    data4 = np.flipud(u[3])
+    data5 = np.flipud(u[4])
+    data6 = None
+    if data == "solution":
+        data6 = np.flipud(u[4] - u[0])
 
     # 2x3 grid of subplots
     fig = plt.figure(figsize=(10, 6.5))
@@ -141,7 +125,7 @@ def heatmap(solution, fig=None, decorate=False, show=False):
     axs = gs.subplots()
 
     # custom coloring
-    wtc = mcol.LinearSegmentedColormap.from_list("wtc", ["white", "blue"])
+    wtc = mcol.LinearSegmentedColormap.from_list("wtc", ["white", "green"])
 
     im1 = axs[0, 0].imshow(data1, cmap=wtc, vmin=hmin, vmax=hmax, extent=bounds)
     axs[0, 1].imshow(data2, cmap=wtc, vmin=hmin, vmax=hmax, extent=bounds)
@@ -155,20 +139,18 @@ def heatmap(solution, fig=None, decorate=False, show=False):
     cbar1.yaxis.set_ticks_position("right")
 
     # Add titles to the plots
-    axs[0, 0].set_title(f"t = {solution.t[idx1]:.3f}")
-    axs[0, 1].set_title(f"t = {solution.t[idx2]:.3f}")
-    axs[0, 2].set_title(f"t = {solution.t[idx3]:.3f}")
-    axs[1, 0].set_title(f"t = {solution.t[idx4]:.3f}")
-    axs[1, 1].set_title(f"t = {solution.t[idx5]:.3f}")
+    axs[0, 0].set_title(f"t = {t[0]:.3f}")
+    axs[0, 1].set_title(f"t = {t[1]:.3f}")
+    axs[0, 2].set_title(f"t = {t[2]:.3f}")
+    axs[1, 0].set_title(f"t = {t[3]:.3f}")
+    axs[1, 1].set_title(f"t = {t[4]:.3f}")
 
     if data6 is not None:
         maxerror = np.max(np.abs(data6))
         im6 = axs[1, 2].imshow(
             data6, cmap="seismic", vmin=-maxerror, vmax=maxerror, extent=bounds
         )
-        axs[1, 2].set_title(
-            f"u(t = {solution.t[idx5]:.3f}) - u(t = {solution.t[idx1]:.3f})"
-        )
+        axs[1, 2].set_title(f"u(t = {t[4]:.3f}) - u(t = {t[0]:.3f})")
         # second color bar
         cbar2 = fig.add_subplot(gs[1, 3])
         plt.colorbar(im6, cax=cbar2)

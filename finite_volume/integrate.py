@@ -2,6 +2,7 @@ import dataclasses
 import numpy as np
 import abc
 from tqdm import tqdm
+import time
 
 
 @dataclasses.dataclass
@@ -105,6 +106,7 @@ class Integrator:
 
         # time loop
         dt = self.dt  # initial time step
+        starting_time = time.time()
         while self.t0 < solving_time:
             move_on = False
             self.iteration_count += 1
@@ -124,6 +126,8 @@ class Integrator:
                         dt = solving_time - self.t0
                 else:
                     dt = dt / 2
+        ellapsed_time = time.time() - starting_time
+        self.solution_time = ellapsed_time
         progress_bar.close()
         print()
         self.post_integrate()

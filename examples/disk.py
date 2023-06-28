@@ -15,17 +15,17 @@ solution = AdvectionSolver(
     bc="neumann",
     const=0,
     T=2 * np.pi,
-    courant=0.166,
+    courant=0.8,
     order=4,
     flux_strategy="gauss-legendre",
     apriori_limiting=True,
     aposteriori_limiting=False,
     cause_trouble=False,
-    load=False,
-    adjust_time_step=True,
+    load=True,
+    adjust_time_step=False,
+    modify_time_step=True,
 )
 solution.ssprk3()
-print(f"global, min: {np.min(solution.u)}, max: {np.max(solution.u)}")
-print(f" final, min: {np.min(solution.u[-1])}, max: {np.max(solution.u[-1])}")
+solution.minmax()
 
-plotting.cubeplot(solution)
+plotting.cube(solution, k=-1)
