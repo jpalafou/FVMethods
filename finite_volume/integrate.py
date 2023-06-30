@@ -3,6 +3,7 @@ import numpy as np
 import abc
 from tqdm import tqdm
 import time
+import inspect
 
 
 @dataclasses.dataclass
@@ -86,7 +87,7 @@ class Integrator:
         """
         return True
 
-    def integrate(self, step, T: float = None):
+    def integrate(self, step, method_name: str, T: float = None):
         """
         args:
             step    function to calculate u1 from u0
@@ -97,7 +98,7 @@ class Integrator:
         solving_time = self.T if T is None else T
 
         # check whether to procede to numerical integration
-        if not self.pre_integrate(method_name=f"{step.__name__}_{solving_time}"):
+        if not self.pre_integrate(method_name=f"{method_name}_{solving_time}"):
             return
 
         # initialize progress bar
@@ -143,7 +144,9 @@ class Integrator:
             u1 = u0 + dt * k1
             return u1
 
-        self.integrate(step=step, T=self.dt)
+        self.integrate(
+            step=step, method_name=inspect.currentframe().f_code.co_name, T=self.dt
+        )
 
     def euler(self):
         """
@@ -155,7 +158,7 @@ class Integrator:
             u1 = u0 + dt * k1
             return u1
 
-        self.integrate(step=step)
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
     def rk2(self):
         """
@@ -168,7 +171,7 @@ class Integrator:
             u1 = u0 + dt * k2
             return u1
 
-        self.integrate(step=step)
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
     def rk3(self):
         """
@@ -186,7 +189,7 @@ class Integrator:
             u1 = u0 + (1 / 4) * dt * (k1 + 3 * k3)
             return u1
 
-        self.integrate(step=step)
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
     def rk4(self):
         """
@@ -203,7 +206,7 @@ class Integrator:
             u1 = u0 + (1 / 6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
             return u1
 
-        self.integrate(step=step)
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
     def ssprk2(self):
         """
@@ -216,7 +219,7 @@ class Integrator:
             u1 = (1 / 2) * _u1 + (1 / 2) * (_u2 + dt * self.udot(u=_u2, t=t0, dt=dt))
             return u1
 
-        self.integrate(step=step)
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
     def ssprk3(self):
         """
@@ -230,4 +233,4 @@ class Integrator:
             u1 = (1 / 3) * _u1 + (2 / 3) * (_u3 + dt * self.udot(u=_u3, t=t0, dt=dt))
             return u1
 
-        self.integrate(step=step)
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)

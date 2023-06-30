@@ -70,7 +70,7 @@ class AdvectionSolver(Integrator):
         v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,
-        const: float = None,
+        const: float = 0.0,
         flux_strategy: str = "gauss-legendre",
         apriori_limiting: bool = False,
         aposteriori_limiting: bool = False,
@@ -802,7 +802,7 @@ class AdvectionSolver(Integrator):
         troubled_faces[1:] = np.where(trouble, 1, troubled_faces[1:])
 
         # compute second order face interpolations
-        u_2gw = self.apply_bc(u, gw=2)
+        u_2gw = self.apply_bc(u, gw=2, const=self.const)
         left_face, right_face = compute_fallback_faces(u_2gw, axis=0)
 
         # revise fluxes
@@ -830,7 +830,7 @@ class AdvectionSolver(Integrator):
         EW_troubled_faces[:, 1:] = np.where(trouble, 1, EW_troubled_faces[:, 1:])
 
         # compute second order face interpolations
-        u_2gw = self.apply_bc(u, gw=2)
+        u_2gw = self.apply_bc(u, gw=2, const=self.const)
         north_face, south_face = compute_fallback_faces(u_2gw[:, 2:-2], axis=0)
         east_face, west_face = compute_fallback_faces(u_2gw[2:-2, :], axis=1)
 
@@ -849,7 +849,10 @@ class AdvectionSolver(Integrator):
         self.g[...] = np.where(NS_troubled_faces, NS_fallback_fluxes, self.g)
 
     def check_mpp(self, u):
-        return not np.logical_or(np.any(u < self.u0_min), np.any(u > self.u0_max))
+        tol = 1e-16
+        return not np.logical_or(
+            np.any(u < self.u0_min - tol), np.any(u > self.u0_max + tol)
+        )
 
     def rkorder(self):
         """
@@ -944,5 +947,42 @@ class AdvectionSolver(Integrator):
             print(f"Wrote a solution instance to {self.filepath}\n")
 
     def minmax(self):
-        print(f"global min: {np.min(self.u)}, max: {np.max(self.u)}")
-        print(f" final min: {np.min(self.u[-1])}, max: {np.max(self.u[-1])}")
+        if self.ndim == 1:
+            minaxis = 1
+        elif self.ndim == 2:
+            minaxis = (1, 2)
+        minimums = np.min(self.u, axis=minaxis) - np.min(self.u[-1])
+        maximums = np.max(self.u, axis=minaxis) - np.max(self.u[-1])
+        mean_min = np.mean(minimums)
+        std_min = np.std(minimums)
+        abs_min = np.min(minimums)
+        mean_max = np.mean(maximums)
+        std_max = np.std(maximums)
+        abs_max = np.max(maximums)
+        headers = [
+            "abs min",
+            "mean min",
+            "std min",
+            "abs max",
+            "mean max",
+            "std max",
+            "time (s)",
+        ]
+        lines = ["-------"] * 7
+        values = [
+            abs_min,
+            mean_min,
+            std_min,
+            abs_max,
+            mean_max,
+            std_max,
+            self.solution_time,
+        ]
+        print("{:>14}{:>14}     {:>11}{:>14}{:>14}     {:>11}{:>14}".format(*headers))
+        print("{:>14}{:>14}     {:>11}{:>14}{:>14}     {:>11}{:>14}".format(*lines))
+        print(
+            "{:14.5e}{:14.5e} +/- {:11.5e}{:14.5e}{:14.5e} +/- {:11.5e}{:14.5f}".format(
+                *values
+            )
+        )
+        print()

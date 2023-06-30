@@ -5,9 +5,9 @@ u0 = "square"
 T = 2
 v = (2, 1)
 load = False
-num_trials = 3
-n_list = [16, 32, 64]
-order_list = [1, 3, 4, 5]
+num_trials = 1
+n_list = [16, 32, 62, 64, 66]
+order_list = [3]
 
 mpp_cfl = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833}
 
@@ -44,7 +44,7 @@ for order in order_list:
                 n=(n,),
                 order=order,
                 modify_time_step=True,
-                courant=0.8,
+                courant=0.5,
                 flux_strategy="gauss-legendre",
                 apriori_limiting=True,
                 aposteriori_limiting=False,

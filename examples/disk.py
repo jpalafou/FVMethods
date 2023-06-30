@@ -9,7 +9,27 @@ def vortex(x, y):
 
 solution = AdvectionSolver(
     u0="disk",
-    n=(128,),
+    n=(64,),
+    x=(-1, 1),
+    v=vortex,
+    bc="neumann",
+    const=0,
+    T=2 * np.pi,
+    courant=0.166,
+    order=4,
+    flux_strategy="gauss-legendre",
+    apriori_limiting=True,
+    load=True,
+    modify_time_step=False,
+)
+solution.ssprk3()
+solution.minmax()
+
+plotting.cube(solution)
+
+fast_solution = AdvectionSolver(
+    u0="disk",
+    n=(64,),
     x=(-1, 1),
     v=vortex,
     bc="neumann",
@@ -19,13 +39,11 @@ solution = AdvectionSolver(
     order=4,
     flux_strategy="gauss-legendre",
     apriori_limiting=True,
-    aposteriori_limiting=False,
-    cause_trouble=False,
     load=True,
-    adjust_time_step=False,
     modify_time_step=True,
 )
-solution.ssprk3()
-solution.minmax()
+fast_solution.ssprk3()
+fast_solution.minmax()
 
-plotting.cube(solution, k=-1)
+
+plotting.minmax({"C=0.166": solution, "dt refinement": fast_solution})

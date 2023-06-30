@@ -35,7 +35,7 @@ def lineplot(
     first_solution = list(solution_dictionary.values())[0]
     if first_solution.ndim == 1:
         # plot t = 0
-        plt.plot(first_solution.x, first_solution.u[0], label="t = 0")
+        plt.plot(first_solution.x, first_solution.u[0], "o-", mfc="none", label="t = 0")
         # plot all curves
         for label, solution in solution_dictionary.items():
             plt.plot(solution.x, solution.u[-1], "o--", mfc="none", label=label)
@@ -179,7 +179,7 @@ def contour(solution):
 
 def cube(solution, k: int = -1):
     # Create a 3D figure
-    fig = plt.figure()
+    fig = plt.figure(figsize=(4, 4))
     ax = fig.add_subplot(111, projection="3d")
 
     x, y = np.meshgrid(solution.x, solution.y)
@@ -195,6 +195,8 @@ def cube(solution, k: int = -1):
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("u")
+
+    ax.set_zlim(0, 1.2)
 
     # Show the plot
     ax.set_box_aspect([1, 1, 0.5])  # Adjust the scaling factors as desired
