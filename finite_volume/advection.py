@@ -960,29 +960,24 @@ class AdvectionSolver(Integrator):
         std_max = np.std(maximums)
         abs_max = np.max(maximums)
         headers = [
-            "abs min",
-            "mean min",
-            "std min",
-            "abs max",
-            "mean max",
-            "std max",
-            "time (s)",
+            "abs min/max",
+            "mean min/max",
+            "std min/max",
         ]
-        lines = ["-------"] * 7
-        values = [
+        values1 = [
             abs_min,
             mean_min,
             std_min,
+        ]
+        values2 = [
             abs_max,
             mean_max,
             std_max,
-            self.solution_time,
         ]
-        print("{:>14}{:>14}     {:>11}{:>14}{:>14}     {:>11}{:>14}".format(*headers))
-        print("{:>14}{:>14}     {:>11}{:>14}{:>14}     {:>11}{:>14}".format(*lines))
-        print(
-            "{:14.5e}{:14.5e} +/- {:11.5e}{:14.5e}{:14.5e} +/- {:11.5e}{:14.5f}".format(
-                *values
-            )
-        )
+        print("---------------------------------")
+        print("{:>14}{:>14}     {:>11}".format(*headers))
+        print("{:14.5e}{:14.5e} +/- {:11.5e}".format(*values1))
+        print("{:14.5e}{:14.5e} +/- {:11.5e}".format(*values2))
+        print()
+        print("{:>10}{:10.5f}".format("time (s):", self.solution_time))
         print()
