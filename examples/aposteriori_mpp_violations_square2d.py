@@ -10,7 +10,44 @@ x = (0, 1)
 T = 0.5
 v = (2, 1)
 bc = "periodic"
+flux_strategy = "transverse"
 
+print("transverse + ssprk3")
+data1 = AdvectionSolver(
+    u0=u0,
+    n=n,
+    v=v,
+    x=x,
+    T=T,
+    bc=bc,
+    order=order,
+    flux_strategy=flux_strategy,
+    courant=0.8,
+    aposteriori_limiting=True,
+    log_every=1,
+)
+data1.ssprk3()
+data1.minmax()
+
+print("transverse + ssprk3 + convex a posteriori")
+data0 = AdvectionSolver(
+    u0=u0,
+    n=n,
+    v=v,
+    x=x,
+    T=1,
+    bc=bc,
+    order=order,
+    flux_strategy=flux_strategy,
+    courant=0.8,
+    aposteriori_limiting=True,
+    convex_aposteriori_limiting=True,
+    log_every=1,
+)
+data0.ssprk3()
+data0.minmax()
+
+print("gauss-legendre + ssprk3")
 data2 = AdvectionSolver(
     u0=u0,
     n=n,
@@ -19,14 +56,32 @@ data2 = AdvectionSolver(
     T=T,
     bc=bc,
     order=order,
+    flux_strategy="gauss-legendre",
     courant=0.8,
     aposteriori_limiting=True,
-    modify_time_step=False,
     log_every=1,
 )
 data2.ssprk3()
 data2.minmax()
 
+print("transverse + rk3")
+data3 = AdvectionSolver(
+    u0=u0,
+    n=n,
+    v=v,
+    x=x,
+    T=T,
+    bc=bc,
+    order=order,
+    flux_strategy=flux_strategy,
+    courant=0.8,
+    aposteriori_limiting=True,
+    log_every=1,
+)
+data3.rk3()
+data3.minmax()
+
+print("transverse + rk4")
 data4 = AdvectionSolver(
     u0=u0,
     n=n,
@@ -35,36 +90,20 @@ data4 = AdvectionSolver(
     T=T,
     bc=bc,
     order=order,
+    flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
-    modify_time_step=False,
     log_every=1,
 )
-data4.rk3()
+data4.rk4()
 data4.minmax()
 
-
-data6 = AdvectionSolver(
-    u0=u0,
-    n=n,
-    v=v,
-    x=x,
-    T=T,
-    bc=bc,
-    order=order,
-    courant=0.8,
-    aposteriori_limiting=True,
-    modify_time_step=False,
-    log_every=1,
-)
-data6.rk4()
-data6.minmax()
-
-
 solution_dict = {
-    "large time step": data2,
-    "rk3 + large time step": data4,
-    "rk4 + large time step": data6,
+    "transverse + ssprk3": data1,
+    "transverse + ssprk3 + convex a posteriori": data0,
+    "GL + ssprk3": data2,
+    "transverse + rk3": data3,
+    "transverse + rk4": data4,
 }
 
 fig, axs = plt.subplots(2, 1, sharex="col", figsize=(10, 6))
@@ -84,9 +123,9 @@ colors = {
 
 color_list = list(colors.values())
 
-if data2.ndim == 1:
+if data1.ndim == 1:
     minaxis = 1
-elif data2.ndim == 2:
+elif data1.ndim == 2:
     minaxis = (1, 2)
 
 idx = 0

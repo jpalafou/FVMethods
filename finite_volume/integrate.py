@@ -18,6 +18,7 @@ class Integrator:
         u0: np.ndarray,
         T: float,
         dt: float,
+        dt_min: float = None,
         t0: float = 0.0,
         log_every: int = 10,
     ):
@@ -34,6 +35,7 @@ class Integrator:
         self.t0 = t0  # time of state u0
         self.T = T
         self.dt = dt
+        self.dt_min = self.dt / 2**10 if dt_min is None else dt_min
         self.u0 = u0  # state entering iteration step
         self.u = u0[np.newaxis]  # array of state arrays
         self.t = np.array([t0])  # array of times corresponding to self.u
@@ -125,7 +127,7 @@ class Integrator:
                     # reduce timestep if the next timestep will bring us beyond T
                     if self.t0 + dt > solving_time:
                         dt = solving_time - self.t0
-                else:
+                elif dt / 2 >= self.dt_min:
                     dt = dt / 2
         ellapsed_time = time.time() - starting_time
         self.solution_time = ellapsed_time
