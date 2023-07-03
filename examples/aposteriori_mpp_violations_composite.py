@@ -11,6 +11,7 @@ T = 0.5
 v = 1
 bc = "periodic"
 SED = True
+convex = False
 
 data2 = AdvectionSolver(
     u0=u0,
@@ -23,6 +24,7 @@ data2 = AdvectionSolver(
     courant=0.8,
     aposteriori_limiting=True,
     smooth_extrema_detection=SED,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -40,6 +42,7 @@ data4 = AdvectionSolver(
     courant=0.8,
     aposteriori_limiting=True,
     smooth_extrema_detection=SED,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -58,6 +61,7 @@ data6 = AdvectionSolver(
     courant=0.8,
     aposteriori_limiting=True,
     smooth_extrema_detection=SED,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )

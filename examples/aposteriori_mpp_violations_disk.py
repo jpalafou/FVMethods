@@ -16,6 +16,7 @@ T = 0.5
 v = vortex
 bc = "neumann"
 flux_strategy = "transverse"
+convex = False
 
 data1 = AdvectionSolver(
     u0=u0,
@@ -28,6 +29,7 @@ data1 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -45,6 +47,7 @@ data0 = AdvectionSolver(
     flux_strategy="gauss-legendre",
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -62,6 +65,7 @@ data2 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -79,6 +83,7 @@ data3 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     modify_time_step=False,
     log_every=1,
 )

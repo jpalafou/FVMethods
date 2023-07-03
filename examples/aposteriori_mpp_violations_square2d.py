@@ -11,6 +11,7 @@ T = 0.5
 v = (2, 1)
 bc = "periodic"
 flux_strategy = "transverse"
+convex = True
 
 print("transverse + ssprk3")
 data1 = AdvectionSolver(
@@ -24,28 +25,11 @@ data1 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     log_every=1,
 )
 data1.ssprk3()
 data1.minmax()
-
-print("transverse + ssprk3 + convex a posteriori")
-data0 = AdvectionSolver(
-    u0=u0,
-    n=n,
-    v=v,
-    x=x,
-    T=1,
-    bc=bc,
-    order=order,
-    flux_strategy=flux_strategy,
-    courant=0.8,
-    aposteriori_limiting=True,
-    convex_aposteriori_limiting=True,
-    log_every=1,
-)
-data0.ssprk3()
-data0.minmax()
 
 print("gauss-legendre + ssprk3")
 data2 = AdvectionSolver(
@@ -59,6 +43,7 @@ data2 = AdvectionSolver(
     flux_strategy="gauss-legendre",
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     log_every=1,
 )
 data2.ssprk3()
@@ -76,6 +61,7 @@ data3 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     log_every=1,
 )
 data3.rk3()
@@ -93,6 +79,7 @@ data4 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
+    convex_aposteriori_limiting=convex,
     log_every=1,
 )
 data4.rk4()
@@ -100,7 +87,6 @@ data4.minmax()
 
 solution_dict = {
     "transverse + ssprk3": data1,
-    "transverse + ssprk3 + convex a posteriori": data0,
     "GL + ssprk3": data2,
     "transverse + rk3": data3,
     "transverse + rk4": data4,

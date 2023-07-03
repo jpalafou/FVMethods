@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from finite_volume.advection import AdvectionSolver
 
-mpp_cfl = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833, 6: 0.0833, 7: 0.05, 8: 0.05}
+mpp_cfl = {4: 0.166, 6: 0.0833, 8: 0.05}
 u0 = "composite"
 order = 4
 n = 256
@@ -10,7 +10,7 @@ x = (0, 1)
 T = 0.5
 v = 1
 bc = "periodic"
-SED = False
+SED = True
 
 print("small timestep, ssprk3")
 data1 = AdvectionSolver(
