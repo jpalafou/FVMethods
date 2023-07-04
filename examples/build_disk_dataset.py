@@ -5,7 +5,7 @@ from finite_volume.advection import AdvectionSolver
 
 # creating data directory if it doesn't exist
 data_directory = 'data/cases/'
-path_to_data = data_directory + 'square2d.csv'
+path_to_data = data_directory + 'disk.csv'
 if os.path.exists(data_directory):
     if os.path.exists(path_to_data):
         raise BaseException(f"Existing data logged at {path_to_data}")
@@ -23,6 +23,9 @@ def enablePrint():
     function to disable printing
     """
     sys.stdout = sys.__stdout__
+
+def vortex(x, y):
+    return -y, x
 
 trials = 10
 ns = [(32,), (64,), (128,)]
@@ -53,10 +56,12 @@ for n in ns:
                             print(f"n = {n}, order {order}, limiting: {limiter_key}, courant = {courant}, integrator: {integrator_key}, trial {trial + 1}/{trials}")
                             blockPrint()
                             solver = AdvectionSolver(
-                                u0="square",
-                                x=(0,1),
-                                v=(2,1),
-                                T=1,
+                                u0="disk",
+                                x=(-1,1),
+                                v=vortex,
+                                T=2 * np.pi,
+                                bc='dirichlet',
+                                const=0,
                                 log_every=100000,
                                 n=n,
                                 order=order,
