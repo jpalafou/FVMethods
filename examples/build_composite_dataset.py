@@ -52,6 +52,7 @@ limiter_config_dict = {
 integrator_config_dict = {"ssprk3": 1, "rk3": 2, "rk4": 3}
 
 list_of_data = []
+solution_count = 0
 for n in ns:
     for order in orders:
         for limiter_key, limiter_config in limiter_config_dict.items():
@@ -114,6 +115,14 @@ for n in ns:
                     data["mean time"] = mean_time
                     data["std time"] = std_time
                     list_of_data.append(data)
+                    # save data so far
+                    solution_count += 1
+                    if solution_count % 10 == 0:
+                        enablePrint()
+                        print(f"Saving {solution_count} solution results")
+                        blockPrint()
+                        dataframe = pd.DataFrame(list_of_data)
+                        dataframe.to_csv(path_to_data, index=False)
 # save as csv
 dataframe = pd.DataFrame(list_of_data)
 dataframe.to_csv(path_to_data, index=False)

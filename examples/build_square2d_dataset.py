@@ -52,6 +52,7 @@ limiter_config_dict = {
 integrator_config_dict = {"ssprk3": 1, "rk3": 2, "rk4": 3}
 
 list_of_data = []
+solution_count = 0
 for n in ns:
     for order in orders:
         for limiter_key, limiter_config in limiter_config_dict.items():
@@ -61,12 +62,12 @@ for n in ns:
             for courant in courants:
                 for integrator_key, integrator_config in integrator_config_dict.items():
                     if integrator_config == 1:
-                        flux_methods = ["gauss-legendre", "transverse"]
+                        flux_strategies = ["gauss-legendre", "transverse"]
                     elif limiter_key == "a priori":
-                        flux_methods = ["gauss-legendre"]
+                        flux_strategies = ["gauss-legendre"]
                     elif limiter_key == "a posteriori":
-                        flux_methods = ["transverse"]
-                    for flux_method in flux_methods:
+                        flux_strategies = ["transverse"]
+                    for flux_strategy in flux_strategies:
                         times = []
                         for trial in range(trials):
                             enablePrint()
@@ -87,7 +88,7 @@ for n in ns:
                                 n=n,
                                 order=order,
                                 courant=courant,
-                                flux_method=flux_method,
+                                flux_strategy=flux_strategy,
                                 apriori_limiting=limiter_config["apriori_limiting"],
                                 aposteriori_limiting=limiter_config[
                                     "aposteriori_limiting"
@@ -111,21 +112,29 @@ for n in ns:
                         mean_time = np.mean(times)
                         std_time = np.std(times)
                         data = {}
-                        data['n'] = n
-                        data['order'] = order
-                        data['flux strategy'] = flux_strategy
-                        data['limiter'] = limiter_key
-                        data['courant'] = courant
-                        data['integrator'] = integrator_key
-                        data['abs min'] = solver.abs_min
-                        data['mean min'] = solver.mean_min
-                        data['std min'] = solver.std_min
-                        data['abs max'] = solver.abs_max
-                        data['mean max'] = solver.mean_max
-                        data['std max'] = solver.std_max
-                        data['mean time'] = mean_time
-                        data['std time'] = std_time
+                        data["n"] = n
+                        data["order"] = order
+                        data["flux strategy"] = flux_strategy
+                        data["limiter"] = limiter_key
+                        data["courant"] = courant
+                        data["integrator"] = integrator_key
+                        data["abs min"] = solver.abs_min
+                        data["mean min"] = solver.mean_min
+                        data["std min"] = solver.std_min
+                        data["abs max"] = solver.abs_max
+                        data["mean max"] = solver.mean_max
+                        data["std max"] = solver.std_max
+                        data["mean time"] = mean_time
+                        data["std time"] = std_time
                         list_of_data.append(data)
+                        # save data so far
+                        solution_count += 1
+                        if solution_count % 10 == 0:
+                            enablePrint()
+                            print(f"Saving {solution_count} solution results")
+                            blockPrint()
+                            dataframe = pd.DataFrame(list_of_data)
+                            dataframe.to_csv(path_to_data, index=False)
 # save as csv
 dataframe = pd.DataFrame(list_of_data)
 dataframe.to_csv(path_to_data, index=False)
