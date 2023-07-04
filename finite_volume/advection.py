@@ -203,8 +203,13 @@ class AdvectionSolver(Integrator):
                 u0 = u0(x=self.x)
             if self.ndim == 2:
                 u0 = u0(x=self.x, y=self.y)
+        self.ones_i = np.ones_like(u0, dtype="int")
+        self.ones_f = np.ones_like(u0, dtype="float")
         self.u0_min = np.min(u0)
         self.u0_max = np.max(u0)
+        self.min_history = [self.u0_min]
+        self.max_history = [self.u0_max]
+        self.every_t = [t0]
 
         # initialize integrator
         super().__init__(u0=u0, T=T, dt=dt, t0=t0, log_every=log_every)
@@ -222,20 +227,20 @@ class AdvectionSolver(Integrator):
         self.convex_aposteriori_limiting = convex_aposteriori_limiting
 
         # arrays for storing local min/max
-        self.m = np.zeros(self.u0.shape)
-        self.M = np.zeros(self.u0.shape)
+        self.m = 0 * self.ones_f
+        self.M = 0 * self.ones_f
 
         # arrays for storing theta
-        self.theta = np.zeros_like(self.u0, dtype="float64")
-        self.theta_history = np.ones_like(self.u, dtype="float64")
-        self.visualize_theta = np.ones_like(self.u0, dtype="int")
-        self.visualize_theta_history = np.ones_like(self.u, dtype="int")
+        self.theta = self.ones_f
+        self.theta_history = [self.ones_f]
+        self.visualize_theta = self.ones_i
+        self.visualize_theta_history = [self.ones_i]
 
         # arrays for storing troubled cells
-        self.trouble = np.zeros_like(self.u0, dtype="int")
-        self.trouble_history = np.zeros_like(self.u, dtype="float64")
-        self.visualize_trouble = np.ones_like(self.u0, dtype="int")
-        self.visualize_trouble_history = np.ones_like(self.u, dtype="int")
+        self.trouble = 0 * self.ones_i
+        self.trouble_history = [0 * self.ones_i]
+        self.visualize_trouble = self.ones_i
+        self.visualize_trouble_history = [self.ones_i]
 
         # initialize cause_trouble and udot_evaluation_count
         self.cause_trouble = 1 if cause_trouble else 0
@@ -1092,23 +1097,12 @@ class AdvectionSolver(Integrator):
         self.u0 has been overwritten with the state at t0 + dt
         """
         if self.iteration_count % self.log_every == 0 or self.t0 == self.T:
-            na = np.newaxis
-            self.t = np.append(self.t, self.t0)
-            self.u = np.append(self.u, self.u0[na], axis=0)
-            self.theta_history = np.append(
-                self.theta_history, self.theta[na] / self.udot_evaluation_count, axis=0
-            )
-            self.visualize_theta_history = np.append(
-                self.visualize_theta_history, self.visualize_theta[na], axis=0
-            )
-            self.trouble_history = np.append(
-                self.trouble_history,
-                self.trouble[na] / self.udot_evaluation_count,
-                axis=0,
-            )
-            self.visualize_trouble_history = np.append(
-                self.visualize_trouble_history, self.visualize_trouble[na], axis=0
-            )
+            self.t.append(self.t0)
+            self.u.append(self.u0)
+            self.theta_history.append(self.theta / self.udot_evaluation_count)
+            self.visualize_theta_history.append(self.visualize_theta)
+            self.trouble_history.append(self.trouble / self.udot_evaluation_count)
+            self.visualize_trouble_history.append(self.visualize_trouble)
             self.loglen += 1
         # clear theta sum, troubled cell sum, and evaluation count
         self.theta[...] = 0.0
@@ -1116,6 +1110,10 @@ class AdvectionSolver(Integrator):
         self.trouble[...] = 0
         self.visualize_trouble[...] = 0
         self.udot_evaluation_count = 0
+        # keep track of max/min
+        self.every_t.append(self.t0)
+        self.min_history.append(np.min(self.u0))
+        self.max_history.append(np.max(self.u0))
 
     def pre_integrate(self, method_name):
         # create solution path if it doesn't exist
@@ -1137,12 +1135,30 @@ class AdvectionSolver(Integrator):
                 )
                 self.loglen = loaded_instance.loglen
                 self.solution_time = loaded_instance.solution_time
+                self.every_t = loaded_instance.every_t
+                self.min_history = loaded_instance.min_history
+                self.max_history = loaded_instance.max_history
+                self.abs_min = loaded_instance.abs_min
+                self.mean_min = loaded_instance.mean_min
+                self.std_min = loaded_instance.std_min
+                self.abs_max = loaded_instance.abs_max
+                self.mean_max = loaded_instance.mean_max
+                self.std_max = loaded_instance.std_max
             return False
         # otherwise proceed to integration
         print("New solution instance...")
         return True
 
     def post_integrate(self):
+        # compute max and min history
+        min_history = np.asarray(self.min_history)
+        max_history = np.asarray(self.max_history)
+        self.mean_min = np.mean(min_history)
+        self.std_min = np.std(min_history)
+        self.abs_min = np.min(min_history)
+        self.mean_max = np.mean(max_history)
+        self.std_max = np.std(max_history)
+        self.abs_max = np.max(max_history)
         # Save the instance to a file
         if self.load:
             with open(self.filepath, "wb") as thisfile:
@@ -1150,32 +1166,20 @@ class AdvectionSolver(Integrator):
             print(f"Wrote a solution instance to {self.filepath}\n")
 
     def minmax(self):
-        if self.ndim == 1:
-            minaxis = 1
-        elif self.ndim == 2:
-            minaxis = (1, 2)
-        minimums = np.min(self.u, axis=minaxis) - np.min(self.u[0])
-        maximums = np.max(self.u, axis=minaxis) - np.max(self.u[0])
-        mean_min = np.mean(minimums)
-        std_min = np.std(minimums)
-        abs_min = np.min(minimums)
-        mean_max = np.mean(maximums)
-        std_max = np.std(maximums)
-        abs_max = np.max(maximums)
         headers = [
             "abs min/max",
             "mean min/max",
             "std min/max",
         ]
         values1 = [
-            abs_min,
-            mean_min,
-            std_min,
+            self.abs_min,
+            self.mean_min,
+            self.std_min,
         ]
         values2 = [
-            abs_max,
-            mean_max,
-            std_max,
+            self.abs_max,
+            self.mean_max,
+            self.std_max,
         ]
         print("---------------------------------")
         print("{:>14}{:>14}     {:>11}".format(*headers))

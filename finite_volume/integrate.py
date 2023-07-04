@@ -37,8 +37,8 @@ class Integrator:
         self.dt = dt
         self.dt_min = self.dt / 2**10 if dt_min is None else dt_min
         self.u0 = u0  # state entering iteration step
-        self.u = u0[np.newaxis]  # array of state arrays
-        self.t = np.array([t0])  # array of times corresponding to self.u
+        self.u = [u0]  # list of state arrays
+        self.t = [t0]  # list of times corresponding to self.u
         self.loglen = 1  # number of logged states
 
     # helper functions
@@ -60,8 +60,8 @@ class Integrator:
         self.u0 has been overwritten with the state at t0 + dt
         """
         if self.iteration_count % self.log_every == 0 or self.t0 == self.T:
-            self.t = np.append(self.t, self.t0)
-            self.u = np.append(self.u, self.u0[np.newaxis], axis=0)
+            self.t.append(self.t0)
+            self.u.append(self.u0)
             self.loglen += 1
 
     def pre_integrate(self, method_name):
@@ -78,6 +78,9 @@ class Integrator:
         """
         any producedures that are to be executed after time integration
         """
+        # convert lists to arrays
+        self.t = np.asarray(self.t)
+        self.u = np.asarray(self.u)
         return
 
     def looks_good(self, u):
