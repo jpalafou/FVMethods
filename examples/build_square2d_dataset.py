@@ -1,22 +1,25 @@
-import sys, os
+import sys
+import os
 import numpy as np
 import pandas as pd
 from finite_volume.advection import AdvectionSolver
 
 # creating data directory if it doesn't exist
-data_directory = 'data/cases/'
-path_to_data = data_directory + 'square2d.csv'
+data_directory = "data/cases/"
+path_to_data = data_directory + "square2d.csv"
 if os.path.exists(data_directory):
     if os.path.exists(path_to_data):
         raise BaseException(f"Existing data logged at {path_to_data}")
 else:
     os.makedirs(data_directory)
 
+
 def blockPrint():
     """
     function to enable printing
     """
-    sys.stdout = open(os.devnull, 'w')
+    sys.stdout = open(os.devnull, "w")
+
 
 def enablePrint():
     """
@@ -24,49 +27,76 @@ def enablePrint():
     """
     sys.stdout = sys.__stdout__
 
+
 trials = 10
 ns = [(32,), (64,), (128,)]
 orders = [1, 2, 3, 4, 5, 6, 7, 8]
 mpp_cfl = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833, 6: 0.0833, 7: 0.05, 8: 0.05}
-limiter_config_dict = {'a priori': {'apriori_limiting': True, 'aposteriori_limiting': False, 'convex_aposteriori_limiting': False},
-'classic a posteriori': {'apriori_limiting': False, 'aposteriori_limiting': False, 'convex_aposteriori_limiting': True},
-'convex a posteriori': {'apriori_limiting': False, 'aposteriori_limiting': True, 'convex_aposteriori_limiting': True}}
-integrator_config_dict = {'ssprk3': 1, 'rk3': 2, 'rk4': 3}
+limiter_config_dict = {
+    "a priori": {
+        "apriori_limiting": True,
+        "aposteriori_limiting": False,
+        "convex_aposteriori_limiting": False,
+    },
+    "classic a posteriori": {
+        "apriori_limiting": False,
+        "aposteriori_limiting": False,
+        "convex_aposteriori_limiting": True,
+    },
+    "convex a posteriori": {
+        "apriori_limiting": False,
+        "aposteriori_limiting": True,
+        "convex_aposteriori_limiting": True,
+    },
+}
+integrator_config_dict = {"ssprk3": 1, "rk3": 2, "rk4": 3}
 
 list_of_data = []
 for n in ns:
     for order in orders:
         for limiter_key, limiter_config in limiter_config_dict.items():
-            courants = [0.8, mpp_cfl[order]] if limiter_config['apriori_limiting'] else [0.8]
+            courants = (
+                [0.8, mpp_cfl[order]] if limiter_config["apriori_limiting"] else [0.8]
+            )
             for courant in courants:
                 for integrator_key, integrator_config in integrator_config_dict.items():
                     if integrator_config == 1:
-                        flux_strategies = ['gauss-legendre', 'transverse']
-                    elif limiter_key == 'a priori':
-                        flux_strategies = ['gauss-legendre']
-                    elif limiter_key == 'a posteriori':
-                        flux_strategies = ['transverse']
-                    for flux_strategy in flux_strategies:
+                        flux_methods = ["gauss-legendre", "transverse"]
+                    elif limiter_key == "a priori":
+                        flux_methods = ["gauss-legendre"]
+                    elif limiter_key == "a posteriori":
+                        flux_methods = ["transverse"]
+                    for flux_method in flux_methods:
                         times = []
                         for trial in range(trials):
                             enablePrint()
-                            print(f"n = {n}, order {order}, limiting: {limiter_key}, courant = {courant}, integrator: {integrator_key}, trial {trial + 1}/{trials}")
+                            print(
+                                f"n = {n}, order {order}",
+                                f", flux strategy: {flux_strategy}",
+                                f", limiting: {limiter_key}, courant = {courant}",
+                                f", integrator: {integrator_key}",
+                                f", trial {trial + 1}/{trials}",
+                            )
                             blockPrint()
                             solver = AdvectionSolver(
                                 u0="square",
-                                x=(0,1),
-                                v=(2,1),
+                                x=(0, 1),
+                                v=(2, 1),
                                 T=1,
                                 log_every=100000,
                                 n=n,
                                 order=order,
                                 courant=courant,
-                                flux_strategy = flux_strategy,
-                                apriori_limiting=limiter_config['apriori_limiting'],
-                                aposteriori_limiting=limiter_config['aposteriori_limiting'],
-                                convex_aposteriori_limiting=limiter_config['convex_aposteriori_limiting'],
-                                load = False,
-                                )
+                                flux_method=flux_method,
+                                apriori_limiting=limiter_config["apriori_limiting"],
+                                aposteriori_limiting=limiter_config[
+                                    "aposteriori_limiting"
+                                ],
+                                convex_aposteriori_limiting=limiter_config[
+                                    "convex_aposteriori_limiting"
+                                ],
+                                load=False,
+                            )
                             if integrator_config == 1:
                                 solver.ssprk3()
                             elif integrator_config == 2:
@@ -74,7 +104,7 @@ for n in ns:
                             elif integrator_config == 3:
                                 solver.rk4()
                             else:
-                                raise BaseException('invalid integrator')
+                                raise BaseException("invalid integrator")
                             times.append(solver.solution_time)
                         # gather data
                         times = np.asarray(times)

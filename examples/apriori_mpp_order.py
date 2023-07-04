@@ -12,7 +12,7 @@ n = (64,)
 v = vortex
 x = (-1, 1)
 T = 2 * np.pi
-bc = "neumann"
+bc = "dirichlet"
 
 data1 = AdvectionSolver(
     n=n,

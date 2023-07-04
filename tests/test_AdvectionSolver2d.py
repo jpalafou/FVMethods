@@ -165,7 +165,7 @@ def test_periodic_solution(n, order):
             "T": 2 * np.pi,
             "v": vortex,
             "u0": "disk",
-            "bc": "neumann",
+            "bc": "dirichlet",
             "const": 0,
         },
         {

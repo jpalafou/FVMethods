@@ -38,7 +38,7 @@ class AdvectionSolver(Integrator):
         courant                 stability condition
         order                   accuracy requirement for polynomial interpolation
         bc                      string describing a pre-coded boudnary condition
-        const                   for Neumann bc
+        const                   for dirichlet bc
         flux_strategy           'gauss-legendre' or 'transverse'
         apriori_limiting        whether to follow zhang and shu mpp limiting
         aposteriori_limiting    whether to call trouble detection and 2d fallback
@@ -217,8 +217,8 @@ class AdvectionSolver(Integrator):
         # boundary conditon
         if bc == "periodic":
             self.apply_bc = self.apply_periodic_bc
-        if bc == "neumann":
-            self.apply_bc = self.apply_neumann_bc
+        if bc == "dirichlet":
+            self.apply_bc = self.apply_dirichlet_bc
         self.const = const
 
         # initialize limiting
@@ -508,7 +508,7 @@ class AdvectionSolver(Integrator):
         """
         return np.pad(u_without_ghost_cells, pad_width=gw, mode="wrap")
 
-    def apply_neumann_bc(
+    def apply_dirichlet_bc(
         self, u_without_ghost_cells: np.ndarray, gw: {tuple, list, int}, const, **kwargs
     ) -> np.ndarray:
         return np.pad(

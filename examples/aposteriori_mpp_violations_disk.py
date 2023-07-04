@@ -14,7 +14,7 @@ n = (128,)
 x = (-1, 1)
 T = 0.5
 v = vortex
-bc = "neumann"
+bc = "dirichlet"
 flux_strategy = "transverse"
 convex = False
 
