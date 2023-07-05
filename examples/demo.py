@@ -1,15 +1,26 @@
+import numpy as np
 from finite_volume.advection import AdvectionSolver
 import finite_volume.plotting as plotting
 import matplotlib.pyplot as plt
 
+
+def vortex(x, y):
+    return -y, x
+
+
 solver = AdvectionSolver(
     n=(64,),
-    v=(2, 1),
-    u0="square",
+    v=vortex,
+    u0="disk",
     order=4,
     courant=0.8,
-    aposteriori_limiting=True,
-    convex_aposteriori_limiting=True,
+    x=(-1, 1),
+    T=2 * np.pi,
+    bc="dirichlet",
+    const=0,
+    apriori_limiting=True,
+    aposteriori_limiting=False,
+    convex_aposteriori_limiting=False,
     load=True,
     log_every=100000,
 )

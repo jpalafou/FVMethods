@@ -209,6 +209,7 @@ class AdvectionSolver(Integrator):
         self.u0_max = np.max(u0)
         self.min_history = [self.u0_min]
         self.max_history = [self.u0_max]
+        self.steps = 0
         self.every_t = [t0]
 
         # initialize integrator
@@ -1111,6 +1112,7 @@ class AdvectionSolver(Integrator):
         self.visualize_trouble[...] = 0
         self.udot_evaluation_count = 0
         # keep track of max/min
+        self.steps += 1
         self.every_t.append(self.t0)
         self.min_history.append(np.min(self.u0))
         self.max_history.append(np.max(self.u0))
@@ -1135,6 +1137,7 @@ class AdvectionSolver(Integrator):
                 )
                 self.loglen = loaded_instance.loglen
                 self.solution_time = loaded_instance.solution_time
+                self.steps = loaded_instance.steps
                 self.every_t = loaded_instance.every_t
                 self.min_history = loaded_instance.min_history
                 self.max_history = loaded_instance.max_history
