@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 def blockPrint():
     """
     function to enable printing
@@ -31,7 +32,9 @@ conda activate build
 
 echo "running"
 python build_datasets/build_dataset.py --n {} --order {} --problem {}
-""".format(job_number, time_limit, n, order, problem)
+""".format(
+        job_number, time_limit, n, order, problem
+    )
 
     path_to_file = f"build_datasets/job_scripts/build{job_number}.slurm"
     with open(path_to_file, "w") as somefile:

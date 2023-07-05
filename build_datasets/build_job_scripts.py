@@ -17,7 +17,7 @@ for order in [1, 2, 3, 4, 5, 6, 7, 8]:
             n=n,
             order=order,
             job_number=job_number,
-            )
+        )
         with open(path_to_executable, "a") as somefile:
             somefile.write("sbatch " + path_to_file + "\n")
         job_number += 1
@@ -28,18 +28,18 @@ for order in [1, 2, 3, 4, 5, 6, 7, 8]:
             n=n,
             order=order,
             job_number=job_number,
-            )
+        )
         with open(path_to_executable, "a") as somefile:
             somefile.write("sbatch " + path_to_file + "\n")
         job_number += 1
-    for n in [64, 128, 256]: 
+    for n in [64, 128, 256]:
         path_to_file = build_job_script(
             problem="disk",
             time_limit="10:00:00",
             n=n,
             order=order,
             job_number=job_number,
-            )
+        )
         with open(path_to_executable, "a") as somefile:
             somefile.write("sbatch " + path_to_file + "\n")
         job_number += 1

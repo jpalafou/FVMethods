@@ -7,48 +7,50 @@ from finite_volume.utils import blockPrint
 from finite_volume.utils import enablePrint
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--problem')
-    parser.add_argument('--n')
-    parser.add_argument('--order')
+    parser.add_argument("--problem")
+    parser.add_argument("--n")
+    parser.add_argument("--order")
     args = parser.parse_args()
     problem = args.problem
     n = int(args.n)
     order = int(args.order)
 
 
-if problem == 'composite':
+if problem == "composite":
     u0 = "composite"
     v = 1
     x = (0, 1)
     T = 1
-    bc = 'periodic'
+    bc = "periodic"
     const = None
     smooth_extrema_detection = True
-    flux_strategies = ['gauss-legendre']
-elif problem == 'square2d':
+    flux_strategies = ["gauss-legendre"]
+elif problem == "square2d":
     n = (n, n)
     u0 = "square"
     v = 1
     x = (0, 1)
     T = 1
-    bc = 'periodic'
+    bc = "periodic"
     const = None
     smooth_extrema_detection = False
-    flux_strategies = ['gauss-legendre', 'transverse']
-elif problem == 'disk':
+    flux_strategies = ["gauss-legendre", "transverse"]
+elif problem == "disk":
+
     def vortex(x, y):
         return -y, x
+
     n = (n, n)
     u0 = "disk"
     v = vortex
     x = (-1, 1)
     T = 2 * np.pi
-    bc = 'dirichlet'
+    bc = "dirichlet"
     const = 0
     smooth_extrema_detection = False
-    flux_strategies = ['gauss-legendre', 'transverse']
+    flux_strategies = ["gauss-legendre", "transverse"]
 
 # creating data directory if it doesn't exist
 data_directory = f"data/cases/{problem}/"
@@ -75,14 +77,12 @@ limiter_config_dict = {
         "convex_aposteriori_limiting": True,
     },
 }
-integrator_configs = ['ssprk3', 'rk3', 'rk4']
+integrator_configs = ["ssprk3", "rk3", "rk4"]
 
 list_of_data = []
 solution_count = 0
 for limiter_key, limiter_config in limiter_config_dict.items():
-    courants = (
-        [0.8, mpp_cfl[order]] if limiter_config["apriori_limiting"] else [0.8]
-    )
+    courants = [0.8, mpp_cfl[order]] if limiter_config["apriori_limiting"] else [0.8]
     for courant in courants:
         for integrator_config in integrator_configs:
             for flux_strategy in flux_strategies:
@@ -105,8 +105,8 @@ for limiter_key, limiter_config in limiter_config_dict.items():
                         n=n,
                         order=order,
                         courant=courant,
-                        bc = bc,
-                        const = const,
+                        bc=bc,
+                        const=const,
                         apriori_limiting=limiter_config["apriori_limiting"],
                         aposteriori_limiting=limiter_config["aposteriori_limiting"],
                         convex_aposteriori_limiting=limiter_config[
@@ -116,11 +116,11 @@ for limiter_key, limiter_config in limiter_config_dict.items():
                         log_every=100000,
                         load=load,
                     )
-                    if integrator_config == 'ssprk3':
+                    if integrator_config == "ssprk3":
                         solver.ssprk3()
-                    elif integrator_config == 'rk3':
+                    elif integrator_config == "rk3":
                         solver.rk3()
-                    elif integrator_config == 'rk4':
+                    elif integrator_config == "rk4":
                         solver.rk4()
                     else:
                         raise BaseException("invalid integrator")
@@ -129,7 +129,7 @@ for limiter_key, limiter_config in limiter_config_dict.items():
                 times = np.asarray(times)
                 mean_time = np.mean(times)
                 std_time = np.std(times)
-                # gather data 
+                # gather data
                 data = {}
                 data["n"] = n
                 data["steps"] = solver.steps
