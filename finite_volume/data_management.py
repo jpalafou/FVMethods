@@ -4,10 +4,6 @@ def build_job_script(
     problem,
     limiter,
     flux_strategy,
-    order,
-    n,
-    courant,
-    modify_time_step,
     integrator,
 ):
     bash_script1 = """#!/bin/bash
@@ -28,14 +24,10 @@ echo "running"\n
         name, time_limit
     )
     bash_script2 = (
-        "python build_datasets/run_and_time.py "
+        "python build_datasets/build_dataset.py "
         + "--problem {} ".format(problem)
         + "--limiter '{}' ".format(limiter)
         + "--flux_strategy {} ".format(flux_strategy)
-        + "--order {} ".format(order)
-        + "--n {} ".format(n)
-        + "--courant {} ".format(courant)
-        + "--modify_time_step {} ".format(modify_time_step)
         + "--integrator {} ".format(integrator)
     )
 

@@ -1,41 +1,26 @@
 from finite_volume.advection import AdvectionSolver
 import finite_volume.plotting as plotting
+import matplotlib.pyplot as plt
 
-u0 = "square"
-n = (32,)
-v = (1, 2)
-courant = 0.166
-order = 4
-flux_strategy = "gauss-legendre"
-load = False
 
-data1 = AdvectionSolver(
-    u0=u0,
-    n=n,
-    v=v,
-    courant=courant,
-    order=order,
-    flux_strategy=flux_strategy,
+solver = AdvectionSolver(
+    n=(128,),
+    v=(2, 1),
+    u0="square",
+    order=8,
+    courant=0.05,
+    x=(0, 1),
+    T=1,
     apriori_limiting=True,
     aposteriori_limiting=False,
-    smooth_extrema_detection=True,
-    load=load,
+    convex_aposteriori_limiting=False,
+    load=False,
+    log_every=100000,
 )
-data1.ssprk3()
+solver.rk4()
 
-data2 = AdvectionSolver(
-    u0=u0,
-    n=n,
-    v=v,
-    courant=courant,
-    order=order,
-    flux_strategy=flux_strategy,
-    apriori_limiting=False,
-    aposteriori_limiting=True,
-    smooth_extrema_detection=True,
-    load=load,
-)
-data2.ssprk3()
+plotting.contour(solver)
 
-
-plotting.lineplot({"a priori": data1, "a posteriori": data2}, y=0.5 + 0.5 * 1 / 32)
+plt.plot(solver.every_t, solver.min_history)
+plt.xlabel("t")
+plt.show()

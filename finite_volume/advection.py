@@ -141,6 +141,7 @@ class AdvectionSolver(Integrator):
             self.hy = 1
             self.Ly = 1
             self.hy_recip = 1
+            self.n_cells = nx
         if self.ndim == 2:
             ny = n[0]
             y = x if y is None else y
@@ -151,6 +152,7 @@ class AdvectionSolver(Integrator):
             self.Ly = y[1] - y[0]  # domain size in y
             self.hy = self.Ly / ny  # cell size in y
             self.hy_recip = ny / self.Ly  # 1 / h
+            self.n_cells = nx * ny
 
         # maximum expected advection velocities
         if self.ndim == 1:  # uniform 1d velocity

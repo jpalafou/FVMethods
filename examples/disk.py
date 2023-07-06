@@ -1,49 +1,33 @@
 import numpy as np
 from finite_volume.advection import AdvectionSolver
 import finite_volume.plotting as plotting
+import matplotlib.pyplot as plt
 
 
 def vortex(x, y):
     return -y, x
 
 
-solution = AdvectionSolver(
-    u0="disk",
-    n=(64,),
-    x=(-1, 1),
+solver = AdvectionSolver(
+    n=(256,),
     v=vortex,
-    bc="dirichlet",
-    const=0,
-    T=2 * np.pi,
-    courant=0.166,
-    order=4,
-    flux_strategy="gauss-legendre",
-    apriori_limiting=True,
-    load=True,
-    modify_time_step=False,
-)
-solution.ssprk3()
-solution.minmax()
-
-plotting.cube(solution)
-
-fast_solution = AdvectionSolver(
     u0="disk",
-    n=(64,),
-    x=(-1, 1),
-    v=vortex,
-    bc="dirichlet",
-    const=0,
-    T=2 * np.pi,
+    order=8,
     courant=0.8,
-    order=4,
-    flux_strategy="gauss-legendre",
+    x=(-1, 1),
+    T=2 * np.pi,
+    bc="dirichlet",
+    const=0,
     apriori_limiting=True,
-    load=True,
-    modify_time_step=True,
+    aposteriori_limiting=False,
+    convex_aposteriori_limiting=False,
+    load=False,
+    log_every=100000,
 )
-fast_solution.ssprk3()
-fast_solution.minmax()
+solver.rk4()
 
+plotting.contour(solver)
 
-plotting.minmax({"C=0.166": solution, "dt refinement": fast_solution})
+plt.plot(solver.every_t, solver.min_history)
+plt.xlabel("t")
+plt.show()

@@ -6,3 +6,7 @@ plot_generation/
 .pytest_cache/
 *.egg-info/
 .vscode/
+build_datasets/job_scripts/
+run_composite_jobs.sh
+run_square2d_jobs.sh
+run_disk_jobs.sh
