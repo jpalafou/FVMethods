@@ -155,7 +155,7 @@ for order in orders:
                 convex_aposteriori_limiting=convex_aposteriori_limiting,
                 smooth_extrema_detection=smooth_extrema_detection,
                 log_every=100000,
-                load=False,
+                load=True,
             )
             # integrate
             if integrator == "ssprk3":
