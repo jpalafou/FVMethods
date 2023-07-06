@@ -8,5 +8,5 @@ setup(
     author="Jonathan Palafoutas",
     author_email="jpalafou@princeton.edu",
     packages=find_packages(),
-    install_requires=["numpy", "matplotlib", "tqdm"],
+    install_requires=["numpy", "matplotlib", "pandas", "dataclasses", "tqdm"],
 )

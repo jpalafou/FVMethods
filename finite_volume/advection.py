@@ -1119,8 +1119,10 @@ class AdvectionSolver(Integrator):
 
     def pre_integrate(self, method_name):
         # create solution path if it doesn't exist
-        if not os.path.exists(self._load_directory):
+        try:
             os.makedirs(self._load_directory)
+        except OSError:
+            pass
         self._filename = self._filename + "_" + method_name + ".pkl"
         self.filepath = self._load_directory + self._filename
         # load the solution if it already exists

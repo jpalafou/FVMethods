@@ -1,24 +1,17 @@
-import os
-import sys
-
-
-def blockPrint():
-    """
-    function to enable printing
-    """
-    sys.stdout = open(os.devnull, "w")
-
-
-def enablePrint():
-    """
-    function to disable printing
-    """
-    sys.stdout = sys.__stdout__
-
-
-def build_job_script(job_number, time_limit, n, order, problem):
-    bash_script = """#!/bin/bash
-#SBATCH --job-name=build{}     # create a short name for your job
+def build_job_script(
+    name,
+    time_limit,
+    problem,
+    limiter,
+    flux_strategy,
+    order,
+    n,
+    courant,
+    modify_time_step,
+    integrator,
+):
+    bash_script1 = """#!/bin/bash
+#SBATCH --job-name={}     # create a short name for your job
 #SBATCH --nodes=1              # node count
 #SBATCH --ntasks=1             # total number of tasks across all nodes
 #SBATCH --cpus-per-task=1      # cpu-cores per task (>1 if multi-threaded tasks)
@@ -30,13 +23,23 @@ module purge
 module load anaconda3/2023.3
 conda activate build
 
-echo "running"
-python build_datasets/build_dataset.py --n {} --order {} --problem {}
+echo "running"\n
 """.format(
-        job_number, time_limit, n, order, problem
+        name, time_limit
+    )
+    bash_script2 = (
+        "python build_datasets/run_and_time.py "
+        + "--problem {} ".format(problem)
+        + "--limiter '{}' ".format(limiter)
+        + "--flux_strategy {} ".format(flux_strategy)
+        + "--order {} ".format(order)
+        + "--n {} ".format(n)
+        + "--courant {} ".format(courant)
+        + "--modify_time_step {} ".format(modify_time_step)
+        + "--integrator {} ".format(integrator)
     )
 
-    path_to_file = f"build_datasets/job_scripts/build{job_number}.slurm"
+    path_to_file = f"build_datasets/job_scripts/{name}.slurm"
     with open(path_to_file, "w") as somefile:
-        somefile.write(bash_script)
+        somefile.write(bash_script1 + bash_script2)
     return path_to_file
