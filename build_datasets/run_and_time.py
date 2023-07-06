@@ -21,20 +21,20 @@ if __name__ == "__main__":
     order = int(args.order)
     courant = float(args.courant)
     limiter = args.limiter
-    modify_time_step = args.modify_time_step == 'True'
+    modify_time_step = args.modify_time_step == "True"
     flux_strategy = args.flux_strategy
     integrator = args.integrator
 
 # limiter
-if limiter == 'a priori':
+if limiter == "a priori":
     apriori_limiting = True
     aposteriori_limiting = False
     convex_aposteriori_limiting = False
-elif limiter == 'classic a posteriori':
+elif limiter == "classic a posteriori":
     apriori_limiting = False
     aposteriori_limiting = True
     convex_aposteriori_limiting = False
-elif limiter == 'convex a posteriori':
+elif limiter == "convex a posteriori":
     apriori_limiting = False
     aposteriori_limiting = True
     convex_aposteriori_limiting = True
@@ -80,7 +80,10 @@ nint = n if isinstance(n, int) else n[0]
 
 # creating data directory if it doesn't exist
 data_directory = f"data/cases/{problem}/{limiter}/{flux_strategy}/"
-path_to_data = data_directory + f"order{order}_n{nint}_courant{courant}_refine{modify_time_step}_{integrator}.csv"
+path_to_data = (
+    data_directory
+    + f"order{order}_n{nint}_courant{courant}_refine{modify_time_step}_{integrator}.csv"
+)
 try:
     os.makedirs(data_directory)
 except OSError:
@@ -131,7 +134,7 @@ data["order"] = order
 data["flux strategy"] = flux_strategy
 data["limiter"] = limiter
 data["courant"] = courant
-data["timestep"] = 'adaptive' if modify_time_step else 'fixed'
+data["timestep"] = "adaptive" if modify_time_step else "fixed"
 data["integrator"] = integrator
 data["abs min"] = solver.abs_min
 data["mean min"] = solver.mean_min
