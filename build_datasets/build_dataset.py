@@ -76,10 +76,7 @@ mpp_cfl = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833, 6: 0.0833, 7: 0.05, 8:
 
 # creating data directory if it doesn't exist
 data_directory = f"data/cases/{problem}/"
-path_to_data = (
-    data_directory
-    + f"{limiter}_{flux_strategy}_{integrator}.csv"
-)
+path_to_data = data_directory + f"{limiter}_{flux_strategy}_{integrator}.csv"
 try:
     os.makedirs(data_directory)
 except OSError:
@@ -95,11 +92,11 @@ for order in orders:
             if ndim == 1:
                 ntuple = n
             elif ndim == 2:
-                ntuple = (n,n)
+                ntuple = (n, n)
             # print configurations
             print(f"n = {n}, order {order}, courant = {courant}")
             # time trials
-            print('\ttime trial')
+            print("\ttime trial")
             times = []
             for _ in range(trials):
                 # initialize solver for time trials
@@ -141,26 +138,26 @@ for order in orders:
             mean_tpc = np.mean(times_per_cell)
             std_tpc = np.std(times_per_cell)
             # complete solution
-            print('\tcomplete solution')
+            print("\tcomplete solution")
             # initialize new solver for complete solution
             solver = AdvectionSolver(
-                    u0=u0,
-                    x=x,
-                    v=v,
-                    T=T,
-                    n=ntuple,
-                    order=order,
-                    courant=courant,
-                    bc=bc,
-                    const=const,
-                    apriori_limiting=apriori_limiting,
-                    aposteriori_limiting=aposteriori_limiting,
-                    convex_aposteriori_limiting=convex_aposteriori_limiting,
-                    smooth_extrema_detection=smooth_extrema_detection,
-                    log_every=100000,
-                    load=False,
-                )
-                # integrate
+                u0=u0,
+                x=x,
+                v=v,
+                T=T,
+                n=ntuple,
+                order=order,
+                courant=courant,
+                bc=bc,
+                const=const,
+                apriori_limiting=apriori_limiting,
+                aposteriori_limiting=aposteriori_limiting,
+                convex_aposteriori_limiting=convex_aposteriori_limiting,
+                smooth_extrema_detection=smooth_extrema_detection,
+                log_every=100000,
+                load=False,
+            )
+            # integrate
             if integrator == "ssprk3":
                 solver.ssprk3()
             elif integrator == "rk3":
