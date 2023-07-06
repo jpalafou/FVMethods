@@ -22,7 +22,9 @@ for limiter in ["a priori", "classic a posteriori", "convex a posteriori"]:
                     for integrator in ["ssprk3", "rk3", "rk4"]:
                         path_to_file = build_job_script(
                             name=f"disk-{job_number}",
-                            time_limit=f"0{int(np.ceil(n**2 / 6500))}:00:00",
+                            time_limit="{:02d}:00:00".format(
+                                int(np.ceil(n**2 / 6500))
+                            ),
                             problem="disk",
                             limiter=limiter,
                             flux_strategy=flux_strategy,
