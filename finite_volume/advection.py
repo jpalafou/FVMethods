@@ -29,32 +29,36 @@ class AdvectionSolver(Integrator):
     """
     args:
         u0  preset string or callable function describing solution at t=0
+        bc  string describing a pre-coded boudnary condition
         n   tuple of number of cells in x and y
         x   tuple of boundaries in x
         y   tuple of boundaries in y
+        t0  starting time
         T   solving time
         v   tuple of floating point velocity components
             callable function of x and y
-        courant                 stability condition
-        order                   accuracy requirement for polynomial interpolation
-        bc                      string describing a pre-coded boudnary condition
-        const                   for dirichlet bc
-        flux_strategy           'gauss-legendre' or 'transverse'
-        apriori_limiting        whether to follow zhang and shu mpp limiting
-        aposteriori_limiting    whether to call trouble detection and 2d fallback
+        courant                     stability condition
+        order                       accuracy requirement for polynomial interpolation
+        const                       for dirichlet bc
+        flux_strategy               'gauss-legendre' or 'transverse'
+        apriori_limiting            whether to follow zhang and shu mpp limiting
+        aposteriori_limiting        whether to call trouble detection and 2d fallback
         convex_aposteriori_limiting a more mpp version of a posteriori limiting
-        smooth_extrema_detection    whether to hold back on limiting extrema if smooth
-        cause_trouble           set all cells to be troubled, forcing 2d fallback
-        NAD                     simulation NAD tolerance
-                                set to None or +inf to disable NAD
-        PAD                     physical admissibility detection bounds (lower, upper)
-                                set to None or (-inf, +inf) to disable PAD
-        visualization_tolerance tolerance for whether to visualize theta or a troubled
-                                cell based on some violation
-                                set to None or -inf to visualize simulation values
-        loglen                  number of saved states
-        adjust_time_step        whether to reduce timestep for order >4
-        load                    whether to load precalculated solution or do it again
+        cause_trouble               set all cells to be troubled, forcing 2d fallback
+        SED                         whether to enable smooth extrema detection
+        NAD                         simulation NAD tolerance
+                                    set to None or +inf to disable NAD
+        PAD                         physical admissibility detection (lower, upper)
+                                    set to None or (-inf, +inf) to disable PAD
+        visualization_tolerance     tolerance for whether to visualize theta and/or
+                                    troubled cells based on some violation
+                                    set to None or -inf to visualize simulation values
+        adjust_time_step            whether to reduce timestep for order >4
+        modify_time_step            whether to conditionally reduce dt by half
+        log_every                   number of iterations to complete before logging
+        progress_bar                whether to print a progress bar in the loop
+        load                        whether to load precalculated solution or save a
+                                    new precalculated solution
     returns:
         u   array of saved states
     """
@@ -76,14 +80,15 @@ class AdvectionSolver(Integrator):
         apriori_limiting: bool = False,
         aposteriori_limiting: bool = False,
         convex_aposteriori_limiting: bool = False,
-        smooth_extrema_detection: bool = False,
         cause_trouble: bool = False,
+        SED: bool = False,
         NAD: float = 0.0,
         PAD: tuple = None,
         visualization_tolerance: float = None,
-        log_every: int = 10,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
+        log_every: int = 10,
+        progress_bar: bool = True,
         load: bool = True,
         load_directory: str = "data/solutions/",
     ):
@@ -107,14 +112,15 @@ class AdvectionSolver(Integrator):
             apriori_limiting,
             aposteriori_limiting,
             convex_aposteriori_limiting,
-            smooth_extrema_detection,
             cause_trouble,
+            SED,
             NAD,
             PAD,
             visualization_tolerance,
-            log_every,
             adjust_time_step,
             modify_time_step,
+            log_every,
+            progress_bar,
         ]
         self._filename = "_".join(str(component) for component in filename_components)
         self._load_directory = load_directory
@@ -215,7 +221,9 @@ class AdvectionSolver(Integrator):
         self.every_t = [t0]
 
         # initialize integrator
-        super().__init__(u0=u0, T=T, dt=dt, t0=t0, log_every=log_every)
+        super().__init__(
+            u0=u0, T=T, dt=dt, t0=t0, log_every=log_every, progress_bar=progress_bar
+        )
 
         # boundary conditon
         if bc == "periodic":
@@ -452,7 +460,7 @@ class AdvectionSolver(Integrator):
         else:
             self.apriori_limiter = self.trivial_limiter
 
-        if smooth_extrema_detection:
+        if SED:
             self.detect_smooth_extrema = detect_smooth_extrema
         else:
             self.detect_smooth_extrema = detect_no_smooth_extrema

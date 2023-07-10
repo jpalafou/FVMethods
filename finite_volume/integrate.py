@@ -21,14 +21,17 @@ class Integrator:
         dt_min: float = None,
         t0: float = 0.0,
         log_every: int = 10,
+        progress_bar: bool = False,
     ):
         """
         args:
             u0          np array, initial state
             T           final time
             dt          largest timestep
+            dt_min      smallest timestep
             t0          starting time
-            log_every   number of iterations to store in array
+            log_every   number of iterations to complete before logging
+            progress_bar    whether to print a progress bar in the loop
         """
         self.log_every = log_every
         self.iteration_count = 0
@@ -40,6 +43,13 @@ class Integrator:
         self.u = [u0]  # list of state arrays
         self.t = [t0]  # list of times corresponding to self.u
         self.loglen = 1  # number of logged states
+        self.progress_bar = progress_bar
+
+        # dynamic function assignment
+        if self.progress_bar:
+            self.update_printout = self.update_progress_bar
+        else:
+            self.update_printout = lambda *args: None
 
     # helper functions
     @abc.abstractmethod
@@ -107,8 +117,10 @@ class Integrator:
             return
 
         # initialize progress bar
-        bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
-        progress_bar = tqdm(total=solving_time, bar_format=bar_format)
+        progress_bar = None
+        if self.progress_bar:
+            bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
+            progress_bar = tqdm(total=solving_time, bar_format=bar_format)
 
         # time loop
         dt = self.dt  # initial time step
@@ -123,8 +135,7 @@ class Integrator:
                     self.u0 = u1
                     self.t0 += dt
                     self.logupdate()
-                    progress_bar.n = self.t0
-                    progress_bar.refresh()
+                    self.update_printout(progress_bar)
                     # reset dt
                     dt = self.dt
                     # reduce timestep if the next timestep will bring us beyond T
@@ -133,10 +144,15 @@ class Integrator:
                 elif dt / 2 >= self.dt_min:
                     dt = dt / 2
         ellapsed_time = time.time() - starting_time
-        self.solution_time = ellapsed_time
-        progress_bar.close()
+        if self.progress_bar:
+            progress_bar.close()
         print()
+        self.solution_time = ellapsed_time
         self.post_integrate()
+
+    def update_progress_bar(self, progress_bar):
+        progress_bar.n = self.t0
+        progress_bar.refresh()
 
     # integrators
     def one_euler_step(self):

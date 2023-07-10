@@ -27,14 +27,16 @@ def cleanup(request):
 @pytest.mark.parametrize("order", [1, 2, 8])
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
-@pytest.mark.parametrize("smooth_extrema_detection", [False, True])
+@pytest.mark.parametrize("convex_aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
 def test_init(
     order,
     apriori_limiting,
     aposteriori_limiting,
-    smooth_extrema_detection,
+    convex_aposteriori_limiting,
+    SED,
     NAD,
     PAD,
 ):
@@ -48,7 +50,8 @@ def test_init(
         order=order,
         apriori_limiting=apriori_limiting,
         aposteriori_limiting=aposteriori_limiting,
-        smooth_extrema_detection=smooth_extrema_detection,
+        convex_aposteriori_limiting=convex_aposteriori_limiting,
+        SED=SED,
         NAD=NAD,
         PAD=PAD,
         load_directory=test_directory,
@@ -58,14 +61,16 @@ def test_init(
 @pytest.mark.parametrize("order", [1, 2, 8])
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
-@pytest.mark.parametrize("smooth_extrema_detection", [False, True])
+@pytest.mark.parametrize("convex_aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
 def test_udot(
     order,
     apriori_limiting,
     aposteriori_limiting,
-    smooth_extrema_detection,
+    convex_aposteriori_limiting,
+    SED,
     NAD,
     PAD,
 ):
@@ -79,7 +84,8 @@ def test_udot(
         order=order,
         apriori_limiting=apriori_limiting,
         aposteriori_limiting=aposteriori_limiting,
-        smooth_extrema_detection=smooth_extrema_detection,
+        convex_aposteriori_limiting=convex_aposteriori_limiting,
+        SED=SED,
         NAD=NAD,
         PAD=PAD,
         load_directory=test_directory,
@@ -186,7 +192,7 @@ def test_fallback_mpp(order, config):
 
 @pytest.mark.parametrize("u0", ["square", "sinus"])
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
-def test_smooth_extrema_detection(u0, flux_strategy):
+def test_SED(u0, flux_strategy):
     """
     smooth extrema detection turned on should return the same solution to a sinusoid as
     when slope limiting is turned off
@@ -199,7 +205,7 @@ def test_smooth_extrema_detection(u0, flux_strategy):
         T=1,
         order=4,
         apriori_limiting=False,
-        smooth_extrema_detection=False,
+        SED=False,
         load_directory=test_directory,
     )
     detect_on = AdvectionSolver(
@@ -210,7 +216,7 @@ def test_smooth_extrema_detection(u0, flux_strategy):
         T=1,
         order=4,
         apriori_limiting=True,
-        smooth_extrema_detection=True,
+        SED=True,
         load_directory=test_directory,
     )
     no_limiter.rk4()

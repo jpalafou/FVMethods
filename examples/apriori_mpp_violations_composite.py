@@ -23,7 +23,7 @@ data1 = AdvectionSolver(
     order=order,
     courant=mpp_cfl[order],
     apriori_limiting=True,
-    smooth_extrema_detection=SED,
+    SED=SED,
     modify_time_step=False,
     log_every=1,
 )
@@ -41,7 +41,7 @@ data2 = AdvectionSolver(
     order=order,
     courant=0.8,
     apriori_limiting=True,
-    smooth_extrema_detection=SED,
+    SED=SED,
     modify_time_step=False,
     log_every=1,
 )
@@ -59,7 +59,7 @@ data3 = AdvectionSolver(
     order=order,
     courant=mpp_cfl[order],
     apriori_limiting=True,
-    smooth_extrema_detection=SED,
+    SED=SED,
     modify_time_step=False,
     log_every=1,
 )
@@ -77,7 +77,7 @@ data4 = AdvectionSolver(
     order=order,
     courant=0.8,
     apriori_limiting=True,
-    smooth_extrema_detection=SED,
+    SED=SED,
     modify_time_step=False,
     log_every=1,
 )
@@ -95,7 +95,7 @@ data5 = AdvectionSolver(
     order=order,
     courant=mpp_cfl[order],
     apriori_limiting=True,
-    smooth_extrema_detection=SED,
+    SED=SED,
     modify_time_step=False,
     log_every=1,
 )
@@ -113,7 +113,7 @@ data6 = AdvectionSolver(
     order=order,
     courant=0.8,
     apriori_limiting=True,
-    smooth_extrema_detection=SED,
+    SED=SED,
     modify_time_step=False,
     log_every=1,
 )

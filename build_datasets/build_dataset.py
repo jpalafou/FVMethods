@@ -39,7 +39,7 @@ if problem == "composite":
     T = 1
     bc = "periodic"
     const = None
-    smooth_extrema_detection = True
+    SED = True
     flux_strategies = ["gauss-legendre"]
     ns = [128, 256, 512]
     ndim = 1
@@ -50,7 +50,7 @@ elif problem == "square2d":
     T = 1
     bc = "periodic"
     const = None
-    smooth_extrema_detection = False
+    SED = False
     flux_strategies = ["gauss-legendre", "transverse"]
     ns = [32, 64, 128]
     ndim = 2
@@ -65,7 +65,7 @@ elif problem == "disk":
     T = 2 * np.pi
     bc = "dirichlet"
     const = 0
-    smooth_extrema_detection = False
+    SED = False
     flux_strategies = ["gauss-legendre", "transverse"]
     ns = [64, 128, 256]
     ndim = 2
@@ -113,7 +113,7 @@ for order in orders:
                     apriori_limiting=apriori_limiting,
                     aposteriori_limiting=aposteriori_limiting,
                     convex_aposteriori_limiting=convex_aposteriori_limiting,
-                    smooth_extrema_detection=smooth_extrema_detection,
+                    SED=SED,
                     log_every=100000,
                     load=False,
                 )
@@ -153,7 +153,7 @@ for order in orders:
                 apriori_limiting=apriori_limiting,
                 aposteriori_limiting=aposteriori_limiting,
                 convex_aposteriori_limiting=convex_aposteriori_limiting,
-                smooth_extrema_detection=smooth_extrema_detection,
+                SED=SED,
                 log_every=100000,
                 load=True,
             )

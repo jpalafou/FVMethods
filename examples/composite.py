@@ -19,7 +19,7 @@ data1 = AdvectionSolver(
     order=order,
     apriori_limiting=True,
     aposteriori_limiting=False,
-    smooth_extrema_detection=True,
+    SED=True,
     load=load,
 )
 data1.rk4()
@@ -36,7 +36,7 @@ data2 = AdvectionSolver(
     order=order,
     apriori_limiting=False,
     aposteriori_limiting=True,
-    smooth_extrema_detection=True,
+    SED=True,
     load=load,
 )
 data2.rk4()

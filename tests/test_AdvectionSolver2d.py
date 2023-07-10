@@ -33,7 +33,8 @@ def cleanup(request):
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
-@pytest.mark.parametrize("smooth_extrema_detection", [False, True])
+@pytest.mark.parametrize("convex_aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
 def test_init(
@@ -42,7 +43,8 @@ def test_init(
     flux_strategy,
     apriori_limiting,
     aposteriori_limiting,
-    smooth_extrema_detection,
+    convex_aposteriori_limiting,
+    SED,
     NAD,
     PAD,
 ):
@@ -58,7 +60,8 @@ def test_init(
         flux_strategy=flux_strategy,
         apriori_limiting=apriori_limiting,
         aposteriori_limiting=aposteriori_limiting,
-        smooth_extrema_detection=smooth_extrema_detection,
+        convex_aposteriori_limiting=convex_aposteriori_limiting,
+        SED=SED,
         NAD=NAD,
         PAD=PAD,
         load_directory=test_directory,
@@ -70,7 +73,8 @@ def test_init(
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
-@pytest.mark.parametrize("smooth_extrema_detection", [False, True])
+@pytest.mark.parametrize("convex_aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
 def test_udot(
@@ -79,16 +83,14 @@ def test_udot(
     flux_strategy,
     apriori_limiting,
     aposteriori_limiting,
-    smooth_extrema_detection,
+    convex_aposteriori_limiting,
+    SED,
     NAD,
     PAD,
 ):
     """
     evaluating udot shouldn't return an error
     """
-
-    def vortex(x, y):
-        return -y, x
 
     solution = AdvectionSolver(
         u0="square",
@@ -98,7 +100,8 @@ def test_udot(
         flux_strategy=flux_strategy,
         apriori_limiting=apriori_limiting,
         aposteriori_limiting=aposteriori_limiting,
-        smooth_extrema_detection=smooth_extrema_detection,
+        convex_aposteriori_limiting=convex_aposteriori_limiting,
+        SED=SED,
         NAD=NAD,
         PAD=PAD,
         load_directory=test_directory,

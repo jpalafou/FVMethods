@@ -31,7 +31,7 @@ for order in order_list:
                 flux_strategy="gauss-legendre",
                 apriori_limiting=True,
                 aposteriori_limiting=False,
-                smooth_extrema_detection=False,
+                SED=False,
                 load=load,
             )
             normal_solution.rkorder()
@@ -48,7 +48,7 @@ for order in order_list:
                 flux_strategy="gauss-legendre",
                 apriori_limiting=True,
                 aposteriori_limiting=False,
-                smooth_extrema_detection=False,
+                SED=False,
                 load=load,
             )
             fast_solution.rkorder()

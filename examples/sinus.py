@@ -17,7 +17,7 @@ detect_off = AdvectionSolver(
     order=order,
     flux_strategy=flux_strategy,
     apriori_limiting=True,
-    smooth_extrema_detection=False,
+    SED=False,
     load=load,
 )
 detect_off.ssprk3()
@@ -30,7 +30,7 @@ detect_on = AdvectionSolver(
     order=order,
     flux_strategy=flux_strategy,
     apriori_limiting=True,
-    smooth_extrema_detection=True,
+    SED=True,
     load=load,
 )
 detect_on.ssprk3()
