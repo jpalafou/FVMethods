@@ -25,7 +25,7 @@ data1 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     log_every=1,
 )
 data1.ssprk3()
@@ -43,7 +43,7 @@ data2 = AdvectionSolver(
     flux_strategy="gauss-legendre",
     courant=0.8,
     aposteriori_limiting=True,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     log_every=1,
 )
 data2.ssprk3()
@@ -61,7 +61,7 @@ data3 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     log_every=1,
 )
 data3.rk3()
@@ -79,7 +79,7 @@ data4 = AdvectionSolver(
     flux_strategy=flux_strategy,
     courant=0.8,
     aposteriori_limiting=True,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     log_every=1,
 )
 data4.rk4()

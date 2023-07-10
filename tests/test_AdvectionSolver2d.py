@@ -32,8 +32,9 @@ def cleanup(request):
 @pytest.mark.parametrize("order", [1, 2, 8])
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("apriori_limiting", [False, True])
+@pytest.mark.parametrize("mpp_lite", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
-@pytest.mark.parametrize("convex_aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("convex", [False, True])
 @pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
@@ -42,8 +43,9 @@ def test_init(
     order,
     flux_strategy,
     apriori_limiting,
+    mpp_lite,
     aposteriori_limiting,
-    convex_aposteriori_limiting,
+    convex,
     SED,
     NAD,
     PAD,
@@ -59,8 +61,9 @@ def test_init(
         order=order,
         flux_strategy=flux_strategy,
         apriori_limiting=apriori_limiting,
+        mpp_lite=mpp_lite,
         aposteriori_limiting=aposteriori_limiting,
-        convex_aposteriori_limiting=convex_aposteriori_limiting,
+        convex=convex,
         SED=SED,
         NAD=NAD,
         PAD=PAD,
@@ -72,8 +75,9 @@ def test_init(
 @pytest.mark.parametrize("order", [1, 2, 8])
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("apriori_limiting", [False, True])
+@pytest.mark.parametrize("mpp_lite", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
-@pytest.mark.parametrize("convex_aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("convex", [False, True])
 @pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
@@ -82,8 +86,9 @@ def test_udot(
     order,
     flux_strategy,
     apriori_limiting,
+    mpp_lite,
     aposteriori_limiting,
-    convex_aposteriori_limiting,
+    convex,
     SED,
     NAD,
     PAD,
@@ -99,8 +104,9 @@ def test_udot(
         order=order,
         flux_strategy=flux_strategy,
         apriori_limiting=apriori_limiting,
+        mpp_lite=mpp_lite,
         aposteriori_limiting=aposteriori_limiting,
-        convex_aposteriori_limiting=convex_aposteriori_limiting,
+        convex=convex,
         SED=SED,
         NAD=NAD,
         PAD=PAD,

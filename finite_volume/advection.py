@@ -35,24 +35,25 @@ class AdvectionSolver(Integrator):
         y   tuple of boundaries in y
         t0  starting time
         T   solving time
-        v   tuple of floating point velocity components
-            callable function of x and y
+        v   tuple of floating point velocity components or callable function of x and y
         courant                     stability condition
         order                       accuracy requirement for polynomial interpolation
         const                       for dirichlet bc
         flux_strategy               'gauss-legendre' or 'transverse'
         apriori_limiting            whether to follow zhang and shu mpp limiting
+        mpp_lite                    cell center is the only interior point
         aposteriori_limiting        whether to call trouble detection and 2d fallback
-        convex_aposteriori_limiting a more mpp version of a posteriori limiting
+        convex                      a more mpp version of a posteriori limiting
         cause_trouble               set all cells to be troubled, forcing 2d fallback
         SED                         whether to enable smooth extrema detection
         NAD                         simulation NAD tolerance
-                                    set to None or +inf to disable NAD
+                                        set to None or +inf to disable NAD
         PAD                         physical admissibility detection (lower, upper)
-                                    set to None or (-inf, +inf) to disable PAD
+                                        set to None or (-inf, +inf) to disable PAD
         visualization_tolerance     tolerance for whether to visualize theta and/or
-                                    troubled cells based on some violation
-                                    set to None or -inf to visualize simulation values
+                                        troubled cells based on some violation
+                                        set to None or -inf to visualize simulation
+                                        values
         adjust_time_step            whether to reduce timestep for order >4
         modify_time_step            whether to conditionally reduce dt by half
         log_every                   number of iterations to complete before logging
@@ -78,8 +79,9 @@ class AdvectionSolver(Integrator):
         const: float = 0.0,
         flux_strategy: str = "gauss-legendre",
         apriori_limiting: bool = False,
+        mpp_lite: bool = False,
         aposteriori_limiting: bool = False,
-        convex_aposteriori_limiting: bool = False,
+        convex: bool = False,
         cause_trouble: bool = False,
         SED: bool = False,
         NAD: float = 0.0,
@@ -110,8 +112,9 @@ class AdvectionSolver(Integrator):
             const,
             flux_strategy,
             apriori_limiting,
+            mpp_lite,
             aposteriori_limiting,
-            convex_aposteriori_limiting,
+            convex,
             cause_trouble,
             SED,
             NAD,
@@ -234,8 +237,9 @@ class AdvectionSolver(Integrator):
 
         # initialize limiting
         self.apriori_limiting = apriori_limiting
+        self.mpp_lite = mpp_lite
         self.aposteriori_limiting = aposteriori_limiting
-        self.convex_aposteriori_limiting = convex_aposteriori_limiting
+        self.convex = convex
 
         # arrays for storing local min/max
         self.m = 0 * self.ones_f
@@ -322,6 +326,9 @@ class AdvectionSolver(Integrator):
                 ) = np.polynomial.legendre.leggauss(N_GL - 2)
                 # scale to cell of width 1
                 interior_GL_quadr_points /= 2
+                # cell center is the only central point considered for mpp_lite
+                if self.mpp_lite:
+                    interior_GL_quadr_points = [0]
                 # generate stencils two are given
                 for x in interior_GL_quadr_points:
                     stencil = ConservativeInterpolation.construct_from_order(
@@ -466,7 +473,7 @@ class AdvectionSolver(Integrator):
             self.detect_smooth_extrema = detect_no_smooth_extrema
 
         if self.aposteriori_limiting:
-            if self.convex_aposteriori_limiting:
+            if self.convex:
                 if self.ndim == 1:
                     self.aposteriori_limiter = self.convex_fallback_scheme1d
                 elif self.ndim == 2:

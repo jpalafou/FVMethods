@@ -21,15 +21,15 @@ if __name__ == "__main__":
 if limiter == "a priori":
     apriori_limiting = True
     aposteriori_limiting = False
-    convex_aposteriori_limiting = False
+    convex = False
 elif limiter == "classic a posteriori":
     apriori_limiting = False
     aposteriori_limiting = True
-    convex_aposteriori_limiting = False
+    convex = False
 elif limiter == "convex a posteriori":
     apriori_limiting = False
     aposteriori_limiting = True
-    convex_aposteriori_limiting = True
+    convex = True
 
 # problem setup
 if problem == "composite":
@@ -112,7 +112,7 @@ for order in orders:
                     const=const,
                     apriori_limiting=apriori_limiting,
                     aposteriori_limiting=aposteriori_limiting,
-                    convex_aposteriori_limiting=convex_aposteriori_limiting,
+                    convex=convex,
                     SED=SED,
                     log_every=100000,
                     load=False,
@@ -152,7 +152,7 @@ for order in orders:
                 const=const,
                 apriori_limiting=apriori_limiting,
                 aposteriori_limiting=aposteriori_limiting,
-                convex_aposteriori_limiting=convex_aposteriori_limiting,
+                convex=convex,
                 SED=SED,
                 log_every=100000,
                 load=True,

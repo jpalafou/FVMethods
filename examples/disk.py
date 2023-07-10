@@ -20,7 +20,7 @@ solver = AdvectionSolver(
     const=0,
     apriori_limiting=True,
     aposteriori_limiting=False,
-    convex_aposteriori_limiting=False,
+    convex=False,
     load=False,
     log_every=100000,
 )

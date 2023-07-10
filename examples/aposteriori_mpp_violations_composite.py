@@ -24,7 +24,7 @@ data2 = AdvectionSolver(
     courant=0.8,
     aposteriori_limiting=True,
     SED=SED,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -42,7 +42,7 @@ data4 = AdvectionSolver(
     courant=0.8,
     aposteriori_limiting=True,
     SED=SED,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     modify_time_step=False,
     log_every=1,
 )
@@ -61,7 +61,7 @@ data6 = AdvectionSolver(
     courant=0.8,
     aposteriori_limiting=True,
     SED=SED,
-    convex_aposteriori_limiting=convex,
+    convex=convex,
     modify_time_step=False,
     log_every=1,
 )
