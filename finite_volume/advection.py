@@ -28,17 +28,18 @@ warnings.filterwarnings("ignore")
 class AdvectionSolver(Integrator):
     """
     args:
-        u0  preset string or callable function describing solution at t=0
-        bc  string describing a pre-coded boudnary condition
-        n   tuple of number of cells in x and y
-        x   tuple of boundaries in x
-        y   tuple of boundaries in y
-        t0  starting time
-        T   solving time
-        v   tuple of floating point velocity components or callable function of x and y
+        u0                          initial condition, keywork or callable function
+        bc                          "periodic" or "dirichlet"
+        const                       for dirichlet bc
+        n                           tuple of number of cells in x and y
+        x                           tuple of boundaries in x
+        y                           tuple of boundaries in y
+        t0                          starting time
+        T                           solving time
+        v                           tuple of floating point velocity components or
+                                    callable function of x and y
         courant                     stability condition
         order                       accuracy requirement for polynomial interpolation
-        const                       for dirichlet bc
         flux_strategy               'gauss-legendre' or 'transverse'
         apriori_limiting            whether to follow zhang and shu mpp limiting
         mpp_lite                    cell center is the only interior point
@@ -68,6 +69,7 @@ class AdvectionSolver(Integrator):
         self,
         u0: str = "square",
         bc: str = "periodic",
+        const: float = 0.0,
         n: tuple = (32, 32),
         x: tuple = (0, 1),
         y: tuple = None,
@@ -76,7 +78,6 @@ class AdvectionSolver(Integrator):
         v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,
-        const: float = 0.0,
         flux_strategy: str = "gauss-legendre",
         apriori_limiting: bool = False,
         mpp_lite: bool = False,
@@ -101,6 +102,7 @@ class AdvectionSolver(Integrator):
         filename_components = [
             u0_str,
             bc,
+            const,
             n,
             x,
             y,
@@ -109,7 +111,6 @@ class AdvectionSolver(Integrator):
             v_str,
             courant,
             order,
-            const,
             flux_strategy,
             apriori_limiting,
             mpp_lite,
