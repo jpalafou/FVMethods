@@ -1,12 +1,17 @@
+# directories
 data/
-figures/
-plot_generation/
-.DS_Store
-**/__pycache__/
-.pytest_cache/
+
+# Distribution / packaging
+develop-eggs/
+eggs/
+.eggs/
 *.egg-info/
+*.egg
+
+# Ignore these also
+.DS_Store
+*/__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
 .vscode/
-build_datasets/job_scripts/
-run_composite_jobs.sh
-run_square2d_jobs.sh
-run_disk_jobs.sh
