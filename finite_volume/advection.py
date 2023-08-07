@@ -322,10 +322,9 @@ class AdvectionSolver(Integrator):
             list_of_interior_pointwise_stencils = []
             if N_GL > 2:
                 # interpolating values along line segments
-                GL_quadr_points, GL_quadr_weights = gauss_lobatto(N_GL)
+                GL_quadr_points, _ = gauss_lobatto(N_GL)
                 # scale to cell of width 1
                 interior_GL_quadr_points = GL_quadr_points[1:-1] / 2
-                GL_quadr_weights /= 2
                 # cell center is the only central point considered for mpp_lite
                 if self.mpp_lite:
                     interior_GL_quadr_points = [0]
@@ -346,6 +345,7 @@ class AdvectionSolver(Integrator):
                 + [right_interface_stencil]
             )
             if self.apriori_limiting:
+                _, GL_quadr_weights = gauss_lobatto(N_GL)
                 C_mpp = min(GL_quadr_weights)
                 self.dt_min = C_mpp / v_over_h
                 # check if timestep is small enough for mpp
