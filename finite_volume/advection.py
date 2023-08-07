@@ -6,6 +6,7 @@ import warnings
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
+from finite_volume.mathematiques import gauss_lobatto
 from finite_volume.trouble_detection import (
     detect_smooth_extrema,
     detect_no_smooth_extrema,
@@ -321,12 +322,10 @@ class AdvectionSolver(Integrator):
             list_of_interior_pointwise_stencils = []
             if N_GL > 2:
                 # interpolating values along line segments
-                (
-                    interior_GL_quadr_points,
-                    _,
-                ) = np.polynomial.legendre.leggauss(N_GL - 2)
+                GL_quadr_points, GL_quadr_weights = gauss_lobatto(N_GL)
                 # scale to cell of width 1
-                interior_GL_quadr_points /= 2
+                interior_GL_quadr_points = GL_quadr_points[1:-1] / 2
+                GL_quadr_weights /= 2
                 # cell center is the only central point considered for mpp_lite
                 if self.mpp_lite:
                     interior_GL_quadr_points = [0]
@@ -347,15 +346,13 @@ class AdvectionSolver(Integrator):
                 + [right_interface_stencil]
             )
             if self.apriori_limiting:
-                # endpoint GL quadrature weights
-                endpoint_GL_quadr_weights = 2 / (N_GL * (N_GL - 1))
-                endpoint_GL_quadr_weights /= 2  # scale to cell of width 1
-                self.dt_min = endpoint_GL_quadr_weights / v_over_h
+                C_mpp = min(GL_quadr_weights)
+                self.dt_min = C_mpp / v_over_h
                 # check if timestep is small enough for mpp
-                if self.dt * v_over_h > endpoint_GL_quadr_weights:
+                if self.dt * v_over_h > min(GL_quadr_weights):
                     print(
                         "WARNING: Maximum principle preserving not satisfied.\nTry a ",
-                        f"courant condition less than {endpoint_GL_quadr_weights}\n",
+                        f"courant condition less than {C_mpp}\n",
                     )
             # no transverse integral stencil
             self._transverse_k = 0

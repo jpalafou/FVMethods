@@ -1,3 +1,4 @@
+import numpy as np
 import dataclasses
 
 
@@ -24,6 +25,38 @@ def lcm(a: int, b: int) -> int:
     if all(isinstance(i, int) for i in [a, b]):
         return a * b // gcf([a, b])
     raise TypeError("Input is not a pair of integers.")
+
+
+def gauss_lobatto(n: int):
+    """
+    args:
+        n   int, number of quadrature points
+    returns:
+        nodes, weights
+            nodes       array of the n quadrature points on [-1, 1]
+            weights     array (size n)
+    """
+    if n == 1:
+        return np.array(0), np.array(1)
+    p = np.polynomial.legendre.Legendre.basis(n - 1)  # Legendre polynomial
+    # find nodes
+    nodes = np.zeros(n)
+    interior_roots = p.deriv().roots()
+    if n > 2:
+        hlf_idx = int(np.floor((n - 2) / 2))
+        hlf_idx_nodes = hlf_idx + 1
+        half_interior_roots = interior_roots[-hlf_idx:]
+        nodes[-hlf_idx_nodes:] = half_interior_roots
+        nodes[:hlf_idx_nodes] = -np.flip(half_interior_roots)
+    nodes[0] = -1
+    nodes[-1] = 1
+    # find weights
+    weights = np.empty(n)
+    if n > 2:
+        weights[1:-1] = 2 / (n * (n - 1) * (p(nodes[1:-1]) ** 2))
+    weights[0] = 2 / (n * (n - 1))
+    weights[-1] = weights[0]
+    return nodes, weights
 
 
 @dataclasses.dataclass
