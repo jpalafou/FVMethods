@@ -91,7 +91,7 @@ class AdvectionSolver(Integrator):
         visualization_tolerance: float = None,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
-        log_every: int = 10,
+        log_every: int = 100000,
         progress_bar: bool = True,
         load: bool = True,
         load_directory: str = "data/solutions/",
