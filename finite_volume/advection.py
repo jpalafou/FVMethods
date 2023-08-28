@@ -87,7 +87,7 @@ class AdvectionSolver(Integrator):
         cause_trouble: bool = False,
         SED: bool = False,
         NAD: float = 0.0,
-        PAD: tuple = None,
+        PAD: tuple = (0, 1),
         visualization_tolerance: float = None,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
@@ -205,9 +205,6 @@ class AdvectionSolver(Integrator):
             )
         self.dt_adjustment = dt_adjustment
 
-        if modify_time_step:
-            self.looks_good = self.check_mpp
-
         # initial condition
         if isinstance(u0, str):
             u0 = generate_ic(type=u0, x=self.x, y=self.y)
@@ -284,6 +281,16 @@ class AdvectionSolver(Integrator):
             np.floor(len(left_interface_stencil) / 2)
         )  # cell reach of stencil
 
+        if self.mpp_lite:
+            cell_center_stencil = ConservativeInterpolation.construct_from_order(
+                order, "center"
+            ).nparray()
+            while cell_center_stencil.size < self._conservative_stencil_size:
+                cell_center_stencil = np.concatenate(
+                    (np.zeros(1), cell_center_stencil, np.zeros(1))
+                )
+            self.cell_center_stencil = cell_center_stencil[np.newaxis]
+
         # quadrature points setup
         self.flux_strategy = flux_strategy if self.ndim > 1 else "gauss-legendre"
         if self.flux_strategy == "gauss-legendre":
@@ -327,7 +334,7 @@ class AdvectionSolver(Integrator):
                 interior_GL_quadr_points = GL_quadr_points[1:-1] / 2
                 # cell center is the only central point considered for mpp_lite
                 if self.mpp_lite:
-                    interior_GL_quadr_points = [0]
+                    interior_GL_quadr_points = []
                 # generate stencils two are given
                 for x in interior_GL_quadr_points:
                     stencil = ConservativeInterpolation.construct_from_order(
@@ -346,7 +353,7 @@ class AdvectionSolver(Integrator):
             )
             if self.apriori_limiting:
                 _, GL_quadr_weights = gauss_lobatto(N_GL)
-                C_mpp = min(GL_quadr_weights)
+                C_mpp = min(GL_quadr_weights) / 2
                 self.dt_min = C_mpp / v_over_h
                 # check if timestep is small enough for mpp
                 if self.dt * v_over_h > min(GL_quadr_weights):
@@ -448,12 +455,13 @@ class AdvectionSolver(Integrator):
             self.get_fluxes = self.get_fluxes_1d
             self.f_of_neighbors = f_of_3_neighbors
             self.compute_alpha = self.compute_alpha_1d
-            self.revise_fluxes = self.revise_fluxes_1d
         if self.ndim == 2:
             self.get_fluxes = self.get_fluxes_2d
             self.f_of_neighbors = f_of_4_neighbors
             self.compute_alpha = self.compute_alpha_2d
-            self.revise_fluxes = self.revise_fluxes_2d
+
+        if modify_time_step:
+            self.looks_good = self.check_mpp
 
         if self.flux_strategy == "gauss-legendre":
             self.integrate_fluxes = self.gauss_legendre_integral
@@ -462,6 +470,13 @@ class AdvectionSolver(Integrator):
 
         if self.apriori_limiting:
             self.apriori_limiter = self.mpp_limiter
+            if self.mpp_lite:
+                if self.ndim == 1:
+                    self.mpplite_Mm_adjustment = self.mpplite_Mm_adjustment_1d
+                if self.ndim == 2:
+                    self.mpplite_Mm_adjustment = self.mpplite_Mm_adjustment_2d
+            else:
+                self.mpplite_Mm_adjustment = self.no_mpplite_Mm_adjustment
         else:
             self.apriori_limiter = self.trivial_limiter
 
@@ -471,13 +486,17 @@ class AdvectionSolver(Integrator):
             self.detect_smooth_extrema = detect_no_smooth_extrema
 
         if self.aposteriori_limiting:
+            self.aposteriori_limiter = self.fallback_scheme
             if self.convex:
                 if self.ndim == 1:
-                    self.aposteriori_limiter = self.convex_fallback_scheme1d
+                    self.revise_fluxes = self.revise_blended_fluxes_1d
                 elif self.ndim == 2:
-                    self.aposteriori_limiter = self.convex_fallback_scheme2d
+                    self.revise_fluxes = self.revise_blended_fluxes_2d
             else:
-                self.aposteriori_limiter = self.fallback_scheme
+                if self.ndim == 1:
+                    self.revise_fluxes = self.revise_fluxes_1d
+                elif self.ndim == 2:
+                    self.revise_fluxes = self.revise_fluxes_2d
         else:
             self.aposteriori_limiter = self.trivial_limiter
 
@@ -590,11 +609,15 @@ class AdvectionSolver(Integrator):
         M = self.f_of_neighbors(fallback, f=np.maximum)
         self.m[...], self.M[...] = m[1:-1], M[1:-1]
         fallback = fallback[1:-1]  # remove extra gw for computing m and M
-        theta, visualize_theta = self.apriori_limiter(
+        theta, visualize_theta, M_i, m_i = self.apriori_limiter(
             points=points, u=fallback, m=m, M=M
         )
         # apply smooth extrema detection
-        theta = np.where(alpha < 1, theta, 1.0)
+        theta = np.where(
+            np.logical_or(m_i < self.PAD[0], M_i > self.PAD[1]),
+            theta,
+            np.where(alpha < 1, theta, 1.0),
+        )
         # store theta visualization
         self.theta += theta[1:-1]
         self.visualize_theta[...] = np.where(
@@ -652,11 +675,15 @@ class AdvectionSolver(Integrator):
             M, chop_size=self.riemann_zone, axis=[0, 1]
         )  # store for later
         fallback = fallback[1:-1, 1:-1]  # remove extra gw for computing m and M
-        theta, visualize_theta = self.apriori_limiter(
+        theta, visualize_theta, M_ij, m_ij = self.apriori_limiter(
             points=np.array([horizontal_points, vertical_points]), u=fallback, m=m, M=M
         )
         # apply smooth extrema detection
-        theta = np.where(alpha < 1.0, theta, 1.0)
+        theta = np.where(
+            np.logical_or(m_ij < self.PAD[0], M_ij > self.PAD[1]),
+            theta,
+            np.where(alpha < 1, theta, 1.0),
+        )
         # store theta
         stored_theta = chop(theta, self.riemann_zone, axis=0)
         stored_theta = chop(stored_theta, self.riemann_zone, axis=1)
@@ -708,6 +735,48 @@ class AdvectionSolver(Integrator):
         alpha = np.where(alpha_x < alpha_y, alpha_x, alpha_y)
         return alpha
 
+    def no_mpplite_Mm_adjustment(self, u, M_ij, m_ij):
+        """
+        args:
+            u               np array (m, n)
+            M_ij            np array (m,) or (m, n),    maximum of reconstructed points
+                                                        not including cell center
+            m_ij            np array (m,) or (m, n),    minimum of reconstructed points
+                                                        not including cell center
+        """
+        return M_ij, m_ij
+
+    def mpplite_Mm_adjustment_1d(self, u, M_ij, m_ij):
+        u_gw = self.apply_bc(u[1:-1], gw=self.gw_riemann, const=self.const)
+        cell_center_points = self.conservative_interpolation(
+            u=u_gw,
+            stencils=self.cell_center_stencil,
+        )[
+            0
+        ]  # remove ghost width to retrive original array u
+        M_ij = np.maximum(M_ij, cell_center_points)
+        m_ij = np.minimum(m_ij, cell_center_points)
+        return M_ij, m_ij
+
+    def mpplite_Mm_adjustment_2d(self, u, M_ij, m_ij):
+        horizontal_lines = self.conservative_interpolation(
+            u=self.apply_bc(
+                chop(u, self.excess_riemann_gw + 1, axis=[0, 1]),
+                gw=((self.gw_riemann,), (self.gw_riemann,)),
+                const=self.const,
+            ),
+            stencils=self.cell_center_stencil,
+            axis=0,
+        )
+        cell_center_points = self.conservative_interpolation(
+            u=horizontal_lines, stencils=self.cell_center_stencil, axis=2
+        )[
+            0, 0
+        ]  # remove ghost width to retrive original array u
+        M_ij = np.maximum(M_ij, cell_center_points)
+        m_ij = np.minimum(m_ij, cell_center_points)
+        return M_ij, m_ij
+
     def gauss_legendre_integral(self, pointwise_fluxes: np.ndarray, axis: int):
         """
         args:
@@ -731,7 +800,7 @@ class AdvectionSolver(Integrator):
         return apply_stencil(pointwise_fluxes_stack, self.transverse_stencil)
 
     def trivial_limiter(self, u, **kwargs):
-        return np.ones_like(u), np.ones_like(u)
+        return np.ones_like(u), np.ones_like(u), np.ones_like(u), np.ones_like(u)
 
     def mpp_limiter(
         self, points: np.ndarray, u: np.ndarray, m: np.ndarray, M: np.ndarray
@@ -743,11 +812,16 @@ class AdvectionSolver(Integrator):
             m       min of cell and neighbors (m,) or (m, n)
             M       max of cell and neighbors (m,) or (m, n)
         returns:
-            theta   (m,) or (m, n)
+            theta           np array (m,) or (m, n), reconstruction limiter
+            visualize_theta np array (m,) or (m, n), pretend value of theta
+            M_ij            np array (m,) or (m, n), maximum of reconstructed points
+            m_ij            np array (m,) or (m, n), minimum of reconstructed points
         """
         # max and min of u evaluated at quadrature points
-        m_ij = np.amin(points, axis=tuple(range(points.ndim - self.ndim)))
         M_ij = np.amax(points, axis=tuple(range(points.ndim - self.ndim)))
+        m_ij = np.amin(points, axis=tuple(range(points.ndim - self.ndim)))
+        M_ij, m_ij = self.mpplite_Mm_adjustment(u, M_ij, m_ij)
+
         # theta visualization
         u_range = np.max(u) - np.min(u)
         visualize_theta = np.where(
@@ -762,7 +836,8 @@ class AdvectionSolver(Integrator):
         m_arg = np.abs(m - u) / ((np.abs(m_ij - u)))
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
-        return theta, visualize_theta
+
+        return theta, visualize_theta, M_ij, m_ij
 
     def fallback_scheme(self, u: np.ndarray, dt: float):
         """
@@ -787,14 +862,15 @@ class AdvectionSolver(Integrator):
         possible_trouble = np.where(lower_differences < -tolerance, 1, 0)
         possible_trouble = np.where(upper_differences > tolerance, 1, possible_trouble)
 
-        # check for smooth extrema and relax
-        if np.any(possible_trouble):
-            alpha = self.compute_alpha(self.apply_bc(unew, gw=3, const=self.const))
-            trouble = np.where(possible_trouble, np.where(alpha < 1, 1, 0), 0)
+        # SED
+        alpha = self.compute_alpha(self.apply_bc(unew, gw=3, const=self.const))
 
-        # PAD
-        trouble = np.where(unew < self.PAD[0], 1, trouble)
-        trouble = np.where(unew > self.PAD[1], 1, trouble)
+        # PAD then SED then NAD
+        trouble = np.where(
+            np.logical_or(unew < self.PAD[0], unew > self.PAD[1]),
+            1,
+            np.where(alpha < 1, possible_trouble, 0),
+        )
 
         # set all cells to 1 if cause_trouble = True
         trouble = (
@@ -828,7 +904,6 @@ class AdvectionSolver(Integrator):
         """
 
         # flag faces of troubled cells as troubled
-
         troubled_faces = np.zeros_like(self.f, dtype=int)
         troubled_faces[:-1] = trouble
         troubled_faces[1:] = np.where(trouble, 1, troubled_faces[1:])
@@ -880,55 +955,21 @@ class AdvectionSolver(Integrator):
         self.f[...] = np.where(EW_troubled_faces, EW_fallback_fluxes, self.f)
         self.g[...] = np.where(NS_troubled_faces, NS_fallback_fluxes, self.g)
 
-    def convex_fallback_scheme1d(self, u: np.ndarray, dt: float):
+    def revise_blended_fluxes_1d(self, u: np.ndarray, trouble: np.ndarray):
         """
         args:
-            u   initial state   (m, n)
-            ucandidate  proposed next state (ny, nx)
+            u   (m,)
+            trouble (m,)
         overwrites:
-            self.NS_fluxes and self.EW_fluxes to fall back to second order
-            when trouble is detected
+            self.f  (m + 1,)
         """
-        # compute candidate solution
-        unew = u + dt * self.get_dynamics()
-
-        # NAD
-        u_3gw = self.apply_bc(u, gw=3, const=self.const)
-        u_2gw = u_3gw[1:-1]
-        unew_5gw = self.apply_bc(unew, gw=5, const=self.const)
-        unew_2gw = unew_5gw[3:-3]
-        m = self.f_of_neighbors(u_3gw, f=np.minimum)
-        M = self.f_of_neighbors(u_3gw, f=np.maximum)
-
-        u_range = np.max(u) - np.min(u)
-        tolerance = self.NAD * u_range
-        upper_differences, lower_differences = unew_2gw - M, unew_2gw - m
-        possible_trouble = np.where(lower_differences < -tolerance, 1, 0)
-        possible_trouble = np.where(upper_differences > tolerance, 1, possible_trouble)
-
-        # reset trouble and theta array
-        trouble = np.zeros_like(possible_trouble, dtype="int")
-
-        # check for smooth extrema and relax
-        if np.any(possible_trouble):
-            alpha = self.compute_alpha(unew_5gw)
-            trouble = np.where(possible_trouble, np.where(alpha < 1, 1, 0), 0)
-
-        # PAD
-        trouble = np.where(unew_2gw < self.PAD[0], 1, trouble)
-        trouble = np.where(unew_2gw > self.PAD[1], 1, trouble)
-
-        # set all cells to 1 if cause_trouble = True
-        trouble = (
-            1 - self.cause_trouble
-        ) * trouble + self.cause_trouble * np.ones_like(trouble, dtype="int")
-
         # initialize theta
-        theta = trouble.astype("float")
+        trouble_2gw = self.apply_bc(trouble, gw=2, const=self.const)
+        theta = trouble_2gw.astype("float")
 
         # First neighbors
-        theta[:-1] = np.maximum(0.75 * trouble[1:], theta[:-1])
-        theta[1:] = np.maximum(0.75 * trouble[:-1], theta[1:])
+        theta[:-1] = np.maximum(0.75 * trouble_2gw[1:], theta[:-1])
+        theta[1:] = np.maximum(0.75 * trouble_2gw[:-1], theta[1:])
 
         # Second neighbors
         theta[:-1] = np.maximum(0.25 * (theta[1:] > 0), theta[:-1])
@@ -937,23 +978,8 @@ class AdvectionSolver(Integrator):
         # flag affected faces with theta
         affected_face_x = np.maximum(theta[1:-2], theta[2:-1])
 
-        # store history of troubled cells
-        self.trouble += trouble[2:-2]
-        visualize_trouble = np.where(
-            lower_differences[2:-2] < -self.visualization_tolerance * u_range,
-            1,
-            0,
-        )
-        visualize_trouble = np.where(
-            upper_differences[2:-2] > self.visualization_tolerance * u_range,
-            1,
-            visualize_trouble,
-        )
-        self.visualize_trouble[...] = np.where(
-            visualize_trouble, 1, self.visualize_trouble
-        )
-
         # compute second order face interpolations
+        u_2gw = self.apply_bc(u, gw=2, const=self.const)
         left_face, right_face = compute_fallback_faces(u_2gw, axis=0)
 
         # revise fluxes
@@ -967,62 +993,29 @@ class AdvectionSolver(Integrator):
             affected_face_x * fallback_fluxes_x + (1 - affected_face_x) * self.f
         )
 
-    def convex_fallback_scheme2d(self, u: np.ndarray, dt: float):
+    def revise_blended_fluxes_2d(self, u: np.ndarray, trouble: np.ndarray):
         """
         args:
-            u   initial state   (m, n)
-            ucandidate  proposed next state (ny, nx)
+            u   (m, n)
+            trouble (m, n)
         overwrites:
-            self.NS_fluxes and self.EW_fluxes to fall back to second order
-            when trouble is detected
+            self.f  (m, n + 1)
+            self.g  (m + 1, n)
         """
-        # compute candidate solution
-        unew = u + dt * self.get_dynamics()
-
-        # NAD
-        u_3gw = self.apply_bc(u, gw=3, const=self.const)
-        u_2gw = u_3gw[1:-1, 1:-1]
-        unew_5gw = self.apply_bc(unew, gw=5, const=self.const)
-        unew_2gw = unew_5gw[3:-3, 3:-3]
-        m = self.f_of_neighbors(u_3gw, f=np.minimum)
-        M = self.f_of_neighbors(u_3gw, f=np.maximum)
-
-        u_range = np.max(u) - np.min(u)
-        tolerance = self.NAD * u_range
-        upper_differences, lower_differences = unew_2gw - M, unew_2gw - m
-        possible_trouble = np.where(lower_differences < -tolerance, 1, 0)
-        possible_trouble = np.where(upper_differences > tolerance, 1, possible_trouble)
-
-        # reset trouble and theta array
-        trouble = np.zeros_like(possible_trouble, dtype="int")
-
-        # check for smooth extrema and relax
-        if np.any(possible_trouble):
-            alpha = self.compute_alpha(unew_5gw)
-            trouble = np.where(possible_trouble, np.where(alpha < 1, 1, 0), 0)
-
-        # PAD
-        trouble = np.where(unew_2gw < self.PAD[0], 1, trouble)
-        trouble = np.where(unew_2gw > self.PAD[1], 1, trouble)
-
-        # set all cells to 1 if cause_trouble = True
-        trouble = (
-            1 - self.cause_trouble
-        ) * trouble + self.cause_trouble * np.ones_like(trouble, dtype="int")
-
         # initialize theta
-        theta = trouble.astype("float")
+        trouble_2gw = self.apply_bc(trouble, gw=2, const=self.const)
+        theta = trouble_2gw.astype("float")
 
         # First neighbors
-        theta[:, :-1] = np.maximum(0.75 * trouble[:, 1:], theta[:, :-1])
-        theta[:, 1:] = np.maximum(0.75 * trouble[:, :-1], theta[:, 1:])
-        theta[:-1, :] = np.maximum(0.75 * trouble[1:, :], theta[:-1, :])
-        theta[1:, :] = np.maximum(0.75 * trouble[:-1, :], theta[1:, :])
+        theta[:, :-1] = np.maximum(0.75 * trouble_2gw[:, 1:], theta[:, :-1])
+        theta[:, 1:] = np.maximum(0.75 * trouble_2gw[:, :-1], theta[:, 1:])
+        theta[:-1, :] = np.maximum(0.75 * trouble_2gw[1:, :], theta[:-1, :])
+        theta[1:, :] = np.maximum(0.75 * trouble_2gw[:-1, :], theta[1:, :])
         # Second neighbors
-        theta[:-1, :-1] = np.maximum(0.5 * trouble[1:, 1:], theta[:-1, :-1])
-        theta[:-1, 1:] = np.maximum(0.5 * trouble[1:, :-1], theta[:-1, 1:])
-        theta[1:, :-1] = np.maximum(0.5 * trouble[:-1, 1:], theta[1:, :-1])
-        theta[1:, 1:] = np.maximum(0.5 * trouble[:-1, :-1], theta[1:, 1:])
+        theta[:-1, :-1] = np.maximum(0.5 * trouble_2gw[1:, 1:], theta[:-1, :-1])
+        theta[:-1, 1:] = np.maximum(0.5 * trouble_2gw[1:, :-1], theta[:-1, 1:])
+        theta[1:, :-1] = np.maximum(0.5 * trouble_2gw[:-1, 1:], theta[1:, :-1])
+        theta[1:, 1:] = np.maximum(0.5 * trouble_2gw[:-1, :-1], theta[1:, 1:])
         # Third neighbors
         theta[:, :-1] = np.maximum(0.25 * (theta[:, 1:] > 0), theta[:, :-1])
         theta[:, 1:] = np.maximum(0.25 * (theta[:, :-1] > 0), theta[:, 1:])
@@ -1033,23 +1026,8 @@ class AdvectionSolver(Integrator):
         affected_face_x = np.maximum(theta[2:-2, 1:-2], theta[2:-2, 2:-1])
         affected_face_y = np.maximum(theta[1:-2, 2:-2], theta[2:-1, 2:-2])
 
-        # store history of troubled cells
-        self.trouble += trouble[2:-2, 2:-2]
-        visualize_trouble = np.where(
-            lower_differences[2:-2, 2:-2] < -self.visualization_tolerance * u_range,
-            1,
-            0,
-        )
-        visualize_trouble = np.where(
-            upper_differences[2:-2, 2:-2] > self.visualization_tolerance * u_range,
-            1,
-            visualize_trouble,
-        )
-        self.visualize_trouble[...] = np.where(
-            visualize_trouble, 1, self.visualize_trouble
-        )
-
         # compute second order face interpolations
+        u_2gw = self.apply_bc(u, gw=2, const=self.const)
         south_face, north_face = compute_fallback_faces(u_2gw[:, 2:-2], axis=0)
         west_face, east_face = compute_fallback_faces(u_2gw[2:-2, :], axis=1)
 
@@ -1073,9 +1051,9 @@ class AdvectionSolver(Integrator):
         )
 
     def check_mpp(self, u):
-        tol = 1e-16
+        tol = 1e-10
         return not np.logical_or(
-            np.any(u < self.u0_min - tol), np.any(u > self.u0_max + tol)
+            np.any(u < self.PAD[0] - tol), np.any(u > self.PAD[1] + tol)
         )
 
     def rkorder(self):

@@ -130,7 +130,7 @@ class Integrator:
             self.iteration_count += 1
             while not move_on:
                 u1 = step(u0=self.u0, t0=self.t0, dt=dt)
-                if self.looks_good(u1):
+                if self.looks_good(u1) or dt == self.dt_min:
                     move_on = True
                     self.u0 = u1
                     self.t0 += dt
@@ -143,6 +143,8 @@ class Integrator:
                         dt = solving_time - self.t0
                 elif dt / 2 >= self.dt_min:
                     dt = dt / 2
+                else:
+                    dt = self.dt_min
         ellapsed_time = time.time() - starting_time
         if self.progress_bar:
             progress_bar.close()

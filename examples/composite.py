@@ -5,10 +5,10 @@ from finite_volume.advection import AdvectionSolver
 u0 = "composite"
 bc = "periodic"
 const = None
-n = 512
+n = 256
 v = 1
 T = 1
-courant = 0.8
+courant = 0.05
 order = 8
 flux_strategy = "gauss"
 
@@ -20,15 +20,17 @@ data1 = AdvectionSolver(
     n=n,
     v=v,
     T=T,
-    courant=courant,
+    courant=0.8,
+    modify_time_step=True,
     order=order,
     flux_strategy=flux_strategy,
     apriori_limiting=True,
     mpp_lite=True,
     aposteriori_limiting=False,
     convex=False,
+    NAD=None,
     SED=True,
-    load=True,
+    load=False,
 )
 data1.rk4()
 print("data1")
@@ -41,15 +43,17 @@ data2 = AdvectionSolver(
     n=n,
     v=v,
     T=T,
-    courant=courant,
+    courant=0.8,
+    modify_time_step=False,
     order=order,
     flux_strategy=flux_strategy,
     apriori_limiting=False,
     mpp_lite=False,
     aposteriori_limiting=True,
     convex=True,
+    NAD=1e-10,
     SED=True,
-    load=True,
+    load=False,
 )
 data2.rk4()
 print("data2")

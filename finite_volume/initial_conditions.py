@@ -20,6 +20,8 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         return sinus(x, y)
     if type == "square":
         return square(x, y)
+    if type == "disk plus hill":
+        return disk_plus_hill(x, y)
 
 
 def composite(x, y):
@@ -70,6 +72,16 @@ def disk(x, y):
     u = np.zeros(x.shape)
     u = np.where(np.logical_and(disk_idx, np.logical_not(slot_idx)), 1, u)
     return u
+
+
+def disk_plus_hill(x, y):
+    # only defined for 2d
+    xx, yy = np.meshgrid(x, y)
+    r = 0.3
+    disp = -0.5
+    rr = np.sqrt(xx**2 + (yy - disp) ** 2)
+    hill = np.where(rr < r, 0.5 * np.cos((np.pi / r) * rr) + 0.5, 0)
+    return disk(x, y) + hill
 
 
 def gauss(x, y):

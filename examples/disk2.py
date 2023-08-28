@@ -3,14 +3,19 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from finite_volume.advection import AdvectionSolver
 
+
 # problem initialization
-u0 = "square"
-bc = "periodic"
-const = None
-n = (128,)
-x = (0, 1)
-v = (2, 1)
-T = 1
+def vortex(x, y):
+    return -y, x
+
+
+u0 = "disk plus hill"
+bc = "dirichlet"
+const = 0
+n = (64,)
+x = (-1, 1)
+v = vortex
+T = 2 * np.pi
 courant = 0.05
 order = 8
 
@@ -31,7 +36,7 @@ data1 = AdvectionSolver(
     mpp_lite=True,
     aposteriori_limiting=False,
     convex=False,
-    SED=False,
+    SED=True,
     load=False,
 )
 data1.rk4()
@@ -54,12 +59,17 @@ data2 = AdvectionSolver(
     mpp_lite=False,
     aposteriori_limiting=True,
     convex=True,
-    SED=False,
+    SED=True,
     load=False,
 )
 data2.rk4()
 print("data2")
 data2.minmax()
+
+plt.plot(data1.y, data1.u[0][:, int(n[0]/2)], 'k-')
+plt.plot(data1.y, data1.u[-1][:, int(n[0]/2)], '--')
+plt.plot(data2.y, data2.u[-1][:, int(n[0]/2)], '--')
+plt.show()
 
 # plot
 plt.gca().set_aspect("equal")
