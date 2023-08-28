@@ -66,9 +66,9 @@ data2.rk4()
 print("data2")
 data2.minmax()
 
-plt.plot(data1.y, data1.u[0][:, int(n[0]/2)], 'k-')
-plt.plot(data1.y, data1.u[-1][:, int(n[0]/2)], '--')
-plt.plot(data2.y, data2.u[-1][:, int(n[0]/2)], '--')
+plt.plot(data1.y, data1.u[0][:, int(n[0] / 2)], "k-")
+plt.plot(data1.y, data1.u[-1][:, int(n[0] / 2)], "--")
+plt.plot(data2.y, data2.u[-1][:, int(n[0] / 2)], "--")
 plt.show()
 
 # plot
