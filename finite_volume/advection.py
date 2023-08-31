@@ -356,7 +356,7 @@ class AdvectionSolver(Integrator):
                 C_mpp = min(GL_quadr_weights) / 2
                 self.dt_min = C_mpp / v_over_h
                 # check if timestep is small enough for mpp
-                if self.dt * v_over_h > min(GL_quadr_weights):
+                if self.dt * v_over_h > C_mpp:
                     print(
                         "WARNING: Maximum principle preserving not satisfied.\nTry a ",
                         f"courant condition less than {C_mpp}\n",

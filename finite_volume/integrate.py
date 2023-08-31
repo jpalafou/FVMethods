@@ -126,11 +126,11 @@ class Integrator:
         dt = self.dt  # initial time step
         starting_time = time.time()
         while self.t0 < solving_time:
-            move_on = False
+            move_on = force_move_on = False
             self.iteration_count += 1
             while not move_on:
                 u1 = step(u0=self.u0, t0=self.t0, dt=dt)
-                if self.looks_good(u1) or dt == self.dt_min:
+                if self.looks_good(u1) or force_move_on:
                     move_on = True
                     self.u0 = u1
                     self.t0 += dt
@@ -138,13 +138,17 @@ class Integrator:
                     self.update_printout(progress_bar)
                     # reset dt
                     dt = self.dt
-                    # reduce timestep if the next timestep will bring us beyond T
-                    if self.t0 + dt > solving_time:
-                        dt = solving_time - self.t0
-                elif dt / 2 >= self.dt_min:
-                    dt = dt / 2
                 else:
+                    dt = dt / 2
+                # set timestep to dt_min if it is smaller
+                if dt <= self.dt_min:
                     dt = self.dt_min
+                    force_move_on = True
+                # reduce timestep if the next timestep will bring us beyond T
+                if self.t0 + dt > solving_time:
+                    dt = solving_time - self.t0
+                    if dt < self.dt_min:
+                        force_move_on = True
         ellapsed_time = time.time() - starting_time
         if self.progress_bar:
             progress_bar.close()
