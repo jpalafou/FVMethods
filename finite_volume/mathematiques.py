@@ -36,26 +36,26 @@ def gauss_lobatto(n: int):
             nodes       array of the n quadrature points on [-1, 1]
             weights     array (size n)
     """
-    if n == 1:
-        return np.array(0), np.array(1)
+    if n < 2:
+        raise BaseException("A Gauss-Lobatto quadrature has at least 2 points.")
+    # find ndoes
     p = np.polynomial.legendre.Legendre.basis(n - 1)  # Legendre polynomial
-    # find nodes
-    nodes = np.zeros(n)
-    interior_roots = p.deriv().roots()
-    if n > 2:
-        hlf_idx = int(np.floor((n - 2) / 2))
-        hlf_idx_nodes = hlf_idx + 1
-        half_interior_roots = interior_roots[-hlf_idx:]
-        nodes[-hlf_idx_nodes:] = half_interior_roots
-        nodes[:hlf_idx_nodes] = -np.flip(half_interior_roots)
-    nodes[0] = -1
-    nodes[-1] = 1
+    raw_interior_nodes = p.deriv().roots()  # roots of derivative
+    # ensure nodes array is symmetric about a center of 0
+    if n % 2 == 0:
+        first_half = raw_interior_nodes[: (n - 2) // 2]
+        flipped_half = -first_half[::-1]
+        nodes = np.concatenate(([-1], first_half, flipped_half, [1]))
+    else:
+        first_half = raw_interior_nodes[: (n - 2) // 2]
+        flipped_half = -first_half[::-1]
+        nodes = np.concatenate(([-1], first_half, [0], flipped_half, [1]))
     # find weights
     weights = np.empty(n)
-    if n > 2:
-        weights[1:-1] = 2 / (n * (n - 1) * (p(nodes[1:-1]) ** 2))
+    weights[1:-1] = 2 / (n * (n - 1) * (p(nodes[1:-1]) ** 2))
     weights[0] = 2 / (n * (n - 1))
     weights[-1] = weights[0]
+
     return nodes, weights
 
 
