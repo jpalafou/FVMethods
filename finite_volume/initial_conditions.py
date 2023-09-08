@@ -98,14 +98,14 @@ def square(x, y):
     ycondition = np.logical_and(Y > 0.25, Y < 0.75)
     return np.where(np.logical_and(xcondition, ycondition), 1, 0)
 
+
 def gauss(x, y):
     sigma = 1 / 10
     center = 0.5
     if y is None:
-        xc = x - c
-        return np.exp(-(1 / 2) * (xc / sigma)**2)
+        xc = x - center
+        return np.exp(-(1 / 2) * (xc / sigma) ** 2)
     xx, yy = np.meshgrid(x, y)
     xxc, yyc = xx - center, yy - center
     r_sq = xxc**2 + yyc**2
     return np.exp(-(1 / 2) * (r_sq / sigma**2))
-    
