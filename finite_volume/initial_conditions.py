@@ -84,26 +84,28 @@ def disk_plus_hill(x, y):
     return disk(x, y) + hill
 
 
-def gauss(x, y):
-    # only defined for 2d
-    sigma = 1 / 14
-    xx, yy = np.meshgrid(x, y)
-    r_sq = xx**2 + yy**2
-    return np.exp(-r_sq / (2 * (sigma**2)))
-
-
 def sinus(x, y):
     if y is None:
         return np.cos(2 * np.pi * x)
-    else:
-        return np.sin(2 * np.pi * (x + y[:, np.newaxis]))
+    return np.sin(2 * np.pi * (x + y[:, np.newaxis]))
 
 
 def square(x, y):
     if y is None:
         return np.heaviside(x - 0.25, 1) - np.heaviside(x - 0.75, 1)
-    else:
-        X, Y = np.meshgrid(x, y)
-        xcondition = np.logical_and(X > 0.25, X < 0.75)
-        ycondition = np.logical_and(Y > 0.25, Y < 0.75)
-        return np.where(np.logical_and(xcondition, ycondition), 1, 0)
+    X, Y = np.meshgrid(x, y)
+    xcondition = np.logical_and(X > 0.25, X < 0.75)
+    ycondition = np.logical_and(Y > 0.25, Y < 0.75)
+    return np.where(np.logical_and(xcondition, ycondition), 1, 0)
+
+def gauss(x, y):
+    sigma = 1 / 10
+    center = 0.5
+    if y is None:
+        xc = x - c
+        return np.exp(-(1 / 2) * (xc / sigma)**2)
+    xx, yy = np.meshgrid(x, y)
+    xxc, yyc = xx - center, yy - center
+    r_sq = xxc**2 + yyc**2
+    return np.exp(-(1 / 2) * (r_sq / sigma**2))
+    
