@@ -3,12 +3,7 @@ import dataclasses
 import numpy as np
 import csv
 import os.path
-from finite_volume.mathematiques import (
-    lcm,
-    Fraction,
-    LinearCombination,
-)
-from finite_volume.polynome import Polynome
+from finite_volume.mathematiques import lcm, Fraction, LinearCombination, Polynome
 
 
 stencil_path = "stencils/"
