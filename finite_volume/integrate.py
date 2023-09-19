@@ -235,6 +235,65 @@ class Integrator:
 
         self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
+    def rk6(self):
+        """
+        6th order Runge-Kutta integrator
+        """
+
+        def step(u0, t0, dt):
+            v = np.sqrt(21)
+            k1 = dt * self.udot(u=u0, t=t0, dt=dt)
+            k2 = dt * self.udot(u=u0 + k1, t=t0 + dt, dt=dt)
+            k3 = dt * self.udot(u=u0 + (3 * k1 + k2) / 8, t=t0 + dt / 2, dt=dt / 2)
+            k4 = dt * self.udot(
+                u=u0 + (8 * k1 + 2 * k2 + 8 * k3) / 27,
+                t=t0 + (2 / 3) * dt,
+                dt=(2 / 3) * dt,
+            )
+            k5 = dt * self.udot(
+                u=u0
+                + (
+                    3 * (3 * v - 7) * k1
+                    - 8 * (7 - v) * k2
+                    + 48 * (7 - v) * k3
+                    - 3 * (21 - v) * k4
+                )
+                / 392,
+                t=t0 + (7 - v) * dt / 14,
+                dt=(7 - v) * dt / 14,
+            )
+            k6 = dt * self.udot(
+                u=u0
+                + (
+                    -5 * (231 + 51 * v) * k1
+                    - 40 * (7 + v) * k2
+                    - 320 * v * k3
+                    + 3 * (21 + 121 * v) * k4
+                    + 392 * (6 + v) * k5
+                )
+                / 1960,
+                t=t0 + (7 + v) * dt / 14,
+                dt=(7 + v) * dt / 14,
+            )
+            k7 = dt * self.udot(
+                u=u0
+                + (
+                    15 * (22 + 7 * v) * k1
+                    + 120 * k2
+                    + 40 * (7 * v - 5) * k3
+                    - 63 * (3 * v - 2) * k4
+                    - 14 * (49 + 9 * v) * k5
+                    + 70 * (7 - v) * k6
+                )
+                / 180,
+                t=t0 + dt,
+                dt=dt,
+            )
+            u1 = u0 + (9 * k1 + 64 * k3 + 49 * k5 + 49 * k6 + 9 * k7) / 180
+            return u1
+
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
+
     def ssprk2(self):
         """
         2nd order strong stability preserving Runge-Kutta integrator
