@@ -11,7 +11,7 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         initial condition defined on xy mesh (m, n)
     """
     if type == "composite":
-        return composite(x, y)
+        return composite(x)
     if type == "disk":
         return disk(x, y)
     if type == "gauss":
@@ -22,9 +22,11 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         return square(x, y)
     if type == "disk plus hill":
         return disk_plus_hill(x, y)
+    if type == "just the gauss":
+        return just_the_gauss(x)
 
 
-def composite(x, y):
+def composite(x):
     # only defined for 1d
     u = np.zeros(len(x))
     for i in range(len(x)):
@@ -109,3 +111,26 @@ def gauss(x, y):
     xxc, yyc = xx - center, yy - center
     r_sq = xxc**2 + yyc**2
     return np.exp(-(1 / 2) * (r_sq / sigma**2))
+
+
+def just_the_gauss(x):
+    initial_domain = [0.7, 0.8]
+    transformed_domain = [0.2, 0.8]
+
+    def transform(x):
+        m = (initial_domain[1] - initial_domain[0]) / (
+            transformed_domain[1] - transformed_domain[0]
+        )
+        return m * (x - transformed_domain[0]) + initial_domain[0]
+
+    y = transform(x)
+    u = (
+        1
+        / 6
+        * (
+            np.sqrt(np.maximum(1 - (20 * (y - 0.75 - 0.0025)) ** 2, 0))
+            + np.sqrt(np.maximum(1 - (20 * (y - 0.75 + 0.0025)) ** 2, 0))
+            + 4 * np.sqrt(np.maximum(1 - (20 * (y - 0.75)) ** 2, 0))
+        )
+    )
+    return u
