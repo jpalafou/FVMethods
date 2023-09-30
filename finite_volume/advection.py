@@ -149,6 +149,7 @@ class AdvectionSolver(Integrator):
         # spatial discretization in y
         if self.ndim == 1:
             self.y = None
+            ny = 1
             self.hy = 1
             self.Ly = 1
             self.hy_recip = 1
@@ -185,25 +186,19 @@ class AdvectionSolver(Integrator):
                 vx_max, vy_max = np.max(abs(v_max[0])), np.max(abs(v_max[1]))
 
         # time discretization
-        self.courant = courant
         self.adjust_time_step = adjust_time_step
         self.order = order
         v_over_h = vx_max / self.hx + vy_max / self.hy
         if v_over_h == 0:
             print("0 velocity case: setting v / h to 10 / T")
             v_over_h = 10 / T
-        dt = courant / v_over_h
-        dt_adjustment = None
+        self.courant = courant
         if adjust_time_step and order > 4:
-            dt_adjustment_x = rk4_dt_adjust(self.hx, self.Lx, order)
-            dt_adjustment_y = rk4_dt_adjust(self.hy, self.Ly, order)
-            dt_adjustment = min(dt_adjustment_x, dt_adjustment_y)
-            dt = dt * dt_adjustment
-            print(
-                f"Decreasing timestep by a factor of {dt_adjustment} to maintain",
-                f" order {order} with rk4",
-            )
-        self.dt_adjustment = dt_adjustment
+            adjusted_courant = min(rk4_dt_adjust(nx, order), rk4_dt_adjust(ny, order))
+            if adjusted_courant < courant:
+                self.courant = adjusted_courant
+                print(f"Reassigned C={courant} for order {order}")
+        dt = self.courant / v_over_h
 
         # initial condition
         if isinstance(u0, str):

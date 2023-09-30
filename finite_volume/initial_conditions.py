@@ -24,6 +24,10 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         return disk_plus_hill(x, y)
     if type == "just the gauss":
         return just_the_gauss(x)
+    if type == "four friends":
+        return four_friends(x)
+    if type == "composite only gauss":
+        return composite_only_gauss(x)
 
 
 def composite(x):
@@ -115,7 +119,7 @@ def gauss(x, y):
 
 def just_the_gauss(x):
     initial_domain = [0.7, 0.8]
-    transformed_domain = [0.2, 0.8]
+    transformed_domain = [0.4, 0.8]
 
     def transform(x):
         m = (initial_domain[1] - initial_domain[0]) / (
@@ -133,4 +137,53 @@ def just_the_gauss(x):
             + 4 * np.sqrt(np.maximum(1 - (20 * (y - 0.75)) ** 2, 0))
         )
     )
+    return u
+
+
+def four_friends(x):
+    initial_domain = [0.7, 0.8]
+    transformed_domain = [0.2, 0.8]
+
+    def transform(x):
+        m = (initial_domain[1] - initial_domain[0]) / (
+            transformed_domain[1] - transformed_domain[0]
+        )
+        return m * (x - transformed_domain[0]) + initial_domain[0]
+
+    def pulse(x):
+        u = (
+            1
+            / 6
+            * (
+                np.sqrt(np.maximum(1 - (20 * (x - 0.75 - 0.0025)) ** 2, 0))
+                + np.sqrt(np.maximum(1 - (20 * (x - 0.75 + 0.0025)) ** 2, 0))
+                + 4 * np.sqrt(np.maximum(1 - (20 * (x - 0.75)) ** 2, 0))
+            )
+        )
+        return u
+
+    u = (
+        just_the_gauss(transform(x, [0, 1], [0, 0.25 * x[-1]]))
+        + just_the_gauss(transform(x, [0, 1], [0.25 * x[-1], 0.5 * x[-1]]))
+        + just_the_gauss(transform(x, [0, 1], [0.5 * x[-1], 0.75 * x[-1]]))
+        + just_the_gauss(transform(x, [0, 1], [0.75 * x[-1], 1 * x[-1]]))
+    )
+
+    return u
+
+
+def composite_only_gauss(x):
+    # only defined for 1d
+    u = np.zeros(len(x))
+    for i in range(len(x)):
+        if x[i] >= 0.7 and x[i] <= 0.8:
+            u[i] = (
+                1
+                / 6
+                * (
+                    np.sqrt(max(1 - (20 * (x[i] - 0.75 - 0.0025)) ** 2, 0))
+                    + np.sqrt(max(1 - (20 * (x[i] - 0.75 + 0.0025)) ** 2, 0))
+                    + 4 * np.sqrt(max(1 - (20 * (x[i] - 0.75)) ** 2, 0))
+                )
+            )
     return u

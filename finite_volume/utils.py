@@ -1,16 +1,15 @@
 import numpy as np
 
 
-def rk4_dt_adjust(h, L, order):
+def rk4_dt_adjust(n: int, spatial_order: int) -> float:
     """
     args:
-        h:  cell size
-        L:  1d domain size
-        order:  accuracy requirement
+        n:              number of cells
+        spatial_order:  of accuracy
     returns:
-        dt multiplication factor for rk4 to satisfy an order of accuracy
+        courant factor which makes rk4 have the same order of accuracy as spatial_order
     """
-    return (h / L) ** max((order - 4) / 4, 0)
+    return (1 / n) ** max((spatial_order - 4) / 4, 0)
 
 
 def stack(u: np.ndarray, stacks: int, axis: int = 0):
