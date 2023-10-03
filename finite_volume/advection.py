@@ -197,7 +197,7 @@ class AdvectionSolver(Integrator):
             adjusted_courant = min(rk4_dt_adjust(nx, order), rk4_dt_adjust(ny, order))
             if adjusted_courant < courant:
                 self.courant = adjusted_courant
-                print(f"Reassigned C={courant} for order {order}")
+                print(f"Reassigned C={self.courant} for order {order}")
         dt = self.courant / v_over_h
 
         # initial condition
