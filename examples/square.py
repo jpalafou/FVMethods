@@ -10,8 +10,8 @@ const = None
 n = (128,)
 x = (0, 1)
 v = (2, 1)
-T = 1
-courant = 0.05
+snapshot_dt = 0.2
+num_snapshots = 5
 order = 8
 
 # solve
@@ -22,7 +22,8 @@ data1 = AdvectionSolver(
     n=n,
     x=x,
     v=v,
-    T=T,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=0.8,
     modify_time_step=True,
     order=order,
@@ -45,7 +46,8 @@ data2 = AdvectionSolver(
     n=n,
     x=x,
     v=v,
-    T=T,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=0.8,
     modify_time_step=False,
     order=order,
@@ -65,13 +67,13 @@ data2.minmax()
 plt.gca().set_aspect("equal")
 X, Y = np.meshgrid(data1.x, data1.y)
 contour1 = plt.contour(
-    X, Y, data1.u[-1], levels=[0.1, 0.3, 0.5, 0.7, 0.9], colors="tab:blue"
+    X, Y, data1.u_snapshots[-1][1], levels=[0.1, 0.3, 0.5, 0.7, 0.9], colors="tab:blue"
 )
 contour1.collections[0].set_label("data1")
 contour2 = plt.contour(
     X,
     Y,
-    data2.u[-1],
+    data2.u_snapshots[-1][1],
     levels=[0.1, 0.3, 0.5, 0.7, 0.9],
     linestyles="dashed",
     colors="tab:orange",

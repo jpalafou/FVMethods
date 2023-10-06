@@ -14,7 +14,8 @@ def test_damped_oscillator(unused_parameter):
     test rk4 integration with a damped oscillator
     x_ddot + b x_dot + (k / m) = 0 at t = T
     """
-    T = 5
+    snapshot_dt = 1.0
+    num_snapshots = 5
     dt = 0.001
     m = 1
     b = random.randint(0, 2)
@@ -44,8 +45,13 @@ def test_damped_oscillator(unused_parameter):
         def udot(self, u, t=None, dt=None):
             return np.array([u[1], -b * u[1] - (k / m) * u[0]])
 
-    dho = DampedOscillatorTest(u0=np.array([u0, udot0]), T=T, dt=dt)
+    dho = DampedOscillatorTest(
+        u0=np.array([u0, udot0]),
+        snapshot_dt=snapshot_dt,
+        num_snapshots=num_snapshots,
+        dt=dt,
+    )
     dho.rk4()
 
     # compare
-    assert dho.u[-1][0] == pytest.approx(analytical_solution(T))
+    assert dho.u0[0] == pytest.approx(analytical_solution(num_snapshots * snapshot_dt))

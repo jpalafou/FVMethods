@@ -7,7 +7,8 @@ bc = "periodic"
 const = None
 n = 256
 v = 1
-T = 1
+snapshot_dt = 0.2
+num_snapshots = 5
 courant = 0.05
 order = 8
 flux_strategy = "gauss"
@@ -19,7 +20,8 @@ data1 = AdvectionSolver(
     const=const,
     n=n,
     v=v,
-    T=T,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=0.8,
     modify_time_step=True,
     order=order,
@@ -42,7 +44,8 @@ data2 = AdvectionSolver(
     const=const,
     n=n,
     v=v,
-    T=T,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=0.8,
     modify_time_step=False,
     order=order,
@@ -60,9 +63,13 @@ print("data2")
 data2.minmax()
 
 # plot
-plt.plot(data1.x, data1.u[0], "k-")
-plt.plot(data1.x, data1.u[-1], "o--", label="data1", markerfacecolor="none")
-plt.plot(data2.x, data2.u[-1], "o--", label="data2", markerfacecolor="none")
+plt.plot(data1.x, data1.u_snapshots[0][1], "k-")
+plt.plot(
+    data1.x, data1.u_snapshots[-1][1], "o--", label="data1", markerfacecolor="none"
+)
+plt.plot(
+    data2.x, data2.u_snapshots[-1][1], "o--", label="data2", markerfacecolor="none"
+)
 plt.xlabel("x")
 plt.ylabel(r"$\bar{u}$")
 plt.legend()

@@ -96,7 +96,7 @@ def test_udot(
         PAD=PAD,
         load_directory=test_directory,
     )
-    solution.udot(solution.u[0], t=solution.t[0], dt=solution.dt)
+    solution.udot(solution.u_snapshots[0][1], t=solution.timestamps[0], dt=solution.dt)
 
 
 @pytest.mark.parametrize("n", n_list)
@@ -144,7 +144,9 @@ def test_periodic_solution(n, order):
         n=n, order=order, v=-1, load_directory=test_directory
     )
     backward_advection.rkorder()
-    assert forward_advection.u[-1] == pytest.approx(np.flip(backward_advection.u[-1]))
+    assert forward_advection.u_snapshots[-1][1] == pytest.approx(
+        np.flip(backward_advection.u_snapshots[-1][1])
+    )
 
 
 @pytest.mark.parametrize("order", order_list)
@@ -167,8 +169,8 @@ def test_apriori_mpp(order, config):
         load_directory=test_directory,
     )
     solution.ssprk3()
-    assert np.min(solution.u) >= 0 - tolerance
-    assert np.max(solution.u) <= 1 + tolerance
+    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
+    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
 
 
 @pytest.mark.parametrize("order", order_list)
@@ -192,5 +194,5 @@ def test_fallback_mpp(order, config):
         load_directory=test_directory,
     )
     solution.ssprk3()
-    assert np.min(solution.u) >= 0 - tolerance
-    assert np.max(solution.u) <= 1 + tolerance
+    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
+    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance

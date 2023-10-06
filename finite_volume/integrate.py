@@ -16,42 +16,48 @@ class Integrator:
     def __init__(
         self,
         u0: np.ndarray,
-        T: float,
         dt: float,
+        snapshot_dt: float,
+        num_snapshots: int = 2,
         dt_min: float = None,
         t0: float = 0.0,
-        log_every: int = 10,
         progress_bar: bool = False,
     ):
         """
         args:
-            u0          np array, initial state
-            T           final time
-            dt          largest timestep
-            dt_min      smallest timestep
-            t0          starting time
-            log_every   number of iterations to complete before logging
+            u0              np array, initial state
+            dt              largest timestep
+            snapshot_dt     dt for snapshots
+            num_snapshots   number of times to evolve system by snapshot_dt
+            dt_min          smallest timestep
+            t0              starting time
             progress_bar    whether to print a progress bar in the loop
         """
-        self.log_every = log_every
-        self.iteration_count = 0
-        self.t0 = t0  # time of state u0
-        self.T = T
+        # initialize
+        self.u0 = u0
+        self.t0 = t0
         self.dt = dt
-        self.dt_min = self.dt / 2**10 if dt_min is None else dt_min
-        self.u0 = u0  # state entering iteration step
-        self.u = [u0]  # list of state arrays
-        self.t = [t0]  # list of times corresponding to self.u
-        self.loglen = 1  # number of logged states
-        self.progress_bar = progress_bar
+        self.snapshot_dt = snapshot_dt
+        self.step_count = 0
 
-        # dynamic function assignment
+        # check num_snapshots
+        if num_snapshots < 0:
+            raise BaseException("num_snapshots must be positive.")
+        self.num_snapshots = num_snapshots
+
+        # check dt_min
+        if dt_min is not None:
+            if dt_min < 0 or dt_min >= self.dt:
+                raise BaseException(f"Invalid minimum timestep size {dt_min}")
+        self.dt_min = dt_min
+
+        # progress bar
+        self.progress_bar = progress_bar
         if self.progress_bar:
             self.update_printout = self.update_progress_bar
         else:
             self.update_printout = lambda *args: None
 
-    # helper functions
     @abc.abstractmethod
     def udot(self, u: np.ndarray, t: float, dt: float) -> np.ndarray:
         """
@@ -60,21 +66,42 @@ class Integrator:
             t   time at which u is defined
             dt  time to let u evolve
         returns:
-            dudt evaluated at time t    np array
+            dudt evaluated at time t
         """
         pass
 
-    def logupdate(self):
+    def looks_good(self, u: np.ndarray) -> bool:
         """
-        self.t0 has been overwritten with t0 + dt
-        self.u0 has been overwritten with the state at t0 + dt
+        args:
+            u   np array
+        returns:
+            bool    whether or not to proceed to next time
         """
-        if self.iteration_count % self.log_every == 0 or self.t0 == self.T:
-            self.t.append(self.t0)
-            self.u.append(self.u0)
-            self.loglen += 1
+        return True
 
-    def pre_integrate(self, method_name):
+    @abc.abstractmethod
+    def snapshot(self):
+        """
+        datalogging at set time intervals
+        """
+        pass
+
+    @abc.abstractmethod
+    def step_cleanup(self):
+        """
+        runs after each update of self.t0
+        """
+        pass
+
+    @abc.abstractmethod
+    def refine_timestep(self, dt: float) -> float:
+        """
+        rule for adjusting timestep on the fly
+        """
+        pass
+
+    @abc.abstractmethod
+    def pre_integrate(self, method_name: str) -> bool:
         """
         any producedures that are to be executed before time integration
         args:
@@ -84,33 +111,21 @@ class Integrator:
         """
         return True
 
+    @abc.abstractmethod
     def post_integrate(self):
         """
-        any producedures that are to be executed after time integration
+        teardown procedures
         """
-        # convert lists to arrays
-        self.t = np.asarray(self.t)
-        self.u = np.asarray(self.u)
-        return
+        pass
 
-    def looks_good(self, u):
-        """
-        args:
-            u   np array
-        returns:
-            bool    whether or not to proceed to next time
-        """
-        return True
-
-    def integrate(self, step, method_name: str, T: float = None):
+    def integrate(self, step, method_name: str):
         """
         args:
             step    function to calculate u1 from u0
         overwrites:
             t, u
         """
-        # time step
-        solving_time = self.T if T is None else T
+        solving_time = self.num_snapshots * self.snapshot_dt  # not to be used in loop
 
         # check whether to procede to numerical integration
         if not self.pre_integrate(method_name=f"{method_name}_{solving_time}"):
@@ -123,32 +138,39 @@ class Integrator:
             progress_bar = tqdm(total=solving_time, bar_format=bar_format)
 
         # time loop
-        dt = self.dt  # initial time step
+        dt = self.dt  # initial timestep size
+        snap_time = self.snapshot_dt
+        snapshot_counter = 0
         starting_time = time.time()
-        while self.t0 < solving_time:
+        while snapshot_counter < self.num_snapshots:
             move_on = force_move_on = False
-            self.iteration_count += 1
+            self.step_count += 1
             while not move_on:
                 u1 = step(u0=self.u0, t0=self.t0, dt=dt)
                 if self.looks_good(u1) or force_move_on:
-                    move_on = True
                     self.u0 = u1
                     self.t0 += dt
-                    self.logupdate()
+                    if self.t0 == snap_time:
+                        self.snapshot()
+                        snapshot_counter += 1
+                        snap_time += self.snapshot_dt
+                    move_on = True  # procees to next step
+                    dt = self.dt  # reset dt
+                    self.step_cleanup()
                     self.update_printout(progress_bar)
-                    # reset dt
-                    dt = self.dt
                 else:
-                    dt = dt / 2
+                    dt = self.refine_timestep(dt)
                 # set timestep to dt_min if it is smaller
-                if dt <= self.dt_min:
+                if self.dt_min is not None and dt <= self.dt_min:
                     dt = self.dt_min
                     force_move_on = True
-                # reduce timestep if the next timestep will bring us beyond T
-                if self.t0 + dt > solving_time:
-                    dt = solving_time - self.t0
-                    if dt < self.dt_min:
+                # reduce timestep if the next timestep will bring us beyond snap_time
+                if self.t0 + dt > snap_time:
+                    dt = snap_time - self.t0
+                    if self.dt_min is not None and dt < self.dt_min:
                         force_move_on = True
+                if dt < 0:
+                    raise BaseException("Negative dt encountered.")
         ellapsed_time = time.time() - starting_time
         if self.progress_bar:
             progress_bar.close()
@@ -171,9 +193,7 @@ class Integrator:
             u1 = u0 + dt * k1
             return u1
 
-        self.integrate(
-            step=step, method_name=inspect.currentframe().f_code.co_name, T=self.dt
-        )
+        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
 
     def euler(self):
         """

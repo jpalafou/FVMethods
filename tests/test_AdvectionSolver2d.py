@@ -112,7 +112,7 @@ def test_udot(
         PAD=PAD,
         load_directory=test_directory,
     )
-    solution.udot(solution.u[0], t=solution.t[0], dt=solution.dt)
+    solution.udot(solution.u_snapshots[0][1], t=solution.timestamps[0], dt=solution.dt)
 
 
 @pytest.mark.parametrize("n", n_list)
@@ -160,8 +160,8 @@ def test_periodic_solution(n, order):
         n=(n,), order=order, v=(-1, -2), load_directory=test_directory
     )
     backward_advection.rkorder()
-    assert forward_advection.u[-1] == pytest.approx(
-        np.fliplr(np.flipud(backward_advection.u[-1]))
+    assert forward_advection.u_snapshots[-1][1] == pytest.approx(
+        np.fliplr(np.flipud(backward_advection.u_snapshots[-1][1]))
     )
 
 
@@ -171,7 +171,8 @@ def test_periodic_solution(n, order):
     [
         {
             "x": (-1, 1),
-            "T": 2 * np.pi,
+            "snapshot_dt": np.pi / 4,
+            "num_snapshots": 8,
             "v": vortex,
             "u0": "disk",
             "bc": "dirichlet",
@@ -179,7 +180,8 @@ def test_periodic_solution(n, order):
         },
         {
             "x": (0, 1),
-            "T": 1,
+            "snapshot_dt": np.pi / 4,
+            "num_snapshots": 8,
             "v": (1, 2),
             "u0": "square",
             "bc": "periodic",
@@ -193,7 +195,8 @@ def test_mpp(order, config):
         n=(64,),
         order=order,
         x=config["x"],
-        T=config["T"],
+        snapshot_dt=config["snapshot_dt"],
+        num_snapshots=config["num_snapshots"],
         v=config["v"],
         u0=config["u0"],
         bc=config["bc"],
@@ -204,8 +207,8 @@ def test_mpp(order, config):
         load_directory=test_directory,
     )
     solution.ssprk3()
-    assert np.min(solution.u) >= 0 - tolerance
-    assert np.max(solution.u) <= 1 + tolerance
+    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
+    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
 
 
 def test_fallback_mpp():

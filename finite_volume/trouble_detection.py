@@ -24,24 +24,18 @@ def detect_smooth_extrema(u: np.ndarray, h: float, axis: int):
     v_left = chopchop(du, chop_size=(0, 2), axis=axis) - chopchop(
         du, chop_size=(1, 1), axis=axis
     )
-    alpha_left = (
-        -np.where(
-            dv < 0, np.where(v_left > 0, v_left, 0), np.where(v_left < 0, v_left, 0)
-        )
-        / dv
-    )
+    alpha_left = -np.where(
+        dv < 0, np.where(v_left > 0, v_left, 0), np.where(v_left < 0, v_left, 0)
+    ) / np.maximum(dv, 1e-16 * np.ones_like(dv))
     alpha_left = np.where(np.abs(dv) <= 0, 1, alpha_left)
     alpha_left = np.where(alpha_left < 1, alpha_left, 1)
 
     v_right = chopchop(du, chop_size=(2, 0), axis=axis) - chopchop(
         du, chop_size=(1, 1), axis=axis
     )
-    alpha_right = (
-        np.where(
-            dv > 0, np.where(v_right > 0, v_right, 0), np.where(v_right < 0, v_right, 0)
-        )
-        / dv
-    )
+    alpha_right = np.where(
+        dv > 0, np.where(v_right > 0, v_right, 0), np.where(v_right < 0, v_right, 0)
+    ) / np.maximum(dv, 1e-16 * np.ones_like(dv))
     alpha_right = np.where(np.abs(dv) <= 0, 1, alpha_right)
     alpha_right = np.where(alpha_right < 1, alpha_right, 1)
 
@@ -69,7 +63,7 @@ def minmod(du_left, du_right):
     """
     minmod slope limiter, returns limited slopes of same shape as input
     """
-    ratio = du_right / du_left
+    ratio = du_right / np.maximum(du_left, 1e-16)
     ratio = np.where(ratio < 1, ratio, 1)
     return np.where(ratio > 0, ratio, 0) * du_left
 

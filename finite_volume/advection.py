@@ -2,7 +2,6 @@
 import numpy as np
 import os
 import pickle
-import warnings
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
@@ -22,9 +21,6 @@ from finite_volume.utils import (
 )
 
 
-warnings.filterwarnings("ignore")
-
-
 # class definition
 class AdvectionSolver(Integrator):
     """
@@ -36,7 +32,8 @@ class AdvectionSolver(Integrator):
         x                           tuple of boundaries in x
         y                           tuple of boundaries in y
         t0                          starting time
-        T                           solving time
+        snapshot_dt                 dt for snapshots
+        num_snapshots               number of times to evolve system by snapshot_dt
         v                           tuple of floating point velocity components or
                                     callable function of x and y
         courant                     stability condition
@@ -75,7 +72,8 @@ class AdvectionSolver(Integrator):
         x: tuple = (0, 1),
         y: tuple = None,
         t0: float = 0,
-        T: float = 1,
+        snapshot_dt: float = 1.0,
+        num_snapshots: int = 2,
         v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,
@@ -108,7 +106,8 @@ class AdvectionSolver(Integrator):
             x,
             y,
             t0,
-            T,
+            snapshot_dt,
+            num_snapshots,
             v_str,
             courant,
             order,
@@ -190,8 +189,8 @@ class AdvectionSolver(Integrator):
         self.order = order
         v_over_h = vx_max / self.hx + vy_max / self.hy
         if v_over_h == 0:
-            print("0 velocity case: setting v / h to 10 / T")
-            v_over_h = 10 / T
+            print("0 velocity case: setting v / h to 0.1")
+            v_over_h = 0.1
         self.courant = courant
         if adjust_time_step and order > 4:
             adjusted_courant = min(rk4_dt_adjust(nx, order), rk4_dt_adjust(ny, order))
@@ -208,18 +207,38 @@ class AdvectionSolver(Integrator):
                 u0 = u0(x=self.x)
             if self.ndim == 2:
                 u0 = u0(x=self.x, y=self.y)
+
+        # initialize simulation/visualized theta and trouble
         self.ones_i = np.ones_like(u0, dtype="int")
         self.ones_f = np.ones_like(u0, dtype="float")
+        self.theta = self.ones_f
+        self.visualized_theta = self.ones_f
+        self.trouble = 0 * self.ones_i
+        self.visualized_trouble = 0 * self.ones_i
+
+        # initialize timeseries lists
         self.u0_min = np.min(u0)
         self.u0_max = np.max(u0)
+        self.all_simulation_times = [t0]
         self.min_history = [self.u0_min]
         self.max_history = [self.u0_max]
-        self.steps = 0
-        self.every_t = [t0]
+
+        # initialize snapshots
+        self.u_snapshots = [(t0, u0)]
+        self.theta_snapshots = [(t0, self.theta)]
+        self.visualized_theta_snapshots = [(t0, self.visualized_theta)]
+        self.trouble_snapshots = [(t0, self.trouble)]
+        self.visualized_trouble_snapshots = [(t0, self.visualized_trouble)]
 
         # initialize integrator
+        self.timestamps = [t0]
         super().__init__(
-            u0=u0, T=T, dt=dt, t0=t0, log_every=log_every, progress_bar=progress_bar
+            u0=u0,
+            dt=dt,
+            snapshot_dt=snapshot_dt,
+            num_snapshots=num_snapshots,
+            t0=t0,
+            progress_bar=progress_bar,
         )
 
         # boundary conditon
@@ -238,18 +257,6 @@ class AdvectionSolver(Integrator):
         # arrays for storing local min/max
         self.m = 0 * self.ones_f
         self.M = 0 * self.ones_f
-
-        # arrays for storing theta
-        self.theta = self.ones_f
-        self.theta_history = [self.ones_f]
-        self.visualize_theta = self.ones_i
-        self.visualize_theta_history = [self.ones_i]
-
-        # arrays for storing troubled cells
-        self.trouble = 0 * self.ones_i
-        self.trouble_history = [0 * self.ones_i]
-        self.visualize_trouble = self.ones_i
-        self.visualize_trouble_history = [self.ones_i]
 
         # initialize cause_trouble and udot_evaluation_count
         self.cause_trouble = 1 if cause_trouble else 0
@@ -604,7 +611,7 @@ class AdvectionSolver(Integrator):
         M = self.f_of_neighbors(fallback, f=np.maximum)
         self.m[...], self.M[...] = m[1:-1], M[1:-1]
         fallback = fallback[1:-1]  # remove extra gw for computing m and M
-        theta, visualize_theta, M_i, m_i = self.apriori_limiter(
+        theta, meaningful_theta, M_i, m_i = self.apriori_limiter(
             points=points, u=fallback, m=m, M=M
         )
         # apply smooth extrema detection
@@ -615,9 +622,7 @@ class AdvectionSolver(Integrator):
         )
         # store theta visualization
         self.theta += theta[1:-1]
-        self.visualize_theta[...] = np.where(
-            visualize_theta[1:-1], 1, self.visualize_theta
-        )
+        self.visualized_theta += np.where(meaningful_theta, theta, 1)[1:-1]
         # limit slopes
         points = theta * (points - fallback) + fallback
         # riemann problem
@@ -670,7 +675,7 @@ class AdvectionSolver(Integrator):
             M, chop_size=self.riemann_zone, axis=[0, 1]
         )  # store for later
         fallback = fallback[1:-1, 1:-1]  # remove extra gw for computing m and M
-        theta, visualize_theta, M_ij, m_ij = self.apriori_limiter(
+        theta, meaningful_theta, M_ij, m_ij = self.apriori_limiter(
             points=np.array([horizontal_points, vertical_points]), u=fallback, m=m, M=M
         )
         # apply smooth extrema detection
@@ -682,10 +687,11 @@ class AdvectionSolver(Integrator):
         # store theta
         stored_theta = chop(theta, self.riemann_zone, axis=0)
         stored_theta = chop(stored_theta, self.riemann_zone, axis=1)
-        visualize_theta = chop(visualize_theta, self.riemann_zone, axis=0)
-        visualize_theta = chop(visualize_theta, self.riemann_zone, axis=1)
         self.theta += stored_theta
-        self.visualize_theta[...] = np.where(visualize_theta, 1, self.visualize_theta)
+        visualized_theta = np.where(meaningful_theta, theta, 1)
+        visualized_theta = chop(visualized_theta, self.riemann_zone, axis=0)
+        visualized_theta = chop(visualized_theta, self.riemann_zone, axis=1)
+        self.visualized_theta += visualized_theta
         # limit slopes
         horizontal_points = theta * (horizontal_points - fallback) + fallback
         vertical_points = theta * (vertical_points - fallback) + fallback
@@ -808,7 +814,7 @@ class AdvectionSolver(Integrator):
             M       max of cell and neighbors (m,) or (m, n)
         returns:
             theta           np array (m,) or (m, n), reconstruction limiter
-            visualize_theta np array (m,) or (m, n), pretend value of theta
+            meaningful_theta np array (m,) or (m, n), boolean intolerated violations
             M_ij            np array (m,) or (m, n), maximum of reconstructed points
             m_ij            np array (m,) or (m, n), minimum of reconstructed points
         """
@@ -819,20 +825,20 @@ class AdvectionSolver(Integrator):
 
         # theta visualization
         u_range = np.max(u) - np.min(u)
-        visualize_theta = np.where(
+        meaningful_theta = np.where(
             m_ij - m < -self.visualization_tolerance * u_range, 1, 0
         )
-        visualize_theta[...] = np.where(
-            M_ij - M > self.visualization_tolerance * u_range, 1, visualize_theta
+        meaningful_theta[...] = np.where(
+            M_ij - M > self.visualization_tolerance * u_range, 1, meaningful_theta
         )
         # evaluate slope limiter
         theta = np.ones_like(u)
-        M_arg = np.abs(M - u) / ((np.abs(M_ij - u)))
-        m_arg = np.abs(m - u) / ((np.abs(m_ij - u)))
+        M_arg = np.abs(M - u) / np.maximum(np.abs(M_ij - u), 1e-16 * np.ones_like(u))
+        m_arg = np.abs(m - u) / np.maximum(np.abs(m_ij - u), 1e-16 * np.ones_like(u))
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
 
-        return theta, visualize_theta, M_ij, m_ij
+        return theta, meaningful_theta, M_ij, m_ij
 
     def fallback_scheme(self, u: np.ndarray, dt: float):
         """
@@ -874,16 +880,16 @@ class AdvectionSolver(Integrator):
 
         # store history of troubled cells
         self.trouble += trouble
-        visualize_trouble = np.where(
+        visualized_trouble = np.where(
             lower_differences < -self.visualization_tolerance * u_range, 1, 0
         )
-        visualize_trouble = np.where(
+        visualized_trouble = np.where(
             upper_differences > self.visualization_tolerance * u_range,
             1,
-            visualize_trouble,
+            visualized_trouble,
         )
-        self.visualize_trouble[...] = np.where(
-            visualize_trouble, 1, self.visualize_trouble
+        self.visualized_trouble[...] = np.where(
+            visualized_trouble, 1, self.visualized_trouble
         )
 
         # revise fluxes of troubled cells
@@ -1045,12 +1051,6 @@ class AdvectionSolver(Integrator):
             affected_face_y * fallback_fluxes_y + (1 - affected_face_y) * self.g
         )
 
-    def check_mpp(self, u):
-        tol = 1e-10
-        return not np.logical_or(
-            np.any(u < self.PAD[0] - tol), np.any(u > self.PAD[1] + tol)
-        )
-
     def rkorder(self):
         """
         rk integrate to an order that matches the spatial order
@@ -1071,8 +1071,8 @@ class AdvectionSolver(Integrator):
         returns:
             norm specified error    (ny, nx)
         """
-        approx = self.u[-1]
-        truth = self.u[0]
+        approx = self.u_snapshots[-1][1]
+        truth = self.u_snapshots[0][1]
         if norm == "l1":
             return np.sum(np.abs(approx - truth) * self.hx * self.hy)
         if norm == "l2":
@@ -1080,30 +1080,49 @@ class AdvectionSolver(Integrator):
         if norm == "inf":
             return np.max(np.abs(approx - truth))
 
-    def logupdate(self):
+    def check_mpp(self, u):
+        tol = 1e-10
+        return not np.logical_or(
+            np.any(u < self.PAD[0] - tol), np.any(u > self.PAD[1] + tol)
+        )
+
+    def append_to_timeseries_lists(self):
+        self.all_simulation_times.append(self.t0)
+        self.min_history.append(np.min(self.u0))
+        self.max_history.append(np.max(self.u0))
+
+    def snapshot(self):
+        snap_time = self.t0
+        self.timestamps.append(snap_time)
+        self.u_snapshots.append((snap_time, self.u0))
+        self.theta_snapshots.append(
+            (snap_time, self.theta / self.udot_evaluation_count)
+        )
+        self.visualized_theta_snapshots.append(
+            (snap_time, self.visualized_theta / self.udot_evaluation_count)
+        )
+        self.trouble_snapshots.append(
+            (snap_time, self.trouble / self.udot_evaluation_count)
+        )
+        self.visualized_trouble_snapshots.append(
+            (snap_time, self.visualized_trouble / self.udot_evaluation_count)
+        )
+
+    def step_cleanup(self):
         """
         self.t0 has been overwritten with t0 + dt
         self.u0 has been overwritten with the state at t0 + dt
         """
-        if self.iteration_count % self.log_every == 0 or self.t0 == self.T:
-            self.t.append(self.t0)
-            self.u.append(self.u0)
-            self.theta_history.append(self.theta / self.udot_evaluation_count)
-            self.visualize_theta_history.append(self.visualize_theta)
-            self.trouble_history.append(self.trouble / self.udot_evaluation_count)
-            self.visualize_trouble_history.append(self.visualize_trouble)
-            self.loglen += 1
         # clear theta sum, troubled cell sum, and evaluation count
         self.theta[...] = 0.0
-        self.visualize_theta[...] = 0
+        self.visualized_theta[...] = 0
         self.trouble[...] = 0
-        self.visualize_trouble[...] = 0
+        self.visualized_trouble[...] = 0
         self.udot_evaluation_count = 0
-        # keep track of max/min
-        self.steps += 1
-        self.every_t.append(self.t0)
-        self.min_history.append(np.min(self.u0))
-        self.max_history.append(np.max(self.u0))
+        self.append_to_timeseries_lists()
+
+    def refine_timestep(self, dt):
+        return dt / 2
 
     def pre_integrate(self, method_name):
         # create solution path if it doesn't exist
@@ -1117,30 +1136,26 @@ class AdvectionSolver(Integrator):
         if os.path.isfile(self.filepath) and self.load:
             with open(self.filepath, "rb") as thisfile:
                 loaded_instance = pickle.load(thisfile)
-                self.t = loaded_instance.t
-                self.u = loaded_instance.u
-                self.theta_history = loaded_instance.theta_history
-                self.visualize_theta_history = loaded_instance.visualize_theta_history
-                self.trouble_history = loaded_instance.trouble_history
-                self.visualize_trouble_history = (
-                    loaded_instance.visualize_trouble_history
-                )
-                self.loglen = loaded_instance.loglen
-                self.solution_time = loaded_instance.solution_time
-                self.steps = loaded_instance.steps
-                self.every_t = loaded_instance.every_t
-                self.min_history = loaded_instance.min_history
-                self.max_history = loaded_instance.max_history
-                self.abs_min = loaded_instance.abs_min
-                self.mean_min = loaded_instance.mean_min
-                self.std_min = loaded_instance.std_min
-                self.abs_max = loaded_instance.abs_max
-                self.mean_max = loaded_instance.mean_max
-                self.std_max = loaded_instance.std_max
+                attribute_names = [
+                    attr
+                    for attr in dir(loaded_instance)
+                    if not callable(getattr(loaded_instance, attr))
+                    and not attr.startswith("_")
+                ]
+                for attribute in attribute_names:
+                    value = getattr(loaded_instance, attribute)
+                    setattr(self, attribute, value)
             return False
         # otherwise proceed to integration
         print("New solution instance...")
         return True
+
+    def write_to_file(self):
+        # Save the instance to a file
+        if self.load:
+            with open(self.filepath, "wb") as thisfile:
+                pickle.dump(self, thisfile)
+            print(f"Wrote a solution up to t = {self.t0} located at {self.filepath}\n")
 
     def post_integrate(self):
         # compute max and min history
@@ -1152,11 +1167,7 @@ class AdvectionSolver(Integrator):
         self.mean_max = np.mean(max_history)
         self.std_max = np.std(max_history)
         self.abs_max = np.max(max_history)
-        # Save the instance to a file
-        if self.load:
-            with open(self.filepath, "wb") as thisfile:
-                pickle.dump(self, thisfile)
-            print(f"Wrote a solution instance to {self.filepath}\n")
+        self.write_to_file()
 
     def minmax(self):
         headers = [

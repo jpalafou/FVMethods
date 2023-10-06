@@ -15,6 +15,8 @@ const = 0
 n = (64,)
 x = (-1, 1)
 v = vortex
+snapshot_dt = np.pi / 4
+num_snapshots = 8
 T = 2 * np.pi
 courant = 0.8
 order = 8
@@ -27,7 +29,8 @@ data1 = AdvectionSolver(
     n=n,
     x=x,
     v=v,
-    T=T,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=courant,
     order=order,
     flux_strategy="gauss-legendre",
@@ -49,7 +52,8 @@ data2 = AdvectionSolver(
     n=n,
     x=x,
     v=v,
-    T=T,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=courant,
     order=order,
     flux_strategy="transverse",
@@ -68,13 +72,13 @@ data2.minmax()
 plt.gca().set_aspect("equal")
 X, Y = np.meshgrid(data1.x, data1.y)
 contour1 = plt.contour(
-    X, Y, data1.u[-1], levels=[0.1, 0.3, 0.5, 0.7, 0.9], colors="tab:blue"
+    X, Y, data1.u_snapshots[-1][1], levels=[0.1, 0.3, 0.5, 0.7, 0.9], colors="tab:blue"
 )
 contour1.collections[0].set_label("data1")
 contour2 = plt.contour(
     X,
     Y,
-    data2.u[-1],
+    data2.u_snapshots[-1][1],
     levels=[0.1, 0.3, 0.5, 0.7, 0.9],
     linestyles="dashed",
     colors="tab:orange",
