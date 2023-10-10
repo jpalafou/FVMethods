@@ -67,7 +67,7 @@ def test_init(
         SED=SED,
         NAD=NAD,
         PAD=PAD,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
 
 
@@ -110,7 +110,7 @@ def test_udot(
         SED=SED,
         NAD=NAD,
         PAD=PAD,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
     solution.udot(solution.u_snapshots[0][1], t=solution.timestamps[0], dt=solution.dt)
 
@@ -123,7 +123,7 @@ def test_order_convergence(n):
     errorlist = []
     for order in order_list:
         solution = AdvectionSolver(
-            n=(n,), order=order, v=(1, 2), u0="sinus", load_directory=test_directory
+            n=(n,), order=order, v=(1, 2), u0="sinus", save_directory=test_directory
         )
         solution.rkorder()
         errorlist.append(solution.periodic_error("l1"))
@@ -138,7 +138,7 @@ def test_mesh_convergence(order):
     errorlist = []
     for n in n_list:
         solution = AdvectionSolver(
-            n=(n,), order=order, v=(1, 2), u0="sinus", load_directory=test_directory
+            n=(n,), order=order, v=(1, 2), u0="sinus", save_directory=test_directory
         )
         solution.rkorder()
         errorlist.append(solution.periodic_error("l1"))
@@ -153,11 +153,11 @@ def test_periodic_solution(n, order):
     advecting with a velocity of (-1,-2)
     """
     forward_advection = AdvectionSolver(
-        n=(n,), order=order, v=(1, 2), load_directory=test_directory
+        n=(n,), order=order, v=(1, 2), save_directory=test_directory
     )
     forward_advection.rkorder()
     backward_advection = AdvectionSolver(
-        n=(n,), order=order, v=(-1, -2), load_directory=test_directory
+        n=(n,), order=order, v=(-1, -2), save_directory=test_directory
     )
     backward_advection.rkorder()
     assert forward_advection.u_snapshots[-1][1] == pytest.approx(
@@ -204,7 +204,7 @@ def test_mpp(order, config):
         courant=C_for_mpp[order],
         flux_strategy="gauss-legendre",
         apriori_limiting=True,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
     solution.ssprk3()
     assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance

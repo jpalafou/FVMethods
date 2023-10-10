@@ -15,3 +15,5 @@ eggs/
 *.py[cod]
 *$py.class
 .vscode/
+*.out
+*.slurm

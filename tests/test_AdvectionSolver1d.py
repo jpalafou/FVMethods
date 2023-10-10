@@ -57,7 +57,7 @@ def test_init(
         SED=SED,
         NAD=NAD,
         PAD=PAD,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
 
 
@@ -94,7 +94,7 @@ def test_udot(
         SED=SED,
         NAD=NAD,
         PAD=PAD,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
     solution.udot(solution.u_snapshots[0][1], t=solution.timestamps[0], dt=solution.dt)
 
@@ -107,7 +107,7 @@ def test_order_convergence(n):
     errorlist = []
     for order in order_list:
         solution = AdvectionSolver(
-            n=n, order=order, v=1, u0="sinus", load_directory=test_directory
+            n=n, order=order, v=1, u0="sinus", save_directory=test_directory
         )
         solution.rkorder()
         errorlist.append(solution.periodic_error("l1"))
@@ -122,7 +122,7 @@ def test_mesh_convergence(order):
     errorlist = []
     for n in n_list:
         solution = AdvectionSolver(
-            n=n, order=order, v=1, u0="sinus", load_directory=test_directory
+            n=n, order=order, v=1, u0="sinus", save_directory=test_directory
         )
         solution.rkorder()
         errorlist.append(solution.periodic_error("l1"))
@@ -137,11 +137,11 @@ def test_periodic_solution(n, order):
     advecting with a velocity of -1
     """
     forward_advection = AdvectionSolver(
-        n=n, order=order, v=1, load_directory=test_directory
+        n=n, order=order, v=1, save_directory=test_directory
     )
     forward_advection.rkorder()
     backward_advection = AdvectionSolver(
-        n=n, order=order, v=-1, load_directory=test_directory
+        n=n, order=order, v=-1, save_directory=test_directory
     )
     backward_advection.rkorder()
     assert forward_advection.u_snapshots[-1][1] == pytest.approx(
@@ -166,7 +166,7 @@ def test_apriori_mpp(order, config):
         u0=config["u0"],
         courant=C_for_mpp[order],
         apriori_limiting=True,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
     solution.ssprk3()
     assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
@@ -191,7 +191,7 @@ def test_fallback_mpp(order, config):
         courant=0.5,
         aposteriori_limiting=True,
         cause_trouble=True,
-        load_directory=test_directory,
+        save_directory=test_directory,
     )
     solution.ssprk3()
     assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance

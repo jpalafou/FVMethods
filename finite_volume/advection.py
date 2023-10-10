@@ -57,8 +57,9 @@ class AdvectionSolver(Integrator):
         modify_time_step            whether to conditionally reduce dt by half
         log_every                   number of iterations to complete before logging
         progress_bar                whether to print a progress bar in the loop
-        load                        whether to load precalculated solution or save a
-                                    new precalculated solution
+        load                        whether to load precalculated solution
+        save                        whether to overwrite saved instance
+        save_directory              directory from which to read/write
     returns:
         u   array of saved states
     """
@@ -92,7 +93,8 @@ class AdvectionSolver(Integrator):
         log_every: int = 100000,
         progress_bar: bool = True,
         load: bool = True,
-        load_directory: str = "data/solutions/",
+        save: bool = True,
+        save_directory: str = "data/solutions/",
     ):
         # create filename out of the initialization arguments
         self.load = load
@@ -127,7 +129,8 @@ class AdvectionSolver(Integrator):
             progress_bar,
         ]
         self._filename = "_".join(str(component) for component in filename_components)
-        self._load_directory = load_directory
+        self._save_directory = save_directory
+        self.save = save
 
         # dimensionality
         self.ndim = 1 if isinstance(n, int) else 2
@@ -1127,11 +1130,11 @@ class AdvectionSolver(Integrator):
     def pre_integrate(self, method_name):
         # create solution path if it doesn't exist
         try:
-            os.makedirs(self._load_directory)
+            os.makedirs(self._save_directory)
         except OSError:
             pass
         self._filename = self._filename + "_" + method_name + ".pkl"
-        self.filepath = self._load_directory + self._filename
+        self.filepath = self._save_directory + self._filename
         # load the solution if it already exists
         if os.path.isfile(self.filepath) and self.load:
             with open(self.filepath, "rb") as thisfile:
@@ -1152,12 +1155,15 @@ class AdvectionSolver(Integrator):
 
     def write_to_file(self):
         # Save the instance to a file
-        if self.load:
+        if self.save:
             with open(self.filepath, "wb") as thisfile:
                 pickle.dump(self, thisfile)
             print(f"Wrote a solution up to t = {self.t0} located at {self.filepath}\n")
 
     def post_integrate(self):
+        """
+        only runs if new solution is computed
+        """
         # compute max and min history
         min_history = np.asarray(self.min_history)
         max_history = np.asarray(self.max_history)
