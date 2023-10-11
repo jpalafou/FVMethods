@@ -1133,6 +1133,7 @@ class AdvectionSolver(Integrator):
             os.makedirs(self._save_directory)
         except OSError:
             pass
+        # find filepath where solution is/will be stored
         self._filename = self._filename + "_" + method_name + ".pkl"
         self.filepath = self._save_directory + self._filename
         # load the solution if it already exists
