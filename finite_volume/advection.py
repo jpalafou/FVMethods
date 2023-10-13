@@ -74,7 +74,7 @@ class AdvectionSolver(Integrator):
         y: tuple = None,
         t0: float = 0,
         snapshot_dt: float = 1.0,
-        num_snapshots: int = 2,
+        num_snapshots: int = 1,
         v: tuple = (1, 1),
         courant: float = 0.5,
         order: int = 1,

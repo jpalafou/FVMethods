@@ -18,7 +18,7 @@ class Integrator:
         u0: np.ndarray,
         dt: float,
         snapshot_dt: float,
-        num_snapshots: int = 2,
+        num_snapshots: int = 1,
         dt_min: float = None,
         t0: float = 0.0,
         progress_bar: bool = False,
