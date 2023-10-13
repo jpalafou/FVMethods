@@ -211,5 +211,53 @@ def test_mpp(order, config):
     assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
 
 
+@pytest.mark.parametrize("order", [1, 2, 8])
+@pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
+@pytest.mark.parametrize("apriori_limiting", [False, True])
+@pytest.mark.parametrize("mpp_lite", [False, True])
+@pytest.mark.parametrize("aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("convex", [False, True])
+@pytest.mark.parametrize("SED", [False, True])
+@pytest.mark.parametrize("NAD", [None, 0, 1e-3])
+@pytest.mark.parametrize("PAD", [None, (0, 1)])
+def test_reflection_equivariance(
+    order,
+    flux_strategy,
+    apriori_limiting,
+    mpp_lite,
+    aposteriori_limiting,
+    convex,
+    SED,
+    NAD,
+    PAD,
+):
+    """
+    f(-x,y) = -f(x,y)
+    """
+    shared_config = {
+        "num_snapshots": 1,
+        "snapshot_dt": 10,
+        "courant": 0.8,
+        "x": (0, 1),
+        "n": (64,),
+        "v": (2, 1),
+        "order": order,
+        "flux_strategy": flux_strategy,
+        "apriori_limiting": apriori_limiting,
+        "mpp_lite": mpp_lite,
+        "aposteriori_limiting": aposteriori_limiting,
+        "convex": convex,
+        "SED": SED,
+        "NAD": NAD,
+        "PAD": PAD,
+        "save_directory": test_directory,
+    }
+    solution = AdvectionSolver(u0="square", **shared_config)
+    reflected_solution = AdvectionSolver(u0="-square", **shared_config)
+    assert np.all(
+        solution.u_snapshots[-1][1] + reflected_solution.u_snapshots[-1][1] == 0
+    )
+
+
 def test_fallback_mpp():
     ...

@@ -10,8 +10,11 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
     returns:
         initial condition defined on xy mesh (m, n)
     """
+
     if type == "composite":
         return composite(x)
+    if type == "-composite":
+        return -composite(x)
     if type == "disk":
         return disk(x, y)
     if type == "gauss":
@@ -20,6 +23,8 @@ def generate_ic(type: str, x: np.ndarray, y: np.ndarray = None):
         return sinus(x, y)
     if type == "square":
         return square(x, y)
+    if type == "-square":
+        return -square(x, y)
     if type == "disk plus hill":
         return disk_plus_hill(x, y)
     if type == "just the gauss":
