@@ -26,7 +26,9 @@ def detect_smooth_extrema(u: np.ndarray, h: float, axis: int):
     )
     alpha_left = -np.where(
         dv < 0, np.where(v_left > 0, v_left, 0), np.where(v_left < 0, v_left, 0)
-    ) / (np.sign(dv) * np.maximum(np.abs(dv), 1e-16 * np.ones_like(dv)))
+    ) / np.where(np.abs(dv) < 1e-16, 1e-16 * np.where(dv >= 0, 1., -1.), dv)
+
+    (np.sign(dv) * np.maximum(np.abs(dv), 1e-16 * np.ones_like(dv)))
     alpha_left = np.where(np.abs(dv) <= 0, 1, alpha_left)
     alpha_left = np.where(alpha_left < 1, alpha_left, 1)
     v_right = chopchop(du, chop_size=(2, 0), axis=axis) - chopchop(
@@ -34,7 +36,7 @@ def detect_smooth_extrema(u: np.ndarray, h: float, axis: int):
     )
     alpha_right = np.where(
         dv > 0, np.where(v_right > 0, v_right, 0), np.where(v_right < 0, v_right, 0)
-    ) / (np.sign(dv) * np.maximum(np.abs(dv), 1e-16 * np.ones_like(dv)))
+    ) / np.where(np.abs(dv) < 1e-16, 1e-16 * np.where(dv >= 0, 1., -1.), dv)
     alpha_right = np.where(np.abs(dv) <= 0, 1, alpha_right)
     alpha_right = np.where(alpha_right < 1, alpha_right, 1)
     alpha = np.where(alpha_left < alpha_right, alpha_left, alpha_right)
