@@ -110,8 +110,7 @@ def square(x, y):
     return np.where(np.logical_and(xcondition, ycondition), 1, 0)
 
 
-def gauss(x, y):
-    sigma = 1 / 10
+def gauss(x, y, sigma=1 / 10):
     center = 0.5
     if y is None:
         xc = x - center
@@ -124,7 +123,7 @@ def gauss(x, y):
 
 def just_the_gauss(x):
     initial_domain = [0.7, 0.8]
-    transformed_domain = [0.4, 0.8]
+    transformed_domain = [0.25, 0.75]
 
     def transform(x):
         m = (initial_domain[1] - initial_domain[0]) / (

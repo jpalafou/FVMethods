@@ -85,8 +85,8 @@ class AdvectionSolver(Integrator):
         convex: bool = False,
         cause_trouble: bool = False,
         SED: bool = False,
-        NAD: float = 0.0,
-        PAD: tuple = (0, 1),
+        NAD: float = 1e-10,
+        PAD: tuple = None,
         visualization_tolerance: float = None,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
@@ -475,7 +475,7 @@ class AdvectionSolver(Integrator):
 
         if self.apriori_limiting:
             self.apriori_limiter = self.mpp_limiter
-            if self.mpp_lite:
+            if self.mpp_lite and self.order > 2:
                 if self.ndim == 1:
                     self.mpplite_Mm_adjustment = self.mpplite_Mm_adjustment_1d
                 if self.ndim == 2:
@@ -836,8 +836,8 @@ class AdvectionSolver(Integrator):
         )
         # evaluate slope limiter
         theta = np.ones_like(u)
-        M_arg = np.abs(M - u) / np.maximum(np.abs(M_ij - u), 1e-16 * np.ones_like(u))
-        m_arg = np.abs(m - u) / np.maximum(np.abs(m_ij - u), 1e-16 * np.ones_like(u))
+        M_arg = np.abs(M - u) / (np.abs(M_ij - u) + 1e-16)
+        m_arg = np.abs(m - u) / (np.abs(m_ij - u) + 1e-16)
         theta = np.where(M_arg < theta, M_arg, theta)
         theta = np.where(m_arg < theta, m_arg, theta)
 
