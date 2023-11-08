@@ -125,6 +125,7 @@ class AdvectionSolver(Integrator):
             visualization_tolerance,
             adjust_time_step,
             modify_time_step,
+            mpp_tolerance,
             progress_bar,
         ]
         self._filename = "_".join(str(component) for component in filename_components)
