@@ -56,7 +56,6 @@ class AdvectionSolver(Integrator):
         adjust_time_step            whether to reduce timestep for order >4
         modify_time_step            whether to conditionally reduce dt by half
         mpp_tolerance               maximum principle tolerance for adaptive time step
-        log_every                   number of iterations to complete before logging
         progress_bar                whether to print a progress bar in the loop
         load                        whether to load precalculated solution
         save                        whether to overwrite saved instance
@@ -92,7 +91,6 @@ class AdvectionSolver(Integrator):
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
         mpp_tolerance: float = 1e-10,
-        log_every: int = 100000,
         progress_bar: bool = True,
         load: bool = True,
         save: bool = True,
@@ -127,7 +125,6 @@ class AdvectionSolver(Integrator):
             visualization_tolerance,
             adjust_time_step,
             modify_time_step,
-            log_every,
             progress_bar,
         ]
         self._filename = "_".join(str(component) for component in filename_components)
