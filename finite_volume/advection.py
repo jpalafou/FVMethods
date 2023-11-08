@@ -1054,16 +1054,22 @@ class AdvectionSolver(Integrator):
             affected_face_y * fallback_fluxes_y + (1 - affected_face_y) * self.g
         )
 
-    def rkorder(self):
+    def rkorder(self, ssp: bool = True):
         """
         rk integrate to an order that matches the spatial order
         """
         if self.order > 3:
             self.rk4()
         elif self.order > 2:
-            self.rk3()
+            if ssp:
+                self.ssprk3()
+            else:
+                self.rk3()
         elif self.order > 1:
-            self.rk2()
+            if ssp:
+                self.ssprk2()
+            else:
+                self.rk2()
         else:
             self.euler()
 
