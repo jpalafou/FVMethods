@@ -45,7 +45,7 @@ class AdvectionSolver(Integrator):
         convex                      a more mpp version of a posteriori limiting
         cause_trouble               set all cells to be troubled, forcing 2d fallback
         SED                         whether to enable smooth extrema detection
-        NAD                         simulation NAD tolerance
+        NAD                         simulation NAD tolerance for a posteriori limiting
                                         set to None or +inf to disable NAD
         PAD                         physical admissibility detection (lower, upper)
                                         set to None or (-inf, +inf) to disable PAD
@@ -55,6 +55,7 @@ class AdvectionSolver(Integrator):
                                         values
         adjust_time_step            whether to reduce timestep for order >4
         modify_time_step            whether to conditionally reduce dt by half
+        mpp_tolerance               maximum principle tolerance for adaptive time step
         log_every                   number of iterations to complete before logging
         progress_bar                whether to print a progress bar in the loop
         load                        whether to load precalculated solution
@@ -90,6 +91,7 @@ class AdvectionSolver(Integrator):
         visualization_tolerance: float = None,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
+        mpp_tolerance: float = 1e-10,
         log_every: int = 100000,
         progress_bar: bool = True,
         load: bool = True,
@@ -273,6 +275,11 @@ class AdvectionSolver(Integrator):
         )
         # initialize PAD
         self.PAD = (-np.inf, np.inf) if PAD is None else PAD
+        self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
+        self.maximum_princicple = (
+            np.min(self.u0) - self.mpp_tolerance,
+            np.max(self.u0) + self.mpp_tolerance,
+        )
 
         # stencils: right/left conservative interpolation from a volume or line segment
         left_interface_stencil = ConservativeInterpolation.construct_from_order(
@@ -1090,9 +1097,9 @@ class AdvectionSolver(Integrator):
             return np.max(np.abs(approx - truth))
 
     def check_mpp(self, u):
-        tol = 1e-10
         return not np.logical_or(
-            np.any(u < self.PAD[0] - tol), np.any(u > self.PAD[1] + tol)
+            np.any(u < self.maximum_princicple[0]),
+            np.any(u > self.maximum_princicple[1]),
         )
 
     def append_to_timeseries_lists(self):
