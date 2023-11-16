@@ -2,6 +2,7 @@
 import numpy as np
 import os
 import pickle
+from typing import Tuple, Dict
 from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
@@ -1209,3 +1210,24 @@ class AdvectionSolver(Integrator):
         print()
         print("{:>10}{:10.5f}".format("time (s):", self.solution_time))
         print()
+
+    def compute_violations(self) -> Tuple[np.ndarray, Dict]:
+        mins = np.array(self.min_history)
+        maxs = np.array(self.max_history)
+        lower_bound_violations = mins - self.maximum_princicple[0]
+        upper_bound_violations = self.maximum_princicple[1] - maxs
+        violations = np.minimum(lower_bound_violations, upper_bound_violations)
+        # negative values indicate violation
+        stats = {}
+        stats["worst"] = np.min(violations)
+        stats["mean"] = np.mean(violations)
+        stats["lower bound violation frequency"] = (
+            np.sum(np.where(lower_bound_violations < 0, 1, 0)) / self.step_count
+        )
+        stats["upper bound violation frequency"] = (
+            np.sum(np.where(upper_bound_violations < 0, 1, 0)) / self.step_count
+        )
+        stats["violation frequency"] = (
+            np.sum(np.where(violations < 0, 1, 0)) / self.step_count
+        )
+        return violations, stats
