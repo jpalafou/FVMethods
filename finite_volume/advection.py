@@ -7,11 +7,11 @@ from finite_volume.initial_conditions import generate_ic
 from finite_volume.integrate import Integrator
 from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
 from finite_volume.mathematiques import gauss_lobatto
-from finite_volume.trouble_detection import (
+from finite_volume.sed import (
     detect_smooth_extrema,
     detect_no_smooth_extrema,
-    compute_fallback_faces,
 )
+from finite_volume.a_posteriori import minmod, moncen, MUSCL
 from finite_volume.utils import (
     rk4_dt_adjust,
     stack,
@@ -43,7 +43,9 @@ class AdvectionSolver(Integrator):
         apriori_limiting            whether to follow zhang and shu mpp limiting
         mpp_lite                    cell center is the only interior point
         aposteriori_limiting        whether to call trouble detection and 2d fallback
+        fallback_limiter            'moncen' or 'minmod'
         convex                      a more mpp version of a posteriori limiting
+        hancock                     predictor corrector scheme for fallback
         cause_trouble               set all cells to be troubled, forcing 2d fallback
         SED                         whether to enable smooth extrema detection
         NAD                         simulation NAD tolerance for a posteriori limiting
@@ -83,7 +85,9 @@ class AdvectionSolver(Integrator):
         apriori_limiting: bool = False,
         mpp_lite: bool = False,
         aposteriori_limiting: bool = False,
+        fallback_limiter: str = "minmod",
         convex: bool = False,
+        hancock: bool = False,
         cause_trouble: bool = False,
         SED: bool = False,
         NAD: float = 1e-10,
@@ -118,7 +122,9 @@ class AdvectionSolver(Integrator):
             apriori_limiting,
             mpp_lite,
             aposteriori_limiting,
+            fallback_limiter,
             convex,
+            hancock,
             cause_trouble,
             SED,
             NAD,
@@ -261,7 +267,12 @@ class AdvectionSolver(Integrator):
         self.apriori_limiting = apriori_limiting
         self.mpp_lite = mpp_lite
         self.aposteriori_limiting = aposteriori_limiting
+        if fallback_limiter == "minmod":
+            self.fallback_limiter = minmod
+        if fallback_limiter == "moncen":
+            self.fallback_limiter = moncen
         self.convex = convex
+        self.hancock = hancock
 
         # arrays for storing local min/max
         self.m = 0 * self.ones_f
@@ -412,6 +423,7 @@ class AdvectionSolver(Integrator):
         # velocity at cell interfaces
         if self.ndim == 1:
             self.a = v * np.ones(nx + 1)
+            self.a_cell_centers = v * np.ones(nx)
         if self.ndim == 2:
             # x and y values at interface points
             na = np.newaxis
@@ -436,20 +448,26 @@ class AdvectionSolver(Integrator):
             NS_interface_x += gauss_quadr_points[:, na, na] * self.hx
             NS_midpoint_x, NS_midpoint_y = np.meshgrid(self.x, self.y_interface)
             # evaluate v components normal to cell interfaces
+            xx_center, yy_center = np.meshgrid(self.x, self.y)
             if isinstance(v, tuple):
                 self.a = v[0] * np.ones(EW_interface_y.shape)
                 self.a_midpoint = v[0] * np.ones(EW_midpoint_x.shape)
-                if len(v) < 2:
+                self.a_cell_centers = v[0] * np.ones(xx_center.shape)
+                if len(v) == 1:
                     self.b = v[0] * np.ones(NS_interface_x.shape)
                     self.b_midpoint = v[0] * np.ones(NS_midpoint_y.shape)
-                else:
+                    self.b_cell_centers = v[0] * np.ones(yy_center.shape)
+                elif len(v) == 2:
                     self.b = v[1] * np.ones(NS_interface_x.shape)
                     self.b_midpoint = v[1] * np.ones(NS_midpoint_y.shape)
+                    self.b_cell_centers = v[1] * np.ones(yy_center.shape)
             if callable(v):
                 self.a = v(EW_interface_x, EW_interface_y)[0]
                 self.b = v(NS_interface_x, NS_interface_y)[1]
                 self.a_midpoint = v(EW_midpoint_x, EW_midpoint_y)[0]
                 self.b_midpoint = v(NS_midpoint_x, NS_midpoint_y)[1]
+                self.a_cell_centers = v(xx_center, yy_center)[0]
+                self.b_cell_centers = v(xx_center, yy_center)[1]
             if self.flux_strategy == "transverse":  # apply boundary for transverse flux
                 self.a = self.apply_bc(self.a, gw=[(0,), (self._transverse_k,), (0,)])
                 self.b = self.apply_bc(self.b, gw=[(0,), (0,), (self._transverse_k,)])
@@ -908,7 +926,7 @@ class AdvectionSolver(Integrator):
 
         # revise fluxes of troubled cells
         correction_masks = self.correction_mask(trouble)
-        fallback_fluxes = self.compute_fallback_fluxes(u)
+        fallback_fluxes = self.compute_fallback_fluxes(u, dt)
         self.revise_fluxes(fallback_fluxes, correction_masks)
 
     def revise_fluxes_1d(
@@ -949,7 +967,7 @@ class AdvectionSolver(Integrator):
             + (1 - correction_masks[1]) * self.g
         )
 
-    def compute_fallback_fluxes_1d(self, u: np.ndarray) -> np.ndarray:
+    def compute_fallback_fluxes_1d(self, u: np.ndarray, dt: float) -> np.ndarray:
         """
         args:
             u   (m,)
@@ -958,7 +976,21 @@ class AdvectionSolver(Integrator):
         """
         # compute second order face interpolations
         u_2gw = self.apply_bc(u, gw=2)
-        left_face, right_face = compute_fallback_faces(u_2gw, axis=0)
+        du = MUSCL(u_2gw, axis=0)
+
+        if self.hancock:
+            cell_center_correct_value = (
+                u - 0.5 * dt * self.a_cell_centers * du[1:-1] * self.hx_recip
+            )
+        else:
+            cell_center_correct_value = u
+
+        # reapply_boundaries
+        cell_center_correct_value_1gw = self.apply_bc(cell_center_correct_value, gw=1)
+
+        # interpolate face values
+        right_face = cell_center_correct_value_1gw + 0.5 * du
+        left_face = cell_center_correct_value_1gw - 0.5 * du
 
         # revise fluxes
         fallback_fluxes = self.riemann(
@@ -967,7 +999,9 @@ class AdvectionSolver(Integrator):
         return fallback_fluxes
 
     def compute_fallback_fluxes_2d(
-        self, u: np.ndarray
+        self,
+        u: np.ndarray,
+        dt: float,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         args:
@@ -980,19 +1014,36 @@ class AdvectionSolver(Integrator):
 
         # compute second order face interpolations
         u_2gw = self.apply_bc(u, gw=2)
-        south_face, north_face = compute_fallback_faces(u_2gw[:, 2:-2], axis=0)
-        west_face, east_face = compute_fallback_faces(u_2gw[2:-2, :], axis=1)
+        du_y = MUSCL(u_2gw, axis=0, slope_limiter=self.fallback_limiter)[:, 1:-1]
+        du_x = MUSCL(u_2gw, axis=1, slope_limiter=self.fallback_limiter)[1:-1, :]
+
+        if self.hancock:
+            cell_center_correct_value = u - 0.5 * dt * (
+                self.a_cell_centers * du_x[1:-1, 1:-1] * self.hx_recip
+                + self.b_cell_centers * du_y[1:-1, 1:-1] * self.hy_recip
+            )
+        else:
+            cell_center_correct_value = u
+
+        # reapply boundaries
+        cell_center_correct_value_1gw = self.apply_bc(cell_center_correct_value, gw=1)
+
+        # interpolate face values
+        north_face = cell_center_correct_value_1gw + 0.5 * du_y
+        south_face = cell_center_correct_value_1gw - 0.5 * du_y
+        east_face = cell_center_correct_value_1gw + 0.5 * du_x
+        west_face = cell_center_correct_value_1gw - 0.5 * du_x
 
         # revise fluxes
         NS_fallback_fluxes = self.riemann(
             v=self.b_midpoint,
-            left_value=north_face[:-1, :],
-            right_value=south_face[1:, :],
+            left_value=north_face[:-1, 1:-1],
+            right_value=south_face[1:, 1:-1],
         )
         EW_fallback_fluxes = self.riemann(
             v=self.a_midpoint,
-            left_value=east_face[:, :-1],
-            right_value=west_face[:, 1:],
+            left_value=east_face[1:-1, :-1],
+            right_value=west_face[1:-1, 1:],
         )
         return EW_fallback_fluxes, NS_fallback_fluxes
 

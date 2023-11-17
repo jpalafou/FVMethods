@@ -28,6 +28,7 @@ def cleanup(request):
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("mpp_lite", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("convex", [False, True])
 @pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
@@ -37,6 +38,7 @@ def test_init(
     apriori_limiting,
     mpp_lite,
     aposteriori_limiting,
+    hancock,
     convex,
     SED,
     NAD,
@@ -53,6 +55,7 @@ def test_init(
         apriori_limiting=apriori_limiting,
         mpp_lite=mpp_lite,
         aposteriori_limiting=aposteriori_limiting,
+        hancock=hancock,
         convex=convex,
         SED=SED,
         NAD=NAD,
@@ -65,6 +68,7 @@ def test_init(
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("mpp_lite", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("convex", [False, True])
 @pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
@@ -74,6 +78,7 @@ def test_udot(
     apriori_limiting,
     mpp_lite,
     aposteriori_limiting,
+    hancock,
     convex,
     SED,
     NAD,
@@ -90,6 +95,7 @@ def test_udot(
         apriori_limiting=apriori_limiting,
         mpp_lite=mpp_lite,
         aposteriori_limiting=aposteriori_limiting,
+        hancock=hancock,
         convex=convex,
         SED=SED,
         NAD=NAD,
@@ -173,7 +179,6 @@ def test_apriori_mpp(order, config):
     assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
 
 
-@pytest.mark.parametrize("order", order_list)
 @pytest.mark.parametrize(
     "config",
     [
@@ -181,19 +186,20 @@ def test_apriori_mpp(order, config):
         {"n": 256, "u0": "composite"},
     ],
 )
-def test_fallback_mpp(order, config):
+def test_MUSCLHancock(config):
     tolerance = 1e-16
     solution = AdvectionSolver(
         n=config["n"],
-        order=order,
+        order=2,
         v=1,
         u0=config["u0"],
         courant=0.5,
         aposteriori_limiting=True,
+        hancock=True,
         cause_trouble=True,
         save_directory=test_directory,
     )
-    solution.ssprk3()
+    solution.euler()
     assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
     assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
 
@@ -202,12 +208,21 @@ def test_fallback_mpp(order, config):
 @pytest.mark.parametrize("apriori_limiting", [False, True])
 @pytest.mark.parametrize("mpp_lite", [False, True])
 @pytest.mark.parametrize("aposteriori_limiting", [False, True])
+@pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("convex", [False, True])
 @pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("NAD", [None, 0, 1e-3])
 @pytest.mark.parametrize("PAD", [None, (0, 1)])
 def test_reflection_equivariance(
-    order, apriori_limiting, mpp_lite, aposteriori_limiting, convex, SED, NAD, PAD
+    order,
+    apriori_limiting,
+    mpp_lite,
+    aposteriori_limiting,
+    hancock,
+    convex,
+    SED,
+    NAD,
+    PAD,
 ):
     """
     f(-x) = -f(x)
@@ -223,6 +238,7 @@ def test_reflection_equivariance(
         "apriori_limiting": apriori_limiting,
         "mpp_lite": mpp_lite,
         "aposteriori_limiting": aposteriori_limiting,
+        "hancock": hancock,
         "convex": convex,
         "SED": SED,
         "NAD": NAD,

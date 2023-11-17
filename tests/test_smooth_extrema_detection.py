@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from finite_volume.trouble_detection import detect_smooth_extrema
+from finite_volume.sed import detect_smooth_extrema
 
 num_trials = 5
 h = 0.05
