@@ -101,3 +101,47 @@ def test_solutions(order, limiting, smooth_extrema_detection):
         np.mean(np.square(romain_solution[-1] - my_solution.u_snapshots[-1][1]))
     )
     assert rmse < 1e-16
+
+
+def test_MUSCLHancock():
+    """
+    Romain's MUSCL-Hancock without smooth extrema detection should match mine
+    """
+    u0 = "composite"
+    n = 128
+    snapshot_dt = 1
+    num_snapshots = 10
+    courant = 0.8
+
+    # romain solution
+    romain = solve_high_order(
+        space=2,
+        time=7,
+        n=n,
+        cfl=courant,
+        tend=num_snapshots * snapshot_dt,
+        ic_type=u0,
+        limiter=True,
+        smooth_extrema_detection=False,
+    )
+
+    # solve
+    solution = AdvectionSolver(
+        u0=u0,
+        bc="periodic",
+        const=None,
+        n=n,
+        v=1,
+        snapshot_dt=snapshot_dt,
+        num_snapshots=num_snapshots,
+        courant=courant,
+        order=2,
+        aposteriori_limiting=True,
+        fallback_limiter="moncen",
+        hancock=True,
+        cause_trouble=True,
+        load=True,
+    )
+    solution.euler()
+
+    assert np.mean(np.square(solution.u_snapshots[-1][1] - romain[-1])) < 1e-16

@@ -269,7 +269,7 @@ class AdvectionSolver(Integrator):
         self.aposteriori_limiting = aposteriori_limiting
         if fallback_limiter == "minmod":
             self.fallback_limiter = minmod
-        if fallback_limiter == "moncen":
+        elif fallback_limiter == "moncen":
             self.fallback_limiter = moncen
         self.convex = convex
         self.hancock = hancock
@@ -976,21 +976,21 @@ class AdvectionSolver(Integrator):
         """
         # compute second order face interpolations
         u_2gw = self.apply_bc(u, gw=2)
-        du = MUSCL(u_2gw, axis=0)
+        du = MUSCL(u_2gw, axis=0, slope_limiter=self.fallback_limiter)
+        right_face = np.full_like(u_2gw[1:-1], np.nan)
+        left_face = np.full_like(u_2gw[1:-1], np.nan)
 
+        # apply predictor corrector scheme or dont
         if self.hancock:
-            cell_center_correct_value = (
-                u - 0.5 * dt * self.a_cell_centers * du[1:-1] * self.hx_recip
+            right_face[:-1] = (
+                u_2gw[1:-1] + 0.5 * (1 - self.a * dt * self.hx_recip) * du[:-1]
+            )
+            left_face[1:] = (
+                u_2gw[1:-1] - 0.5 * (1 - self.a * dt * self.hx_recip) * du[1:]
             )
         else:
-            cell_center_correct_value = u
-
-        # reapply_boundaries
-        cell_center_correct_value_1gw = self.apply_bc(cell_center_correct_value, gw=1)
-
-        # interpolate face values
-        right_face = cell_center_correct_value_1gw + 0.5 * du
-        left_face = cell_center_correct_value_1gw - 0.5 * du
+            right_face[:-1] = u_2gw[1:-1] + 0.5 * du[:-1]
+            left_face[1:] = u_2gw[1:-1] - 0.5 * du[1:]
 
         # revise fluxes
         fallback_fluxes = self.riemann(
