@@ -423,7 +423,6 @@ class AdvectionSolver(Integrator):
         # velocity at cell interfaces
         if self.ndim == 1:
             self.a = v * np.ones(nx + 1)
-            self.a_cell_centers = v * np.ones(nx)
         if self.ndim == 2:
             # x and y values at interface points
             na = np.newaxis
@@ -556,7 +555,8 @@ class AdvectionSolver(Integrator):
             dudt    (ny, nx) at t_i
         """
         self.udot_evaluation_count += 1
-        self.get_fluxes(u=u)  # high order flux update
+        if not self.cause_trouble:
+            self.get_fluxes(u=u)  # high order flux update
         self.aposteriori_limiter(u=u, dt=dt)
         return self.get_dynamics()
 
@@ -992,6 +992,24 @@ class AdvectionSolver(Integrator):
             right_face[:-1] = u_2gw[1:-2] + 0.5 * du[:-1]
             left_face[1:] = u_2gw[2:-1] - 0.5 * du[1:]
 
+        # fall back to first order if there are positivity violations
+        right_face = np.where(
+            np.logical_or(
+                right_face < self.maximum_princicple[0],
+                right_face > self.maximum_princicple[1],
+            ),
+            u_2gw[1:-1],
+            right_face,
+        )
+        left_face = np.where(
+            np.logical_or(
+                left_face < self.maximum_princicple[0],
+                left_face > self.maximum_princicple[1],
+            ),
+            u_2gw[1:-1],
+            left_face,
+        )
+
         # revise fluxes
         fallback_fluxes = self.riemann(
             v=self.a, left_value=right_face[:-1], right_value=left_face[1:]
@@ -1033,6 +1051,41 @@ class AdvectionSolver(Integrator):
         south_face = cell_center_correct_value_1gw - 0.5 * du_y
         east_face = cell_center_correct_value_1gw + 0.5 * du_x
         west_face = cell_center_correct_value_1gw - 0.5 * du_x
+
+        # fall back to first order if there are positivity violations
+        fallback = u_2gw[1:-1, 1:-1]
+        north_face = np.where(
+            np.logical_or(
+                north_face < self.maximum_princicple[0],
+                north_face > self.maximum_princicple[1],
+            ),
+            fallback,
+            north_face,
+        )
+        south_face = np.where(
+            np.logical_or(
+                south_face < self.maximum_princicple[0],
+                south_face > self.maximum_princicple[1],
+            ),
+            fallback,
+            south_face,
+        )
+        east_face = np.where(
+            np.logical_or(
+                east_face < self.maximum_princicple[0],
+                east_face > self.maximum_princicple[1],
+            ),
+            fallback,
+            east_face,
+        )
+        west_face = np.where(
+            np.logical_or(
+                west_face < self.maximum_princicple[0],
+                west_face > self.maximum_princicple[1],
+            ),
+            fallback,
+            west_face,
+        )
 
         # revise fluxes
         NS_fallback_fluxes = self.riemann(

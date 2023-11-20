@@ -268,26 +268,44 @@ def test_reflection_equivariance(
     )
 
 
+@pytest.mark.parametrize("n", [64, 128])
 @pytest.mark.parametrize(
     "config",
     [
-        {"n": 64, "u0": "square"},
-        {"n": 64, "u0": "disk"},
+        {
+            "u0": "square",
+            "v": (2, 1),
+            "x": (0, 1),
+            "bc": "periodic",
+            "snapshot_dt": 1,
+            "num_snapshots": 1,
+        },
+        {
+            "u0": "disk",
+            "v": vortex,
+            "x": (-1, 1),
+            "bc": "dirichlet",
+            "const": 0,
+            "snapshot_dt": 2 * np.pi,
+            "num_snapshots": 1,
+        },
     ],
 )
-def test_MUSCLHancock(config):
-    tolerance = 1e-16
+@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("fallback_limiter", ["minmod", "moncen"])
+@pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
+def test_MUSCLHancock(n, config, order, fallback_limiter, flux_strategy):
     solution = AdvectionSolver(
-        n=(config["n"],),
-        order=2,
-        v=(2, 1),
-        u0=config["u0"],
+        order=order,
+        n=(n,),
+        flux_strategy=flux_strategy,
         courant=0.8,
         aposteriori_limiting=True,
         hancock=True,
         cause_trouble=True,
+        fallback_limiter=fallback_limiter,
         save_directory=test_directory,
+        **config,
     )
-    solution.euler()
-    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
-    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
+    solution.rkorder()
+    assert solution.compute_violations()[1]["violation frequency"] == 0

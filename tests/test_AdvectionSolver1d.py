@@ -186,22 +186,23 @@ def test_apriori_mpp(order, config):
         {"n": 256, "u0": "composite"},
     ],
 )
-def test_MUSCLHancock(config):
-    tolerance = 1e-16
+@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("fallback_limiter", ["minmod", "moncen"])
+def test_MUSCLHancock(config, order, fallback_limiter):
     solution = AdvectionSolver(
         n=config["n"],
-        order=2,
+        order=order,
         v=1,
         u0=config["u0"],
         courant=0.5,
         aposteriori_limiting=True,
         hancock=True,
         cause_trouble=True,
+        fallback_limiter=fallback_limiter,
         save_directory=test_directory,
     )
-    solution.euler()
-    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
-    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
+    solution.rkorder()
+    assert solution.compute_violations()[1]["violation frequency"] == 0
 
 
 @pytest.mark.parametrize("order", [1, 2, 8])
