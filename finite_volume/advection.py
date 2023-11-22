@@ -301,6 +301,10 @@ class AdvectionSolver(Integrator):
         self.PAD = (-np.inf, np.inf) if PAD is None else PAD
         self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
         self.maximum_princicple = (
+            np.min(self.u0),
+            np.max(self.u0),
+        )
+        self.approximated_maximum_princicple = (
             np.min(self.u0) - self.mpp_tolerance,
             np.max(self.u0) + self.mpp_tolerance,
         )
@@ -1005,16 +1009,16 @@ class AdvectionSolver(Integrator):
         if self.fallback_to_first_order:
             right_face = np.where(
                 np.logical_or(
-                    right_face < self.maximum_princicple[0],
-                    right_face > self.maximum_princicple[1],
+                    right_face < self.approximated_maximum_princicple[0],
+                    right_face > self.approximated_maximum_princicple[1],
                 ),
                 u_2gw[1:-1],
                 right_face,
             )
             left_face = np.where(
                 np.logical_or(
-                    left_face < self.maximum_princicple[0],
-                    left_face > self.maximum_princicple[1],
+                    left_face < self.approximated_maximum_princicple[0],
+                    left_face > self.approximated_maximum_princicple[1],
                 ),
                 u_2gw[1:-1],
                 left_face,
@@ -1067,32 +1071,32 @@ class AdvectionSolver(Integrator):
             fallback = u_2gw[1:-1, 1:-1]
             north_face = np.where(
                 np.logical_or(
-                    north_face < self.maximum_princicple[0],
-                    north_face > self.maximum_princicple[1],
+                    north_face < self.approximated_maximum_princicple[0],
+                    north_face > self.approximated_maximum_princicple[1],
                 ),
                 fallback,
                 north_face,
             )
             south_face = np.where(
                 np.logical_or(
-                    south_face < self.maximum_princicple[0],
-                    south_face > self.maximum_princicple[1],
+                    south_face < self.approximated_maximum_princicple[0],
+                    south_face > self.approximated_maximum_princicple[1],
                 ),
                 fallback,
                 south_face,
             )
             east_face = np.where(
                 np.logical_or(
-                    east_face < self.maximum_princicple[0],
-                    east_face > self.maximum_princicple[1],
+                    east_face < self.approximated_maximum_princicple[0],
+                    east_face > self.approximated_maximum_princicple[1],
                 ),
                 fallback,
                 east_face,
             )
             west_face = np.where(
                 np.logical_or(
-                    west_face < self.maximum_princicple[0],
-                    west_face > self.maximum_princicple[1],
+                    west_face < self.approximated_maximum_princicple[0],
+                    west_face > self.approximated_maximum_princicple[1],
                 ),
                 fallback,
                 west_face,
@@ -1238,8 +1242,8 @@ class AdvectionSolver(Integrator):
 
     def check_mpp(self, u):
         return not np.logical_or(
-            np.any(u < self.maximum_princicple[0]),
-            np.any(u > self.maximum_princicple[1]),
+            np.any(u < self.approximated_maximum_princicple[0]),
+            np.any(u > self.approximated_maximum_princicple[1]),
         )
 
     def append_to_timeseries_lists(self):
