@@ -196,8 +196,9 @@ def test_MUSCLHancock(config, order, fallback_limiter):
         u0=config["u0"],
         courant=0.5,
         aposteriori_limiting=True,
-        hancock=True,
         cause_trouble=True,
+        hancock=True,
+        fallback_to_first_order=True,
         fallback_limiter=fallback_limiter,
         save_directory=test_directory,
     )

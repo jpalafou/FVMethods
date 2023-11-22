@@ -302,8 +302,9 @@ def test_MUSCLHancock(n, config, order, fallback_limiter, flux_strategy):
         courant=0.8,
         aposteriori_limiting=True,
         hancock=True,
-        cause_trouble=True,
+        fallback_to_first_order=True,
         fallback_limiter=fallback_limiter,
+        cause_trouble=True,
         save_directory=test_directory,
         **config,
     )
