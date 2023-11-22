@@ -300,13 +300,9 @@ class AdvectionSolver(Integrator):
         # initialize PAD
         self.PAD = (-np.inf, np.inf) if PAD is None else PAD
         self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
-        self.maximum_princicple = (
-            np.min(self.u0),
-            np.max(self.u0),
-        )
         self.approximated_maximum_princicple = (
-            np.min(self.u0) - self.mpp_tolerance,
-            np.max(self.u0) + self.mpp_tolerance,
+            self.PAD[0] - self.mpp_tolerance,
+            self.PAD[1] + self.mpp_tolerance,
         )
 
         # stencils: right/left conservative interpolation from a volume or line segment
@@ -1359,8 +1355,8 @@ class AdvectionSolver(Integrator):
     def compute_violations(self) -> Tuple[np.ndarray, Dict]:
         mins = np.array(self.min_history)
         maxs = np.array(self.max_history)
-        lower_bound_violations = mins - self.maximum_princicple[0]
-        upper_bound_violations = self.maximum_princicple[1] - maxs
+        lower_bound_violations = mins - self.PAD[0]
+        upper_bound_violations = self.PAD[1] - maxs
         violations = np.minimum(lower_bound_violations, upper_bound_violations)
         # negative values indicate violation
         stats = {}
