@@ -40,13 +40,18 @@ class AdvectionSolver(Integrator):
         courant                     stability condition
         order                       accuracy requirement for polynomial interpolation
         flux_strategy               'gauss-legendre' or 'transverse'
+    slope limiter settings - - - - -
+    a priori limiting ~
         apriori_limiting            whether to follow zhang and shu mpp limiting
         mpp_lite                    cell center is the only interior point
+    a posteriori limiting ~
         aposteriori_limiting        whether to call trouble detection and 2d fallback
         fallback_limiter            'moncen' or 'minmod'
         convex                      a more mpp version of a posteriori limiting
         hancock                     predictor corrector scheme for fallback
+        fallback_to_first_order     fallback again to first order in the fallback scheme
         cause_trouble               set all cells to be troubled, forcing 2d fallback
+    ~
         SED                         whether to enable smooth extrema detection
         NAD                         simulation NAD tolerance for a posteriori limiting
                                         set to None or +inf to disable NAD
@@ -56,6 +61,7 @@ class AdvectionSolver(Integrator):
                                         troubled cells based on some violation
                                         set to None or -inf to visualize simulation
                                         values
+    - - - - -
         adjust_time_step            whether to reduce timestep for order >4
         modify_time_step            whether to conditionally reduce dt by half
         mpp_tolerance               maximum principle tolerance for adaptive time step
@@ -71,23 +77,24 @@ class AdvectionSolver(Integrator):
         self,
         u0: str = "square",
         bc: str = "periodic",
-        const: float = 0.0,
+        const: float = None,
         n: tuple = (32, 32),
         x: tuple = (0, 1),
         y: tuple = None,
         t0: float = 0,
         snapshot_dt: float = 1.0,
         num_snapshots: int = 1,
-        v: tuple = (1, 1),
-        courant: float = 0.5,
+        v: tuple = (2, 1),
+        courant: float = 0.8,
         order: int = 1,
         flux_strategy: str = "gauss-legendre",
         apriori_limiting: bool = False,
         mpp_lite: bool = False,
         aposteriori_limiting: bool = False,
-        fallback_limiter: str = "minmod",
-        convex: bool = False,
+        fallback_limiter: str = "moncen",
+        convex: bool = True,
         hancock: bool = False,
+        fallback_to_first_order: bool = False,
         cause_trouble: bool = False,
         SED: bool = False,
         NAD: float = 1e-10,
@@ -125,6 +132,7 @@ class AdvectionSolver(Integrator):
             fallback_limiter,
             convex,
             hancock,
+            fallback_to_first_order,
             cause_trouble,
             SED,
             NAD,
@@ -273,6 +281,7 @@ class AdvectionSolver(Integrator):
             self.fallback_limiter = moncen
         self.convex = convex
         self.hancock = hancock
+        self.fallback_to_first_order = fallback_to_first_order
 
         # arrays for storing local min/max
         self.m = 0 * self.ones_f
@@ -993,22 +1002,23 @@ class AdvectionSolver(Integrator):
             left_face[1:] = u_2gw[2:-1] - 0.5 * du[1:]
 
         # fall back to first order if there are positivity violations
-        right_face = np.where(
-            np.logical_or(
-                right_face < self.maximum_princicple[0],
-                right_face > self.maximum_princicple[1],
-            ),
-            u_2gw[1:-1],
-            right_face,
-        )
-        left_face = np.where(
-            np.logical_or(
-                left_face < self.maximum_princicple[0],
-                left_face > self.maximum_princicple[1],
-            ),
-            u_2gw[1:-1],
-            left_face,
-        )
+        if self.fallback_to_first_order:
+            right_face = np.where(
+                np.logical_or(
+                    right_face < self.maximum_princicple[0],
+                    right_face > self.maximum_princicple[1],
+                ),
+                u_2gw[1:-1],
+                right_face,
+            )
+            left_face = np.where(
+                np.logical_or(
+                    left_face < self.maximum_princicple[0],
+                    left_face > self.maximum_princicple[1],
+                ),
+                u_2gw[1:-1],
+                left_face,
+            )
 
         # revise fluxes
         fallback_fluxes = self.riemann(
@@ -1053,39 +1063,40 @@ class AdvectionSolver(Integrator):
         west_face = cell_center_correct_value_1gw - 0.5 * du_x
 
         # fall back to first order if there are positivity violations
-        fallback = u_2gw[1:-1, 1:-1]
-        north_face = np.where(
-            np.logical_or(
-                north_face < self.maximum_princicple[0],
-                north_face > self.maximum_princicple[1],
-            ),
-            fallback,
-            north_face,
-        )
-        south_face = np.where(
-            np.logical_or(
-                south_face < self.maximum_princicple[0],
-                south_face > self.maximum_princicple[1],
-            ),
-            fallback,
-            south_face,
-        )
-        east_face = np.where(
-            np.logical_or(
-                east_face < self.maximum_princicple[0],
-                east_face > self.maximum_princicple[1],
-            ),
-            fallback,
-            east_face,
-        )
-        west_face = np.where(
-            np.logical_or(
-                west_face < self.maximum_princicple[0],
-                west_face > self.maximum_princicple[1],
-            ),
-            fallback,
-            west_face,
-        )
+        if self.fallback_to_first_order:
+            fallback = u_2gw[1:-1, 1:-1]
+            north_face = np.where(
+                np.logical_or(
+                    north_face < self.maximum_princicple[0],
+                    north_face > self.maximum_princicple[1],
+                ),
+                fallback,
+                north_face,
+            )
+            south_face = np.where(
+                np.logical_or(
+                    south_face < self.maximum_princicple[0],
+                    south_face > self.maximum_princicple[1],
+                ),
+                fallback,
+                south_face,
+            )
+            east_face = np.where(
+                np.logical_or(
+                    east_face < self.maximum_princicple[0],
+                    east_face > self.maximum_princicple[1],
+                ),
+                fallback,
+                east_face,
+            )
+            west_face = np.where(
+                np.logical_or(
+                    west_face < self.maximum_princicple[0],
+                    west_face > self.maximum_princicple[1],
+                ),
+                fallback,
+                west_face,
+            )
 
         # revise fluxes
         NS_fallback_fluxes = self.riemann(
