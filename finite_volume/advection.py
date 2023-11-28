@@ -1362,6 +1362,7 @@ class AdvectionSolver(Integrator):
         stats = {}
         stats["worst"] = np.min(violations)
         stats["mean"] = np.mean(violations)
+        stats["standard deviaton"] = np.std(violations)
         stats["lower bound violation frequency"] = np.sum(
             np.where(lower_bound_violations < 0, 1, 0)
         ) / (self.step_count + 1)
