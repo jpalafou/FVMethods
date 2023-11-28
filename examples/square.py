@@ -1,52 +1,92 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 from finite_volume.advection import AdvectionSolver
 
-shared_config = dict(
-    u0="square",
-    v=(2, 1),
-    x=(0, 1),
-    bc="periodic",
-    const=None,
-    snapshot_dt=1,
-    num_snapshots=100,
-    SED=False,
-    PAD=(0, 1),
+# problem initialization
+u0 = "square"
+bc = "periodic"
+const = None
+n = (128,)
+x = (0, 1)
+v = (2, 1)
+snapshot_dt = 0.2
+num_snapshots = 5
+order = 8
+
+# solve
+data1 = AdvectionSolver(
+    u0=u0,
+    bc=bc,
+    const=const,
+    n=n,
+    x=x,
+    v=v,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
     courant=0.8,
-    cupy=True,
-    save_directory="/scratch/gpfs/jp7427/data/solutions/",
+    modify_time_step=True,
+    order=order,
+    flux_strategy="gauss-legendre",
+    apriori_limiting=True,
+    mpp_lite=True,
+    aposteriori_limiting=False,
+    convex=False,
+    SED=False,
+    load=False,
+)
+data1.rk4()
+print("data1")
+data1.minmax()
+
+data2 = AdvectionSolver(
+    u0=u0,
+    bc=bc,
+    const=const,
+    n=n,
+    x=x,
+    v=v,
+    snapshot_dt=snapshot_dt,
+    num_snapshots=num_snapshots,
+    courant=0.8,
+    modify_time_step=False,
+    order=order,
+    flux_strategy="transverse",
+    apriori_limiting=False,
+    mpp_lite=False,
+    aposteriori_limiting=True,
+    convex=True,
+    SED=False,
+    load=False,
+)
+data2.rk4()
+print("data2")
+data2.minmax()
+
+# plot
+plt.gca().set_aspect("equal")
+X, Y = np.meshgrid(data1.x, data1.y)
+contour1 = plt.contour(
+    X, Y, data1.u_snapshots[-1][1], levels=[0.1, 0.3, 0.5, 0.7, 0.9], colors="tab:blue"
+)
+contour1.collections[0].set_label("data1")
+contour2 = plt.contour(
+    X,
+    Y,
+    data2.u_snapshots[-1][1],
+    levels=[0.1, 0.3, 0.5, 0.7, 0.9],
+    linestyles="dashed",
+    colors="tab:orange",
+)
+contour2.collections[0].set_label("data2")
+
+# Create proxy artists for the legend
+blue_line = mlines.Line2D([], [], color="tab:blue", label="Dataset 1")
+orange_dashed_line = mlines.Line2D(
+    [], [], color="tab:orange", linestyle="dashed", label="Dataset 2"
 )
 
-limiter_configs = [
-    dict(
-        apriori_limiting=True,
-        modify_time_step=True,
-    )
-]
-
-integrators = ["ssprk2", "ssprk3", "rk4"]
-ps = [1, 2, 3, 4, 5, 6, 7]
-ns = [32, 64, 128]
-flux_quadratures = ["gauss-legendre", "transverse"]
-
-for limiter_config in limiter_configs:
-    for integrator in integrators:
-        for p in ps:
-            for n in ns:
-                for flux_strategy in flux_quadratures:
-                    solution = AdvectionSolver(
-                        **shared_config,
-                        **limiter_config,
-                        order=p + 1,
-                        n=(n,),
-                        flux_strategy=flux_strategy,
-                    )
-                    if integrator == "ssprk2":
-                        solution.ssprk2()
-                    if integrator == "ssprk3":
-                        solution.ssprk3()
-                    if integrator == "rk4":
-                        solution.rk4()
-                    print(limiter_config)
-                    print(f"{p=}, {n=}, {integrator=}")
-                    print(solution.compute_violations()[1])
-                    print(f"L2 error = {solution.periodic_error(norm='l2')}")
-                    print()
+plt.xlabel("x")
+plt.ylabel("y")
+plt.legend(handles=[blue_line, orange_dashed_line])
+plt.show()
