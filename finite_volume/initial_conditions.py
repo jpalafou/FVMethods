@@ -103,11 +103,11 @@ def sinus(x, y):
 
 def square(x, y):
     if y is None:
-        return np.heaviside(x - 0.25, 1) - np.heaviside(x - 0.75, 1)
+        return np.heaviside(x - 0.25, 1.0) - np.heaviside(x - 0.75, 1.0)
     X, Y = np.meshgrid(x, y)
     xcondition = np.logical_and(X > 0.25, X < 0.75)
     ycondition = np.logical_and(Y > 0.25, Y < 0.75)
-    return np.where(np.logical_and(xcondition, ycondition), 1, 0)
+    return np.where(np.logical_and(xcondition, ycondition), 1.0, 0.0)
 
 
 def gauss(x, y, sigma=1 / 10):

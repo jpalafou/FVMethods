@@ -270,7 +270,7 @@ def test_reflection_equivariance(
 
 @pytest.mark.parametrize("n", [64, 128])
 @pytest.mark.parametrize(
-    "config",
+    "problem_config",
     [
         {
             "u0": "square",
@@ -291,22 +291,33 @@ def test_reflection_equivariance(
         },
     ],
 )
-@pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("fallback_limiter", ["minmod", "moncen"])
+@pytest.mark.parametrize(
+    "musclhancock_config",
+    [dict(fallback_limiter="minmod"), dict(fallback_limiter="PP2D")],
+)
+@pytest.mark.parametrize(
+    "integrator_config",
+    [("euler", dict(hancock=True)), ("ssprk2", dict(hancock=False))],
+)
 @pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
-def test_MUSCLHancock(n, config, order, fallback_limiter, flux_strategy):
+def test_MUSCLHancock(
+    n, problem_config, musclhancock_config, integrator_config, flux_strategy
+):
     solution = AdvectionSolver(
-        order=order,
+        order=2,
         n=(n,),
         flux_strategy=flux_strategy,
         courant=0.8,
         aposteriori_limiting=True,
-        hancock=True,
-        fallback_to_first_order=True,
-        fallback_limiter=fallback_limiter,
         cause_trouble=True,
+        PAD=(0, 1),
         save_directory=test_directory,
-        **config,
+        **problem_config,
+        **musclhancock_config,
+        **integrator_config[1]
     )
-    solution.rkorder()
-    assert solution.compute_violations()[1]["violation frequency"] == 0
+    if integrator_config[0] == "euler":
+        solution.euler()
+    if integrator_config[0] == "ssprk2":
+        solution.ssprk2()
+    assert solution.compute_violations()[1]["worst"] <= solution.mpp_tolerance

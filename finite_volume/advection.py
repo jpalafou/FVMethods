@@ -46,7 +46,7 @@ class AdvectionSolver(Integrator):
         mpp_lite                    cell center is the only interior point
     a posteriori limiting ~
         aposteriori_limiting        whether to call trouble detection and 2d fallback
-        fallback_limiter            'moncen' or 'minmod'
+        fallback_limiter            'moncen', 'minmod', or 'PP2D'
         convex                      a more mpp version of a posteriori limiting
         hancock                     predictor corrector scheme for fallback
         fallback_to_first_order     fallback again to first order in the fallback scheme
@@ -279,6 +279,13 @@ class AdvectionSolver(Integrator):
             self.fallback_limiter = minmod
         elif fallback_limiter == "moncen":
             self.fallback_limiter = moncen
+        elif fallback_limiter == "PP2D":
+            if self.ndim != 2:
+                raise BaseException("PP2D limiting is for two-dimensional solutions.")
+            if fallback_to_first_order:
+                raise BaseException("PP2D does not fall back to first order.")
+            self.fallback_limiter = "PP2D"
+
         self.convex = convex
         self.hancock = hancock
         self.fallback_to_first_order = fallback_to_first_order
@@ -540,6 +547,8 @@ class AdvectionSolver(Integrator):
                 self.revise_fluxes = self.revise_fluxes_1d
             elif self.ndim == 2:
                 self.compute_fallback_fluxes = self.compute_fallback_fluxes_2d
+                if self.fallback_limiter == "PP2D":
+                    self.compute_fallback_fluxes = self.compute_PP2D_fluxes
                 self.revise_fluxes = self.revise_fluxes_2d
         else:
             self.aposteriori_limiter = self.trivial_limiter
@@ -980,6 +989,7 @@ class AdvectionSolver(Integrator):
         """
         args:
             u   (m,)
+            dt
         overwrites:
             fallback_fluxes     (m + 1,)
         """
@@ -1034,7 +1044,7 @@ class AdvectionSolver(Integrator):
         """
         args:
             u       (m, n)
-            trouble (m, n)
+            dt
         overwrites:
             EW_fallback_fluxes  (m, n + 1)
             NS_fallback_fluxes  (m + 1, n)
@@ -1097,6 +1107,81 @@ class AdvectionSolver(Integrator):
                 fallback,
                 west_face,
             )
+
+        # revise fluxes
+        NS_fallback_fluxes = self.riemann(
+            v=self.b_midpoint,
+            left_value=north_face[:-1, 1:-1],
+            right_value=south_face[1:, 1:-1],
+        )
+        EW_fallback_fluxes = self.riemann(
+            v=self.a_midpoint,
+            left_value=east_face[1:-1, :-1],
+            right_value=west_face[1:-1, 1:],
+        )
+        return EW_fallback_fluxes, NS_fallback_fluxes
+
+    def compute_PP2D_fluxes(
+        self,
+        u: np.ndarray,
+        dt: float,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        args:
+            u       (m, n)
+            dt
+        overwrites:
+            EW_fallback_fluxes  (m, n + 1)
+            NS_fallback_fluxes  (m + 1, n)
+        """
+        u_3gw = self.apply_bc(u, gw=3)  # keeping 3gw in case we want to implement PP2DU
+        S_x = 0.5 * (u_3gw[1:-1, 2:] - u_3gw[1:-1, :-2])
+        S_y = 0.5 * (u_3gw[2:, 1:-1] - u_3gw[:-2, 1:-1])
+
+        # gather neighbors
+        list_of_8_neighbors = [
+            u_3gw[:-2, 1:-1] - u_3gw[1:-1, 1:-1],
+            u_3gw[2:, 1:-1] - u_3gw[1:-1, 1:-1],
+            u_3gw[1:-1, :-2] - u_3gw[1:-1, 1:-1],
+            u_3gw[1:-1, 2:] - u_3gw[1:-1, 1:-1],
+            u_3gw[2:, 2:] - u_3gw[1:-1, 1:-1],
+            u_3gw[2:, :-2] - u_3gw[1:-1, 1:-1],
+            u_3gw[:-2, 2:] - u_3gw[1:-1, 1:-1],
+            u_3gw[:-2, :-2] - u_3gw[1:-1, 1:-1],
+        ]
+        eps = 1e-20
+        V_min = np.minimum(np.minimum.reduce(list_of_8_neighbors), -eps)
+        V_max = np.maximum(np.maximum.reduce(list_of_8_neighbors), eps)
+
+        # limit slopes
+        V = (
+            2
+            * np.minimum(np.abs(V_min), np.abs(V_max))
+            / (np.abs(S_x) + np.abs(S_y) + eps)
+        )
+        S_x = np.minimum(V, 1.0) * S_x
+        S_y = np.minimum(V, 1.0) * S_y
+        # remove excess
+        S_x = S_x[1:-1, 1:-1]
+        S_y = S_y[1:-1, 1:-1]
+
+        # predictor corrector scheme
+        if self.hancock:
+            cell_center_correct_value = u - 0.5 * dt * (
+                self.a_cell_centers * S_x[1:-1, 1:-1] * self.hx_recip
+                + self.b_cell_centers * S_y[1:-1, 1:-1] * self.hy_recip
+            )
+        else:
+            cell_center_correct_value = u
+
+        # rapply boudnaries
+        cell_center_correct_value = self.apply_bc(cell_center_correct_value, gw=1)
+
+        # interpolate faces
+        north_face = cell_center_correct_value + 0.5 * S_y
+        south_face = cell_center_correct_value - 0.5 * S_y
+        east_face = cell_center_correct_value + 0.5 * S_x
+        west_face = cell_center_correct_value - 0.5 * S_x
 
         # revise fluxes
         NS_fallback_fluxes = self.riemann(
