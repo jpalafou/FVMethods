@@ -6,7 +6,9 @@ import os.path
 from finite_volume.mathematiques import lcm, Fraction, LinearCombination, Polynome
 
 
-stencil_path = "stencils/"
+module_file_path = os.path.abspath(__file__)
+module_directory, module_file = os.path.split(module_file_path)
+stencil_path = module_directory + "/../stencils/"
 
 
 class Kernel:

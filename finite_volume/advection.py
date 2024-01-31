@@ -669,12 +669,13 @@ class AdvectionSolver(Integrator):
         theta, meaningful_theta, M_i, m_i = self.apriori_limiter(
             points=points, u=fallback, m=m, M=M
         )
-        # apply smooth extrema detection
-        theta = np.where(
-            np.logical_or(m_i < self.PAD[0], M_i > self.PAD[1]),
-            theta,
-            np.where(alpha < 1, theta, 1.0),
+        # PAD then SED
+        PAD = np.logical_or(
+            m_i < self.approximated_maximum_principle[0],
+            M_i > self.approximated_maximum_principle[1],
         )
+        not_smooth_extrema = alpha < 1
+        theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
         # store theta visualization
         self.theta += theta[1:-1]
         self.visualized_theta += np.where(meaningful_theta, theta, 1)[1:-1]
@@ -729,12 +730,13 @@ class AdvectionSolver(Integrator):
         theta, meaningful_theta, M_ij, m_ij = self.apriori_limiter(
             points=np.array([horizontal_points, vertical_points]), u=fallback, m=m, M=M
         )
-        # apply smooth extrema detection
-        theta = np.where(
-            np.logical_or(m_ij < self.PAD[0], M_ij > self.PAD[1]),
-            theta,
-            np.where(alpha < 1, theta, 1.0),
+        # PAD then SED
+        PAD = np.logical_or(
+            m_ij < self.approximated_maximum_principle[0],
+            M_ij > self.approximated_maximum_principle[1],
         )
+        not_smooth_extrema = alpha < 1
+        theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
         # store theta
         stored_theta = chop(theta, self.riemann_zone, axis=0)
         stored_theta = chop(stored_theta, self.riemann_zone, axis=1)
@@ -917,11 +919,12 @@ class AdvectionSolver(Integrator):
         alpha = self.compute_alpha(self.apply_bc(unew, gw=3))
 
         # PAD then SED then NAD
-        trouble = np.where(
-            np.logical_or(unew < self.PAD[0], unew > self.PAD[1]),
-            1,
-            np.where(alpha < 1, possible_trouble, 0),
+        PAD = np.logical_or(
+            unew < self.approximated_maximum_principle[0],
+            unew > self.approximated_maximum_principle[1],
         )
+        not_smooth_extrema = alpha < 1
+        trouble = np.where(PAD, 1, np.where(not_smooth_extrema, possible_trouble, 0))
 
         # set all cells to 1 if cause_trouble = True
         trouble = (
@@ -1290,20 +1293,20 @@ class AdvectionSolver(Integrator):
         """
         rk integrate to an order that matches the spatial order
         """
-        if self.order > 3:
-            self.rk4()
-        elif self.order > 2:
-            if ssp:
-                self.ssprk3()
-            else:
-                self.rk3()
-        elif self.order > 1:
+        if self.order < 2:
+            self.euler()
+        elif self.order < 3:
             if ssp:
                 self.ssprk2()
             else:
                 self.rk2()
+        elif self.order < 4:
+            if ssp:
+                self.ssprk3()
+            else:
+                self.rk3()
         else:
-            self.euler()
+            self.rk4()
 
     def periodic_error(self, norm: str = "l1"):
         """

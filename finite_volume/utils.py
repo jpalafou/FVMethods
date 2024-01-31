@@ -1,3 +1,4 @@
+from itertools import product
 import numpy as np
 
 
@@ -134,3 +135,17 @@ def f_of_9_neighbors(u: np.array, f):
         u[..., :-2, :-2],
     ]
     return f.reduce(list_of_9_neighbors)
+
+
+def dict_combinations(key_values: dict) -> list:
+    """
+    args:
+        key_values  {key0: [val0, val1, ...], ...}
+    returns:
+        [{key0: val0, ...}, {key0: val1, ...}, ...]
+    """
+    value_combinations = list(product(*key_values.values()))
+    list_of_dicts = [
+        dict(zip(key_values.keys(), values)) for values in value_combinations
+    ]
+    return list_of_dicts
