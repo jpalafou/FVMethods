@@ -140,7 +140,8 @@ def test_MUSCLHancock():
         fallback_limiter="moncen",
         hancock=True,
         cause_trouble=True,
-        load=True,
+        load=False,
+        save=False,
     )
     solution.euler()
 

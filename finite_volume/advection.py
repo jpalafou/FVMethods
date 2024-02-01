@@ -261,7 +261,10 @@ class AdvectionSolver(Integrator):
 
         # boundary conditions
         self.const = const
-        constants = dict(u=self.const, trouble=0)
+        constants = dict(
+            u=self.const,
+            trouble=0,
+        )
         if bc == "periodic":
             self.bc_config = dict(mode="wrap")
             self.constant_bc_config = {key: {} for key, _ in constants.items()}
@@ -439,6 +442,7 @@ class AdvectionSolver(Integrator):
         # velocity at cell interfaces
         if self.ndim == 1:
             self.a = v * np.ones(nx + 1)
+            self.a_cell_centers = v * np.ones(nx)
         if self.ndim == 2:
             # x and y values at interface points
             na = np.newaxis
@@ -999,20 +1003,16 @@ class AdvectionSolver(Integrator):
         # compute second order face interpolations
         u_2gw = self.apply_bc(u, gw=2)
         du = MUSCL(u_2gw, axis=0, slope_limiter=self.fallback_limiter)
-        right_face = np.full_like(u_2gw[1:-1], np.nan)
-        left_face = np.full_like(u_2gw[1:-1], np.nan)
 
         # apply predictor corrector scheme or dont
+        cell_centers = np.copy(u)
         if self.hancock:
-            right_face[:-1] = (
-                u_2gw[1:-2] + 0.5 * (1 - self.a * dt * self.hx_recip) * du[:-1]
-            )
-            left_face[1:] = (
-                u_2gw[2:-1] - 0.5 * (1 + self.a * dt * self.hx_recip) * du[1:]
-            )
-        else:
-            right_face[:-1] = u_2gw[1:-2] + 0.5 * du[:-1]
-            left_face[1:] = u_2gw[2:-1] - 0.5 * du[1:]
+            cell_centers -= 0.5 * self.a_cell_centers * dt * self.hx_recip * du[1:-1]
+
+        # interpolate cell faces
+        cell_centers = self.apply_bc(cell_centers, gw=1)
+        right_face = cell_centers + 0.5 * du
+        left_face = cell_centers - 0.5 * du
 
         # fall back to first order if there are positivity violations
         if self.fallback_to_first_order:
