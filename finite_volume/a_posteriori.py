@@ -34,10 +34,9 @@ def MUSCL(
     args:
         u               (,m,)
         axis
-        limit_slopes    minmod or moncen
+        slope_limiter    minmod or moncen
     returns:
-        left_face       (,m-2,)
-        right_face      (,m-2,)
+        slopes          (,m-2,)
     """
     du_left = chopchop(u, chop_size=(1, 1), axis=axis) - chopchop(
         u, chop_size=(0, 2), axis=axis

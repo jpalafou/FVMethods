@@ -1008,7 +1008,7 @@ class AdvectionSolver(Integrator):
                 u_2gw[1:-2] + 0.5 * (1 - self.a * dt * self.hx_recip) * du[:-1]
             )
             left_face[1:] = (
-                u_2gw[2:-1] - 0.5 * (1 - self.a * dt * self.hx_recip) * du[1:]
+                u_2gw[2:-1] - 0.5 * (1 + self.a * dt * self.hx_recip) * du[1:]
             )
         else:
             right_face[:-1] = u_2gw[1:-2] + 0.5 * du[:-1]
