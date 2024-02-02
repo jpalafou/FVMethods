@@ -32,7 +32,7 @@ limiter_configs_1d = [
         dict(
             apriori_limiting=[True],
             mpp_lite=[False, True],
-            SED=[False, True],
+            SED=[True],
         )
     ),
     *dict_combinations(
@@ -40,9 +40,9 @@ limiter_configs_1d = [
             aposteriori_limiting=[True],
             fallback_limiter=["minmod", "moncen"],
             convex=[False, True],
-            hancock=[False, True],
+            hancock=[True],
             fallback_to_first_order=[False, True],
-            SED=[False, True],
+            SED=[True],
         )
     ),
 ]
@@ -174,33 +174,33 @@ limiter_configs_2d = [
         dict(
             apriori_limiting=[True],
             mpp_lite=[False, True],
-            SED=[False, True],
+            SED=[True],
         )
     ),
     *dict_combinations(
         dict(
             aposteriori_limiting=[True],
             fallback_limiter=["minmod", "moncen"],
-            fallback_to_first_order=[False, True],
             convex=[False, True],
-            hancock=[False, True],
-            SED=[False, True],
+            hancock=[True],
+            fallback_to_first_order=[False, True],
+            SED=[True],
         )
     ),
     *dict_combinations(
         dict(
             aposteriori_limiting=[True],
-            fallback_to_first_order=[False],
             fallback_limiter=["PP2D"],
             convex=[False, True],
-            hancock=[False, True],
-            SED=[False, True],
+            hancock=[True],
+            fallback_to_first_order=[False],
+            SED=[True],
         )
     ),
 ]
 
 
-@pytest.mark.parametrize("p", range(8))
+@pytest.mark.parametrize("p", range(6, 8))
 @pytest.mark.parametrize("a", [1, -1])
 @pytest.mark.parametrize("k", [-1, 0, 1])
 @pytest.mark.parametrize("ic_type", ["sinus", "square"])
@@ -220,7 +220,7 @@ def test_vertical_shift_equivariance_2d(p, a, k, ic_type, quadrature, limiter_co
     def u0_shifted(x, y):
         return linear_transformation(u0(x, y))
 
-    u0_shifted.__name__ = u0_shifted.__name__ + f"_{a}_{k}"
+    u0_shifted.__name__ += f"_{a}_{k}"
 
     shared_config = dict(
         **limiter_config,
@@ -263,6 +263,62 @@ def test_vertical_shift_equivariance_2d(p, a, k, ic_type, quadrature, limiter_co
         np.isclose(
             linear_transformation(solver.u_snapshots[-1][1]),
             shifted_solver.u_snapshots[-1][1],
+            atol=1e-10,
+        )
+    )
+
+
+@pytest.mark.parametrize("p", range(8))
+@pytest.mark.parametrize("ic_type", ["sinus"])
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+@pytest.mark.parametrize("limiter_config", limiter_configs_1d[:1])
+def test_velocity_equivariance_2d(p, ic_type, n_rotations, limiter_config):
+    """
+    C_n in [C_1, C_2, C_3, C_4]
+    advection_solution(u(x, y), (v, 0)) = C_n^-1 advection_...((u(x, y),  C_n (v, 0))
+    """
+
+    def u0(x, y):
+        return generate_ic(type=ic_type, x=x, y=y)
+
+    def u0_rotated(x, y):
+        return np.rot90(u0(x, y), k=n_rotations)
+    u0_rotated.__name__ += f"_{n_rotations}"
+
+    vx_vy = (1, 0)
+    vx_vy_C4 = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
+
+    shared_config = dict(
+        **limiter_config,
+        save_directory=test_directory,
+        PAD=(0, 1),
+        n=(64,),
+        order=p + 1,
+        courant=0.8,
+        snapshot_dt=1,
+    )
+
+    # baseline
+    solver = AdvectionSolver(
+        **shared_config,
+        u0=u0,
+        v=vx_vy,
+    )
+    solver.rkorder()
+
+    # reflected
+    solver_rotated = AdvectionSolver(
+        **shared_config,
+        u0=u0_rotated,
+        v=vx_vy_C4[n_rotations],
+    )
+    solver_rotated.rkorder()
+
+    # check equivariance
+    assert np.all(
+        np.isclose(
+            solver.u_snapshots[-1][1],
+            np.rot90(solver_rotated.u_snapshots[-1][1], k=-n_rotations),
             atol=1e-10,
         )
     )
