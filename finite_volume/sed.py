@@ -2,7 +2,7 @@ import numpy as np
 from finite_volume.utils import chopchop
 
 
-def detect_smooth_extrema(u: np.ndarray, h: float, axis: int):
+def detect_smooth_extrema(u: np.ndarray, h: float = 1.0, axis: int = 0):
     """
     args:
         u   array of any shape, (..., m + 6, ...)
@@ -53,5 +53,33 @@ def detect_smooth_extrema(u: np.ndarray, h: float, axis: int):
     return alpha_min
 
 
-def detect_no_smooth_extrema(u: np.ndarray, axis: int, **kwargs):
-    return chopchop(np.zeros_like(u), chop_size=(3, 3), axis=axis)
+def compute_alpha_1d(u: np.ndarray, zeros: bool = None) -> np.ndarray:
+    """
+    args:
+        u       cell volume averages (m + 6,)
+        h       mesh size
+        zeros   whether to return all 0s
+    returns
+        alpha   np array (m,)
+    """
+    if zeros:
+        return np.zeros_like(u[3:-3])
+    return detect_smooth_extrema(u, axis=0)
+
+
+def compute_alpha_2d(u, zeros: bool = None):
+    """
+    args:
+        u       cell volume averages (m + 6, n + 6)
+        hx      mesh size in x (axis 1)
+        hy      mesh size in y (axis 0)
+        zeros   whether to return all 0s
+    returns
+        alpha   np array (m, n)
+    """
+    if zeros:
+        return np.zeros_like(u[3:-3, 3:-3])
+    alpha_x = detect_smooth_extrema(u, axis=1)[3:-3, :]
+    alpha_y = detect_smooth_extrema(u, axis=0)[:, 3:-3]
+    alpha = np.where(alpha_x < alpha_y, alpha_x, alpha_y)
+    return alpha

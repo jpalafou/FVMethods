@@ -118,7 +118,7 @@ class stencil(LinearCombination):
                     )
                 else:
                     mylist.append(0)
-            return np.array(mylist)
+            return np.array(mylist) / sum(mylist)
         elif all(isinstance(i, float) for i in self.coeffs.values()):
             return np.array([i for i in self.coeffs.values()])
 

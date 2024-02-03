@@ -283,6 +283,7 @@ def test_velocity_equivariance_2d(p, ic_type, n_rotations, limiter_config):
 
     def u0_rotated(x, y):
         return np.rot90(u0(x, y), k=n_rotations)
+
     u0_rotated.__name__ += f"_{n_rotations}"
 
     vx_vy = (1, 0)

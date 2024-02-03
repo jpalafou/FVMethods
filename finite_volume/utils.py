@@ -212,3 +212,14 @@ def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
             out[i, j] = value
 
     return out
+
+
+def np_floor(x: np.ndarray, floor: float) -> np.ndarray:
+    """
+    args:
+        x       any shape
+        floor   constant
+    returns:
+        x which doesn't subceed floor
+    """
+    return np.where(x < floor, floor, x)
