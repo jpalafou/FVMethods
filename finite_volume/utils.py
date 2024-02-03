@@ -1,4 +1,5 @@
 from itertools import product
+from numba import njit
 import numpy as np
 
 
@@ -149,3 +150,65 @@ def dict_combinations(key_values: dict) -> list:
         dict(zip(key_values.keys(), values)) for values in value_combinations
     ]
     return list_of_dicts
+
+
+@njit(nopython=True, fastmath=True)
+def batch_convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """
+    args:
+        arrs    (m, n) or (# of arrays, m, n)
+        kernel  (p, q) or (# of kernels, p, q)
+    returns:
+        out     (# of arrays, # of kernels, m - p + 1, n - q + 1)
+    """
+    # add extra first axis where necessary
+    arrs = arr[np.newaxis, ...] if arr.ndim == 2 else arr
+    kernels = kernel[np.newaxis, ...] if kernel.ndim == 2 else kernel
+
+    # get array shapes
+    n_arrays, arr_rows, arr_cols = arrs.shape
+    n_kernels, kern_rows, kern_cols = kernels.shape
+
+    # intialize empty array
+    out = np.empty(
+        (n_arrays, n_kernels, arr_rows - kern_rows + 1, arr_cols - kern_cols + 1),
+        dtype=np.float64,
+    )
+
+    # perform n_arrays * n_kernels convolutions
+    for i in range(n_arrays):
+        for j in range(n_kernels):
+            out[i, j, ...] = convolve2d(arrs[i, ...], kernels[j, ...])
+
+    return out
+
+
+@njit(nopython=True, fastmath=True)
+def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """
+    args:
+        arr     2D array
+        kernel  2D array
+    returns:
+        out     arr convolved with kernel, excluding boundaries
+    """
+    # get array shapes
+    arr_rows, arr_cols = arr.shape
+    kern_rows, kern_cols = kernel.shape
+
+    # initialize empty array
+    out = np.empty(
+        (arr_rows - kern_rows + 1, arr_cols - kern_cols + 1), dtype=np.float64
+    )
+    out_rows, out_cols = out.shape
+
+    # perform convolution
+    for i in range(out_rows):
+        for j in range(out_cols):
+            value = 0.0
+            for p in range(kern_rows):
+                for q in range(kern_cols):
+                    value += arr[i + p, j + q] * kernel[p, q]
+            out[i, j] = value
+
+    return out

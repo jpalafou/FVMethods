@@ -2,31 +2,6 @@ import numpy as np
 import dataclasses
 
 
-def gcf(mylist: list[int]) -> int:
-    """
-    returns gcf of the absolute value of a list
-    """
-    if all(isinstance(i, int) for i in mylist):
-        if 0 in mylist:
-            raise BaseException("0 has no greatest factor.")
-        else:
-            cf = 1
-            for i in range(2, min(abs(j) for j in mylist) + 1):
-                if all(abs(k) % i == 0 for k in mylist):
-                    cf = i
-            return cf
-    raise TypeError("Input is not a list of integers.")
-
-
-def lcm(a: int, b: int) -> int:
-    """
-    returns signed lcm of two integers
-    """
-    if all(isinstance(i, int) for i in [a, b]):
-        return a * b // gcf([a, b])
-    raise TypeError("Input is not a pair of integers.")
-
-
 def gauss_lobatto(n: int):
     """
     args:
@@ -57,6 +32,31 @@ def gauss_lobatto(n: int):
     weights[-1] = weights[0]
 
     return nodes, weights
+
+
+def gcf(mylist: list[int]) -> int:
+    """
+    returns gcf of the absolute value of a list
+    """
+    if all(isinstance(i, int) for i in mylist):
+        if 0 in mylist:
+            raise BaseException("0 has no greatest factor.")
+        else:
+            cf = 1
+            for i in range(2, min(abs(j) for j in mylist) + 1):
+                if all(abs(k) % i == 0 for k in mylist):
+                    cf = i
+            return cf
+    raise TypeError("Input is not a list of integers.")
+
+
+def lcm(a: int, b: int) -> int:
+    """
+    returns signed lcm of two integers
+    """
+    if all(isinstance(i, int) for i in [a, b]):
+        return a * b // gcf([a, b])
+    raise TypeError("Input is not a pair of integers.")
 
 
 @dataclasses.dataclass
