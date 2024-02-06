@@ -3,7 +3,7 @@ from finite_volume.utils import f_of_3_neighbors, f_of_4_neighbors, np_floor
 
 
 def mpp_limiter(
-    u: np.ndarray, points: np.ndarray, zeros: bool = None, ones: bool = None
+    u: np.ndarray, points: np.ndarray, zeros: bool = False, ones: bool = False
 ):
     """
     args:

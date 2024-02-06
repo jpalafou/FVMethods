@@ -23,11 +23,6 @@ from finite_volume.a_posteriori import (
 )
 from finite_volume.utils import (
     rk4_dt_adjust,
-    stack,
-    apply_stencil,
-    chop,
-    f_of_3_neighbors,
-    f_of_4_neighbors,
     batch_convolve2d,
 )
 from finite_volume.riemann import upwinding
@@ -636,18 +631,14 @@ class AdvectionSolver(Integrator):
         horizontal_points = theta * (horizontal_points - fallback) + fallback
         vertical_points = theta * (vertical_points - fallback) + fallback
         # remove excess due to uniform ghost zone
-        horizontal_points = horizontal_points[
-            :,
-            :,
-            self.excess_transverse_gw or None : -self.excess_transverse_gw or None,
-            self.excess_riemann_gw or None : -self.excess_riemann_gw or None,
-        ]
-        vertical_points = vertical_points[
-            :,
-            :,
-            self.excess_riemann_gw or None : -self.excess_riemann_gw or None,
-            self.excess_transverse_gw or None : -self.excess_transverse_gw or None,
-        ]
+        trans_slice = slice(
+            self.excess_transverse_gw or None, -self.excess_transverse_gw or None
+        )
+        riemann_slice = slice(
+            self.excess_riemann_gw or None, -self.excess_riemann_gw or None
+        )
+        horizontal_points = horizontal_points[:, :, trans_slice, riemann_slice]
+        vertical_points = vertical_points[:, :, riemann_slice, trans_slice]
         ns_pointwise_fluxes = self.riemann_solver(
             v=self.b,
             left_value=vertical_points[:, -1, :-1, :],  # north points
@@ -763,9 +754,18 @@ class AdvectionSolver(Integrator):
         # find troubled cells
         trouble = self.find_trouble(u, dt)
         # overwrite fluxes
-        troubled_interface_mask_x, troubled_interface_mask_y = self.compute_flux_mask(
-            trouble
-        )
+        if not self.convex:
+            (
+                troubled_interface_mask_x,
+                troubled_interface_mask_y,
+            ) = broadcast_troubled_cells_to_faces_2d(trouble)
+        else:
+            (
+                troubled_interface_mask_x,
+                troubled_interface_mask_y,
+            ) = broadcast_troubled_cells_to_faces_with_blending_2d(
+                self.apply_bc(trouble, gw=2, mode="trouble")
+            )
         self.f[...] = (
             1 - troubled_interface_mask_x
         ) * self.f + troubled_interface_mask_x * fallback_fluxes_x

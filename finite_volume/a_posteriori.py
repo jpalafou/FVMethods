@@ -52,7 +52,9 @@ def find_trouble(
     alpha = compute_alpha(u_candidate, zeros=not SED)
 
     # PAD then SED then NAD
-    PAD_trouble = np.logical_or(u_candidate_inner < PAD[0], u_candidate_inner > PAD[1])
+    PAD_trouble = np.logical_or(
+        u_candidate_inner < min(PAD), u_candidate_inner > max(PAD)
+    )
     not_smooth_extrema = alpha < 1
     trouble = np.where(PAD_trouble, 1, np.where(not_smooth_extrema, NAD_trouble, 0))
 
@@ -101,7 +103,7 @@ def PAD_fallback(
     return:
         out         x where elements not bounded by PAD are replaced with fallback
     """
-    PAD_violation = np.logical_or(x < PAD[0], x > PAD[1])
+    PAD_violation = np.logical_or(x < min(PAD), x > max(PAD))
     return np.where(PAD_violation, fallback, x)
 
 
