@@ -104,7 +104,7 @@ class AdvectionSolver(Integrator):
         cause_trouble: bool = False,
         SED: bool = False,
         NAD: float = 1e-10,
-        PAD: tuple = None,
+        PAD: tuple = (0, 1),
         visualization_tolerance: float = None,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
@@ -764,7 +764,7 @@ class AdvectionSolver(Integrator):
         # compute fallback fluxes
         if self.fallback_limiter.__name__ in {"minmod", "moncen"}:
             fallback_faces = compute_MUSCL_interpolations_2d(
-                u=self.apply_bc(u, gw=1),
+                u=self.apply_bc(u, gw=2),
                 slope_limiter=self.fallback_limiter,
                 fallback_to_1st_order=self.fallback_to_first_order,
                 PAD=self.PAD,
@@ -775,7 +775,7 @@ class AdvectionSolver(Integrator):
             )
         elif self.fallback_limiter == "PP2D":
             fallback_faces = compute_PP2D_interpolations(
-                u=self.apply_bc(u, gw=1),
+                u=self.apply_bc(u, gw=2),
                 PAD=self.PAD,
                 hancock=self.hancock,
                 dt=self.dt,
@@ -783,14 +783,14 @@ class AdvectionSolver(Integrator):
                 v_cell_centers=self.a_cell_centers,
             )
         fallback_fluxes_x = self.riemann_solver(
-            v=self.a,
-            left_value=fallback_faces[0][1][:-1],
-            right_value=fallback_faces[0][0][1:],
+            v=self.a_midpoint,
+            left_value=fallback_faces[0][1][1:-1, :-1],
+            right_value=fallback_faces[0][0][1:-1, 1:],
         )
         fallback_fluxes_y = self.riemann_solver(
-            v=self.a,
-            left_value=fallback_faces[0][1][:-1],
-            right_value=fallback_faces[0][0][1:],
+            v=self.b_midpoint,
+            left_value=fallback_faces[0][1][:-1, 1:-1],
+            right_value=fallback_faces[0][0][1:, 1:-1],
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)
