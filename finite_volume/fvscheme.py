@@ -99,7 +99,7 @@ class stencil(LinearCombination):
                 elif isinstance(val, Fraction):
                     writer.writerow([key, val.numerator, val.denominator])
 
-    def nparray(self):
+    def nparray(self, size: int = None):
         """
         convert a reconstruction scheme to an array of weights
         """
@@ -118,9 +118,15 @@ class stencil(LinearCombination):
                     )
                 else:
                     mylist.append(0)
-            return np.array(mylist) / sum(mylist)
+            stencil_array = np.array(mylist) / sum(mylist)
         elif all(isinstance(i, float) for i in self.coeffs.values()):
-            return np.array([i for i in self.coeffs.values()])
+            stencil_array = np.array([i for i in self.coeffs.values()])
+        if size is not None:
+            while len(stencil_array) < size:
+                z = np.zeros(1)
+                stencil_array = np.concatenate((z, stencil_array, z))
+            assert len(stencil_array) == size
+        return stencil_array
 
     @classmethod
     @abstractmethod

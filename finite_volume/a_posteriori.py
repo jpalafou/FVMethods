@@ -35,7 +35,7 @@ def find_trouble(
         u_candidate_inner = u_candidate[3:-3, 3:-3]
 
     if ones:
-        return np.zeros_like(u_candidate, dtype=np.int64)
+        return np.ones_like(u_candidate_inner, dtype=np.int64)
 
     # max and min of immediate neighbors
     M = f_of_neighbors(u, f=np.maximum)

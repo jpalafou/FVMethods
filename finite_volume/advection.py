@@ -103,7 +103,7 @@ class AdvectionSolver(Integrator):
         mpp_lite: bool = False,
         aposteriori_limiting: bool = False,
         fallback_limiter: str = "moncen",
-        convex: bool = True,
+        convex: bool = False,
         hancock: bool = False,
         fallback_to_first_order: bool = False,
         cause_trouble: bool = False,
@@ -216,6 +216,7 @@ class AdvectionSolver(Integrator):
         # time discretization
         self.adjust_time_step = adjust_time_step
         self.order = order
+        self.p = order - 1
         v_over_h = vx_max / self.hx + vy_max / self.hy
         if v_over_h == 0:
             print("0 velocity case: setting v / h to 0.1")
@@ -327,132 +328,83 @@ class AdvectionSolver(Integrator):
             self.PAD[1] + self.mpp_tolerance,
         )
 
-        # stencils: right/left conservative interpolation from a volume or line segment
-        left_interface_stencil = ConservativeInterpolation.construct_from_order(
-            order, "left"
-        ).nparray()
-        right_interface_stencil = ConservativeInterpolation.construct_from_order(
-            order, "right"
-        ).nparray()
-        self._conservative_stencil_size = len(left_interface_stencil)
-        self._conservative_k = int(
-            np.floor(len(left_interface_stencil) / 2)
-        )  # cell reach of stencil
-
-        if self.mpp_lite:
-            cell_center_stencil = ConservativeInterpolation.construct_from_order(
-                order, "center"
-            ).nparray()
-            while cell_center_stencil.size < self._conservative_stencil_size:
-                cell_center_stencil = np.concatenate(
-                    (np.zeros(1), cell_center_stencil, np.zeros(1))
-                )
-            self.cell_center_stencil = cell_center_stencil[np.newaxis]
-
-        # quadrature points setup
+        # quadrature setup
         self.flux_strategy = flux_strategy if self.ndim > 1 else "gauss-legendre"
-        if self.flux_strategy == "gauss-legendre":
-            p = order - 1  # degree of reconstructed polynomial
-            N_G = int(
-                np.ceil((p + 1) / 2)
-            )  # number of gauss-legendre quadrature points
-            N_GL = int(
-                np.ceil((p + 3) / 2)
-            )  # number of gauss-lobatto quadrature points
-            # guass-legendre quadrature
-            (
-                gauss_quadr_points,
-                gauss_quadr_weights,
-            ) = np.polynomial.legendre.leggauss(N_G)
-            # transform to cell coordinate
-            gauss_quadr_points /= 2
-            gauss_quadr_weights /= 2
-            self.gauss_quadr_weights = np.array(
-                gauss_quadr_weights
-            )  # for evaluating line integrals
-            # reconstruct polynomial and evaluate at each quadrature point
-            list_of_line_stencils = []
-            for x in gauss_quadr_points:
-                stencil = ConservativeInterpolation.construct_from_order(
-                    order, x
-                ).nparray()
-                # if the stencil is short, assume it needs a 0 on either end
-                while len(stencil) < self._conservative_stencil_size:
-                    stencil = np.concatenate((np.zeros(1), stencil, np.zeros(1)))
-                assert len(stencil) == self._conservative_stencil_size
-                list_of_line_stencils.append(stencil)  # ordered from left to right
-            self.line_stencils = np.array(list_of_line_stencils)
+        cons_left = ConservativeInterpolation.construct_from_order(
+            self.p + 1, "left"
+        ).nparray()
+        conservative_stencil_size = len(cons_left)
+        self.conservative_width = conservative_stencil_size // 2
+        self.transverse_width = 0
 
-            # stencils for reconstructing pointwise values along a line average
-            list_of_interior_pointwise_stencils = []
-            if N_GL > 2:
-                # interpolating values along line segments
-                GL_quadr_points, _ = gauss_lobatto(N_GL)
-                # scale to cell of width 1
-                interior_GL_quadr_points = GL_quadr_points[1:-1] / 2
-                # cell center is the only central point considered for mpp_lite
-                if self.mpp_lite:
-                    interior_GL_quadr_points = []
-                # generate stencils two are given
-                for x in interior_GL_quadr_points:
-                    stencil = ConservativeInterpolation.construct_from_order(
-                        order, x
-                    ).nparray()
-                    # if the stencil is short, assume it needs a 0 on either end
-                    while len(stencil) < self._conservative_stencil_size:
-                        stencil = np.concatenate((np.zeros(1), stencil, np.zeros(1)))
-                    assert len(stencil) == self._conservative_stencil_size
-                    list_of_interior_pointwise_stencils.append(stencil)
-            # assort list of stencils for pointwise interpolation
-            self.pointwise_stencils = np.array(
-                [left_interface_stencil]
-                + list_of_interior_pointwise_stencils
-                + [right_interface_stencil]
+        # interpolate line averages
+        line_interpolation_positions = []
+        if self.flux_strategy == "gauss-legendre":
+            # legendre gauss quadrature
+            n_legendre_gauss = self.p // 2 + 1
+            assert 2 * n_legendre_gauss - 1 >= self.p
+            leg_points, leg_weights = np.polynomial.legendre.leggauss(n_legendre_gauss)
+            leg_points /= 2
+            leg_weights /= 2
+            self.leg_weights = np.array(leg_weights).reshape(-1, 1, 1)
+            line_interpolation_positions = list(leg_points)
+        elif self.flux_strategy == "transverse":
+            line_interpolation_positions = ["center"]
+        list_of_line_stencils = []
+        for x in line_interpolation_positions:
+            s = ConservativeInterpolation.construct_from_order(self.p + 1, x).nparray(
+                size=conservative_stencil_size
             )
-            if self.apriori_limiting:
-                _, GL_quadr_weights = gauss_lobatto(N_GL)
-                C_mpp = min(GL_quadr_weights) / 2
+            list_of_line_stencils.append(s)
+        self.line_stencils = np.array(list_of_line_stencils)
+
+        # interpolate pointwise averages
+        if self.apriori_limiting and not self.mpp_lite:
+            n_lobatto_gauss = self.p // 2 + 2
+            assert 2 * n_lobatto_gauss - 3 >= self.p
+            if n_lobatto_gauss > 2:
+                lob_points, lob_weights = gauss_lobatto(n_lobatto_gauss)
+                lob_points /= 2
+                lob_weights /= 2
+                interior_lob_points = lob_points[1:-1]
+                # warn use if C is too high for MPP
+                C_mpp = min(lob_weights)
                 self.dt_min = C_mpp / v_over_h
                 # check if timestep is small enough for mpp
                 if self.dt * v_over_h > C_mpp:
                     print(
                         "WARNING: Maximum principle preserving not satisfied.\nTry a ",
-                        f"courant condition less than {C_mpp}\n",
+                        f"CFL factor less than {C_mpp:.5f}\n",
                     )
-            # no transverse integral stencil
-            self._transverse_k = 0
-        elif self.flux_strategy == "transverse":
-            gauss_quadr_points = np.array([0.0])
-            self.line_stencils = ConservativeInterpolation.construct_from_order(
-                order, "center"
-            ).nparray()[np.newaxis]
-            self.pointwise_stencils = np.array(
-                [left_interface_stencil] + [right_interface_stencil]
+            else:
+                interior_lob_points = []
+            point_interpolation_positions = (
+                ["left"] + list(interior_lob_points) + ["right"]
             )
+        else:
+            point_interpolation_positions = ["left", "right"]
+        list_of_point_stencils = []
+        for x in point_interpolation_positions:
+            s = ConservativeInterpolation.construct_from_order(self.p + 1, x).nparray(
+                size=conservative_stencil_size
+            )
+            list_of_point_stencils.append(s)
+        self.pointwise_stencils = np.array(list_of_point_stencils)
 
-            # transverse integral stencil
+        if self.flux_strategy == "transverse":
+            leg_points = np.array([0.0])
             self.transverse_stencil = TransverseIntegral.construct_from_order(
-                order
+                self.p + 1
             ).nparray()
-            self._transverse_stencil_size = len(self.transverse_stencil)
-            self._transverse_k = int(
-                np.floor(len(self.transverse_stencil) / 2)
-            )  # cell reach of stencil
-        # reshape pointwise stencils to 3D for convolution function
-        # (n stencils, 1, len(stencil))
-        self.pointwise_stencils = self.pointwise_stencils[:, np.newaxis, :]
+            self.transverse_width = len(self.transverse_stencil) // 2
+
+        self.n_line_stencils = self.line_stencils.shape[0]
+        self.n_pointwise_stencils = self.pointwise_stencils.shape[0]
 
         # ghost width
-        self.riemann_zone = max(self._transverse_k, 1)
-        self.gw_riemann = self.riemann_zone + self._conservative_k
-        if self.flux_strategy == "gauss-legendre":
-            self.gw_nonriemann = self.riemann_zone + self._conservative_k
-        elif self.flux_strategy == "transverse":
-            self.gw_nonriemann = self.riemann_zone + self._transverse_k
-        # the pointwise data will have a uniform ghost width, so we must keep track of
-        # the excess in the riemann and non-riemann directions
-        self.excess_riemann_gw = max(self.riemann_zone - 1, 0)
-        self.excess_nonriemann_gw = max(self.riemann_zone - self._transverse_k, 0)
+        self.riemann_gw = max(self.transverse_width, 1)
+        self.excess_riemann_gw = self.riemann_gw - 1
+        self.excess_transverse_gw = self.riemann_gw - self.transverse_width
 
         # velocity at cell interfaces
         if self.ndim == 1:
@@ -463,23 +415,15 @@ class AdvectionSolver(Integrator):
             na = np.newaxis
             # EW interface
             EW_interface_x, EW_interface_y = np.meshgrid(self.x_interface, self.y)
-            EW_interface_x = np.repeat(
-                EW_interface_x[na], len(gauss_quadr_points), axis=0
-            )
-            EW_interface_y = np.repeat(
-                EW_interface_y[na], len(gauss_quadr_points), axis=0
-            )
-            EW_interface_y += gauss_quadr_points[:, na, na] * self.hy
+            EW_interface_x = np.repeat(EW_interface_x[na], len(leg_points), axis=0)
+            EW_interface_y = np.repeat(EW_interface_y[na], len(leg_points), axis=0)
+            EW_interface_y += leg_points[:, na, na] * self.hy
             EW_midpoint_x, EW_midpoint_y = np.meshgrid(self.x_interface, self.y)
             # NS interface
             NS_interface_x, NS_interface_y = np.meshgrid(self.x, self.y_interface)
-            NS_interface_x = np.repeat(
-                NS_interface_x[na], len(gauss_quadr_points), axis=0
-            )
-            NS_interface_y = np.repeat(
-                NS_interface_y[na], len(gauss_quadr_points), axis=0
-            )
-            NS_interface_x += gauss_quadr_points[:, na, na] * self.hx
+            NS_interface_x = np.repeat(NS_interface_x[na], len(leg_points), axis=0)
+            NS_interface_y = np.repeat(NS_interface_y[na], len(leg_points), axis=0)
+            NS_interface_x += leg_points[:, na, na] * self.hx
             NS_midpoint_x, NS_midpoint_y = np.meshgrid(self.x, self.y_interface)
             # evaluate v components normal to cell interfaces
             xx_center, yy_center = np.meshgrid(self.x, self.y)
@@ -503,8 +447,12 @@ class AdvectionSolver(Integrator):
                 self.a_cell_centers = v(xx_center, yy_center)[0]
                 self.b_cell_centers = v(xx_center, yy_center)[1]
             if self.flux_strategy == "transverse":  # apply boundary for transverse flux
-                self.a = self.apply_bc(self.a, gw=[(0,), (self._transverse_k,), (0,)])
-                self.b = self.apply_bc(self.b, gw=[(0,), (0,), (self._transverse_k,)])
+                self.a = self.apply_bc(
+                    self.a, gw=[(0,), (self.transverse_width,), (0,)]
+                )
+                self.b = self.apply_bc(
+                    self.b, gw=[(0,), (0,), (self.transverse_width,)]
+                )
 
         # fluxes
         if self.ndim == 1:
@@ -533,31 +481,10 @@ class AdvectionSolver(Integrator):
             self.integrate_fluxes = self.transverse_integral
 
         if self.aposteriori_limiting:
-            self.aposteriori_limiter = self.fallback_scheme
-            if self.convex:
-                if self.ndim == 1:
-                    self.get_flux_mask = (
-                        broadcast_troubled_cells_to_faces_with_blending_1d
-                    )
-                elif self.ndim == 2:
-                    self.get_flux_mask = (
-                        broadcast_troubled_cells_to_faces_with_blending_2d
-                    )
-            else:
-                if self.ndim == 1:
-                    self.correction_mask = broadcast_troubled_cells_to_faces_1d
-                elif self.ndim == 2:
-                    self.correction_mask = broadcast_troubled_cells_to_faces_2d
             if self.ndim == 1:
-                self.compute_fallback_fluxes = self.compute_fallback_fluxes_1d
-                self.revise_fluxes = self.revise_fluxes_1d
+                self.aposteriori_limiter = self.revise_fluxes_1d
             elif self.ndim == 2:
-                self.compute_fallback_fluxes = self.compute_fallback_fluxes_2d
-                if self.fallback_limiter == "PP2D":
-                    self.compute_fallback_fluxes = self.compute_PP2D_fluxes
-                self.revise_fluxes = self.revise_fluxes_2d
-        else:
-            self.aposteriori_limiter = lambda u, dt: None
+                self.aposteriori_limiter = self.revise_fluxes_2d
 
     def get_dynamics(self) -> np.ndarray:
         """
@@ -581,7 +508,8 @@ class AdvectionSolver(Integrator):
         self.udot_evaluation_count += 1
         if not (self.cause_trouble and self.aposteriori_limiting):
             self.get_fluxes(u=u)  # high order flux update
-        self.aposteriori_limiter(u=u, dt=dt)
+        if self.aposteriori_limiting:
+            self.aposteriori_limiter(u=u, dt=dt)
         return self.get_dynamics()
 
     def apply_bc(
@@ -612,25 +540,6 @@ class AdvectionSolver(Integrator):
             **self.constant_bc_config[mode],
         )
 
-    def conservative_interpolation(
-        self, u: np.ndarray, stencils: np.ndarray, axis: int = 0
-    ):
-        """
-        args:
-            u           array of arbitrary shape
-            stensils    m, n array
-                            m   number of stencils
-                            n   stencil size
-            axis
-        returns:
-            u with new first axis of size m (the number of interpolated values)
-        """
-        stacked_u = stack(u, stacks=stencils.shape[1], axis=axis)
-        interpolations = np.apply_along_axis(
-            lambda stencil: apply_stencil(stacked_u, stencil), axis=1, arr=stencils
-        )
-        return interpolations
-
     def get_fluxes_1d(self, u: np.ndarray):
         """
         args:
@@ -640,14 +549,14 @@ class AdvectionSolver(Integrator):
         """
         # interpolate points from line averages
         points = batch_convolve2d(
-            arr=self.apply_bc(u, gw=self.gw_riemann).reshape(1, -1),
-            kernel=self.pointwise_stencils,
+            arr=self.apply_bc(u, gw=self.conservative_width + 1).reshape(1, -1),
+            kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
         )
         points = points[0, :, 0, :]  # (# of interpolated points, # cells x
         # slope limiting
         theta, M_i, m_i = mpp_limiter(
-            self.apply_bc(u, gw=2),
-            points,
+            u=self.apply_bc(u, gw=2),
+            points=points,
             ones=not self.apriori_limiting,
             zeros=self.cause_trouble,
         )
@@ -667,7 +576,7 @@ class AdvectionSolver(Integrator):
         # riemann problem
         right_points = points[-1, :-1]
         left_points = points[0, 1:]
-        self.f[...] = self.riemanns_solver(
+        self.f[...] = self.riemann_solver(
             v=self.a, left_value=right_points, right_value=left_points
         )
 
@@ -679,77 +588,89 @@ class AdvectionSolver(Integrator):
             self.a  (ny, nx + 1)
             self.b  (ny + 1, nx)
         """
-        # gauss-legendre interpolation to get line averages from cell averages
-        horizontal_lines = self.conservative_interpolation(
-            u=self.apply_bc(u, gw=((self.gw_nonriemann,), (self.gw_riemann,))),
-            stencils=self.line_stencils,
-            axis=0,
+        # interpolate line averages from cell averages
+        horizontal_lines = batch_convolve2d(
+            arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
+                np.newaxis
+            ],
+            kernel=self.line_stencils.reshape(self.n_line_stencils, -1, 1),
         )
-        vertical_lines = self.conservative_interpolation(
-            u=self.apply_bc(u, gw=((self.gw_riemann,), (self.gw_nonriemann,))),
-            stencils=self.line_stencils,
-            axis=1,
+        horizontal_lines = horizontal_lines[0]
+        vertical_lines = batch_convolve2d(
+            arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
+                np.newaxis
+            ],
+            kernel=self.line_stencils.reshape(self.n_line_stencils, 1, -1),
         )
-        # gauss-legendre interpolation to get pointise values from line averages
-        horizontal_points = self.conservative_interpolation(
-            u=horizontal_lines, stencils=self.pointwise_stencils, axis=2
+        vertical_lines = vertical_lines[0]
+        print(f"{u.shape=}")
+        print(f"{horizontal_lines.shape=}")
+        print(f"{vertical_lines.shape=}")
+        # interpolate points from line averages
+        horizontal_points = batch_convolve2d(
+            arr=horizontal_lines,
+            kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
         )
-        vertical_points = self.conservative_interpolation(
-            u=vertical_lines, stencils=self.pointwise_stencils, axis=1
+        vertical_points = batch_convolve2d(
+            arr=vertical_lines,
+            kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, -1, 1),
         )
-        # evaluate alpha and theta
-        fallback = self.apply_bc(u, gw=self.riemann_zone + 3)
-        alpha = self.compute_alpha(fallback)
-        fallback = fallback[2:-2, 2:-2]  # remove extra gw for for computing SE
-        m = self.f_of_neighbors(fallback, f=np.minimum)
-        M = self.f_of_neighbors(fallback, f=np.maximum)
-        self.m[...] = chop(
-            m, chop_size=self.riemann_zone, axis=[0, 1]
-        )  # store for later
-        self.M[...] = chop(
-            M, chop_size=self.riemann_zone, axis=[0, 1]
-        )  # store for later
-        fallback = fallback[1:-1, 1:-1]  # remove extra gw for computing m and M
-        theta, meaningful_theta, M_ij, m_ij = self.apriori_limiter(
-            points=np.array([horizontal_points, vertical_points]), u=fallback, m=m, M=M
+        print(f"{horizontal_points.shape=}")
+        print(f"{vertical_points.shape=}")
+        # slope limiting
+        theta, M_ij, m_ij = mpp_limiter(
+            u=self.apply_bc(u, gw=self.riemann_gw + 1),
+            points=np.concatenate((horizontal_points, vertical_points)),
+            ones=not self.apriori_limiting,
+            zeros=self.cause_trouble,
         )
-        # PAD then SED
+        print(f"{theta.shape=}")
+        # PAD
         PAD = np.logical_or(
             m_ij < self.approximated_maximum_principle[0],
             M_ij > self.approximated_maximum_principle[1],
         )
+        # smooth extrema detection
+        alpha = self.compute_alpha(
+            self.apply_bc(u, gw=self.riemann_gw + 3), zeros=not self.SED
+        )
         not_smooth_extrema = alpha < 1
+        # PAD then SED
         theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
-        # store theta
-        stored_theta = chop(theta, self.riemann_zone, axis=0)
-        stored_theta = chop(stored_theta, self.riemann_zone, axis=1)
-        self.theta += stored_theta
-        visualized_theta = np.where(meaningful_theta, theta, 1)
-        visualized_theta = chop(visualized_theta, self.riemann_zone, axis=0)
-        visualized_theta = chop(visualized_theta, self.riemann_zone, axis=1)
-        self.visualized_theta += visualized_theta
         # limit slopes
+        fallback = self.apply_bc(u, gw=self.riemann_gw)
         horizontal_points = theta * (horizontal_points - fallback) + fallback
         vertical_points = theta * (vertical_points - fallback) + fallback
         # remove excess due to uniform ghost zone
-        horizontal_points = chop(horizontal_points, self.excess_riemann_gw, axis=3)
-        horizontal_points = chop(horizontal_points, self.excess_nonriemann_gw, axis=2)
-        vertical_points = chop(vertical_points, self.excess_riemann_gw, axis=2)
-        vertical_points = chop(vertical_points, self.excess_nonriemann_gw, axis=3)
-        # riemann problem
+        horizontal_points = horizontal_points[
+            :,
+            :,
+            self.excess_transverse_gw or None : -self.excess_transverse_gw or None,
+            self.excess_riemann_gw or None : -self.excess_riemann_gw or None,
+        ]
+        vertical_points = vertical_points[
+            :,
+            :,
+            self.excess_riemann_gw or None : -self.excess_riemann_gw or None,
+            self.excess_transverse_gw or None : -self.excess_transverse_gw or None,
+        ]
+        print(f"{horizontal_points.shape=}")
+        print(f"{vertical_points.shape=}")
         ns_pointwise_fluxes = self.riemann_solver(
             v=self.b,
-            left_value=vertical_points[-1, :, :-1, :],  # north points
-            right_value=vertical_points[0, :, 1:, :],  # south points
+            left_value=vertical_points[:, -1, :-1, :],  # north points
+            right_value=vertical_points[:, 0, 1:, :],  # south points
         )
         ew_pointwise_fluxes = self.riemann_solver(
             v=self.a,
-            left_value=horizontal_points[-1, :, :, :-1],  # east points
-            right_value=horizontal_points[0, :, :, 1:],  # west points
+            left_value=horizontal_points[:, -1, :, :-1],  # east points
+            right_value=horizontal_points[:, 0, :, 1:],  # west points
         )
+        print(f"{ns_pointwise_fluxes.shape=}")
+        print(f"{ew_pointwise_fluxes.shape=}")
         # integrate fluxes with gauss-legendre quadrature
-        self.f[...] = self.integrate_fluxes(ew_pointwise_fluxes, axis=1)
-        self.g[...] = self.integrate_fluxes(ns_pointwise_fluxes, axis=2)
+        self.f[...] = self.integrate_fluxes(ew_pointwise_fluxes, axis=0)
+        self.g[...] = self.integrate_fluxes(ns_pointwise_fluxes, axis=1)
 
     def find_trouble(self, u: np.ndarray, dt: float) -> np.ndarray:
         """
@@ -791,21 +712,23 @@ class AdvectionSolver(Integrator):
         )
         fallback_fluxes = self.riemann_solver(
             v=self.a,
-            left_value=right_fallback_face[:-1],
-            right_value=left_fallback_face[1:],
+            left_value=self.apply_bc(right_fallback_face, gw=1)[:-1],
+            right_value=self.apply_bc(left_fallback_face, gw=1)[1:],
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)
         # revise fluxes
-        if self.convex:
-            troubled_interface = broadcast_troubled_cells_to_faces_with_blending_1d(
-                self.apply_bc(u, gw=2)
-            )
+        if not self.convex:
+            troubled_interface_mask = broadcast_troubled_cells_to_faces_1d(trouble)
         else:
-            troubled_interface = broadcast_troubled_cells_to_faces_1d(trouble)
+            troubled_interface_mask = (
+                broadcast_troubled_cells_to_faces_with_blending_1d(
+                    self.apply_bc(trouble, gw=2, mode="trouble")
+                )
+            )
         self.f[...] = (
-            troubled_interface * fallback_fluxes + (1 - troubled_interface) * self.f
-        )
+            1 - troubled_interface_mask
+        ) * self.f + troubled_interface_mask * fallback_fluxes
 
     def revise_fluxes_2d(self, u: np.ndarray, dt: float):
         """
@@ -817,24 +740,24 @@ class AdvectionSolver(Integrator):
             self.g
         """
         # compute fallback fluxes
-        if self.fallback_limiter == "PP2D":
-            fallback_faces = compute_PP2D_interpolations(
-                u=self.apply_bc(u, gw=1),
-                PAD=self.approximated_maximum_principle,
-                hancock=self.hancock,
-                dt=dt,
-                h=self.hx,
-                v_cell_centers=self.a_cell_centers,
-            )
-        else:
+        if self.fallback_limiter.__name__ in {"minmod", "moncen"}:
             fallback_faces = compute_MUSCL_interpolations_2d(
                 u=self.apply_bc(u, gw=1),
                 slope_limiter=self.fallback_limiter,
                 fallback_to_1st_order=self.fallback_to_first_order,
-                PAD=self.approximated_maximum_principle,
+                PAD=self.PAD,
                 hancock=self.hancock,
-                dt=dt,
-                h=self.hx,
+                dt=self.dt,
+                h=(1 / self.hx, 1 / self.hy),
+                v_cell_centers=self.a_cell_centers,
+            )
+        elif self.fallback_limiter == "PP2D":
+            fallback_faces = compute_PP2D_interpolations(
+                u=self.apply_bc(u, gw=1),
+                PAD=self.PAD,
+                hancock=self.hancock,
+                dt=self.dt,
+                h=(1 / self.hx, 1 / self.hy),
                 v_cell_centers=self.a_cell_centers,
             )
         fallback_fluxes_x = self.riemann_solver(
@@ -850,48 +773,38 @@ class AdvectionSolver(Integrator):
         # find troubled cells
         trouble = self.find_trouble(u, dt)
         # overwrite fluxes
-        if self.convex:
-            (
-                interface_trouble_mask_x,
-                interface_trouble_mask_y,
-            ) = broadcast_troubled_cells_to_faces_with_blending_2d(
-                self.apply_bc(u, gw=2)
-            )
-        else:
-            (
-                interface_trouble_mask_x,
-                interface_trouble_mask_y,
-            ) = broadcast_troubled_cells_to_faces_2d(trouble)
+        troubled_interface_mask_x, troubled_interface_mask_y = self.compute_flux_mask(
+            trouble
+        )
         self.f[...] = (
-            interface_trouble_mask_x * fallback_fluxes_x
-            + (1 - interface_trouble_mask_x) * self.f
-        )
+            1 - troubled_interface_mask_x
+        ) * self.f + troubled_interface_mask_x * fallback_fluxes_x
         self.g[...] = (
-            interface_trouble_mask_y * fallback_fluxes_y
-            + (1 - interface_trouble_mask_y) * self.g
-        )
+            1 - troubled_interface_mask_y
+        ) * self.g + troubled_interface_mask_y * fallback_fluxes_y
 
     def gauss_legendre_integral(self, pointwise_fluxes: np.ndarray, axis: int):
         """
         args:
-            pointwise_fluxes    pointwise values on a gauss-legendre quadrature along a
-                                cell face
+            pointwise_fluxes    (p, m, n)
         returns:
-            face integral approximated with gauss-legendre quadrature weights
+            out                 (1, 1, m, n)
         """
-        return apply_stencil(pointwise_fluxes, self.gauss_quadr_weights)
+        na = np.newaxis
+        return np.sum(pointwise_fluxes * self.leg_weights, axis=0)[na, na]
 
     def transverse_integral(self, pointwise_fluxes: np.ndarray, axis: int):
         """
         args:
-            pointwise_fluxes    cell midpoint values
+            pointwise_fluxes    (1, m + excess, n) or (1, m, n + excess)
         returns:
-            face integral approximated with a transverse lagrage integral
+            out                 (1, 1, m, n)
         """
-        pointwise_fluxes_stack = stack(
-            pointwise_fluxes, stacks=self._transverse_stencil_size, axis=axis
+        kernel_shape = [1, 1, 1]
+        kernel_shape[axis + 1] = len(self.transverse_stencil)
+        return batch_convolve2d(
+            arr=pointwise_fluxes, kernel=self.transverse_stencil.reshape(kernel_shape)
         )
-        return apply_stencil(pointwise_fluxes_stack, self.transverse_stencil)
 
     def rkorder(self, ssp: bool = True):
         """
