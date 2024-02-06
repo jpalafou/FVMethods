@@ -393,6 +393,11 @@ class AdvectionSolver(Integrator):
             ).nparray()
             self.transverse_width = len(self.transverse_stencil) // 2
 
+        if self.mpp_lite:
+            self.cell_center_stencil = ConservativeInterpolation.construct_from_order(
+                self.p + 1, "center"
+            ).nparray(size=conservative_stencil_size)
+
         self.n_line_stencils = self.line_stencils.shape[0]
         self.n_pointwise_stencils = self.pointwise_stencils.shape[0]
 
@@ -549,9 +554,13 @@ class AdvectionSolver(Integrator):
         )
         points = points[0, :, 0, :]  # (# of interpolated points, # cells x
         # slope limiting
+        mpp_limiting_points = points
+        if self.mpp_lite:
+            midpoints = self.compute_cell_center(u)
+            mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
         theta, M_i, m_i = mpp_limiter(
             u=self.apply_bc(u, gw=2),
-            points=points,
+            points=mpp_limiting_points,
             ones=not self.apriori_limiting,
             zeros=self.cause_trouble,
         )
@@ -590,27 +599,33 @@ class AdvectionSolver(Integrator):
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, -1, 1),
         )
-        horizontal_lines = horizontal_lines[0]
         vertical_lines = batch_convolve2d(
             arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, 1, -1),
         )
-        vertical_lines = vertical_lines[0]
         # interpolate points from line averages
         horizontal_points = batch_convolve2d(
-            arr=horizontal_lines,
+            arr=horizontal_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
         )
         vertical_points = batch_convolve2d(
-            arr=vertical_lines,
+            arr=vertical_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, -1, 1),
         )
         # slope limiting
+        h_shp = horizontal_points.shape
+        hps = horizontal_points.reshape(h_shp[0] * h_shp[1], h_shp[2], h_shp[3])
+        v_shp = vertical_points.shape
+        vps = vertical_points.reshape(v_shp[0] * v_shp[1], v_shp[2], v_shp[3])
+        mpp_limiting_points = np.concatenate((hps, vps))
+        if self.mpp_lite:
+            midpoints = self.compute_cell_center(u)
+            mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
         theta, M_ij, m_ij = mpp_limiter(
             u=self.apply_bc(u, gw=self.riemann_gw + 1),
-            points=np.concatenate((horizontal_points, vertical_points)),
+            points=mpp_limiting_points,
             ones=not self.apriori_limiting,
             zeros=self.cause_trouble,
         )
@@ -652,6 +667,32 @@ class AdvectionSolver(Integrator):
         # integrate fluxes with gauss-legendre quadrature
         self.f[...] = self.integrate_fluxes(ew_pointwise_fluxes, axis=0)
         self.g[...] = self.integrate_fluxes(ns_pointwise_fluxes, axis=1)
+
+    def compute_cell_center(self, u: np.ndarray) -> np.ndarray:
+        """
+        args:
+            u       cell volume averages with padding (m + p,) or (m + p, n + q)
+        returns:
+            out     cell midpoints  (m,) or (m, n)
+        """
+        if self.ndim == 1:
+            midpoints = batch_convolve2d(
+                arr=self.apply_bc(u, gw=self.conservative_width + 1)[np.newaxis],
+                kernel=self.cell_center_stencil.reshape(1, -1),
+            )
+            return midpoints[0, 0, ...]
+        elif self.ndim == 2:
+            horizontal_lines = batch_convolve2d(
+                arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
+                    np.newaxis
+                ],
+                kernel=self.cell_center_stencil.reshape(1, -1, 1),
+            )
+            midpoints = batch_convolve2d(
+                arr=horizontal_lines[0],
+                kernel=self.cell_center_stencil.reshape(1, 1, -1),
+            )
+            return midpoints[0, ...]
 
     def find_trouble(self, u: np.ndarray, dt: float) -> np.ndarray:
         """
