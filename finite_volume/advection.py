@@ -603,9 +603,6 @@ class AdvectionSolver(Integrator):
             kernel=self.line_stencils.reshape(self.n_line_stencils, 1, -1),
         )
         vertical_lines = vertical_lines[0]
-        print(f"{u.shape=}")
-        print(f"{horizontal_lines.shape=}")
-        print(f"{vertical_lines.shape=}")
         # interpolate points from line averages
         horizontal_points = batch_convolve2d(
             arr=horizontal_lines,
@@ -615,8 +612,6 @@ class AdvectionSolver(Integrator):
             arr=vertical_lines,
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, -1, 1),
         )
-        print(f"{horizontal_points.shape=}")
-        print(f"{vertical_points.shape=}")
         # slope limiting
         theta, M_ij, m_ij = mpp_limiter(
             u=self.apply_bc(u, gw=self.riemann_gw + 1),
@@ -624,7 +619,6 @@ class AdvectionSolver(Integrator):
             ones=not self.apriori_limiting,
             zeros=self.cause_trouble,
         )
-        print(f"{theta.shape=}")
         # PAD
         PAD = np.logical_or(
             m_ij < self.approximated_maximum_principle[0],
@@ -654,8 +648,6 @@ class AdvectionSolver(Integrator):
             self.excess_riemann_gw or None : -self.excess_riemann_gw or None,
             self.excess_transverse_gw or None : -self.excess_transverse_gw or None,
         ]
-        print(f"{horizontal_points.shape=}")
-        print(f"{vertical_points.shape=}")
         ns_pointwise_fluxes = self.riemann_solver(
             v=self.b,
             left_value=vertical_points[:, -1, :-1, :],  # north points
@@ -666,8 +658,6 @@ class AdvectionSolver(Integrator):
             left_value=horizontal_points[:, -1, :, :-1],  # east points
             right_value=horizontal_points[:, 0, :, 1:],  # west points
         )
-        print(f"{ns_pointwise_fluxes.shape=}")
-        print(f"{ew_pointwise_fluxes.shape=}")
         # integrate fluxes with gauss-legendre quadrature
         self.f[...] = self.integrate_fluxes(ew_pointwise_fluxes, axis=0)
         self.g[...] = self.integrate_fluxes(ns_pointwise_fluxes, axis=1)
