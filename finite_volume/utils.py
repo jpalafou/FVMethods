@@ -1,5 +1,5 @@
 from itertools import product
-from numba import njit
+from numba import njit, prange
 import numpy as np
 
 
@@ -152,7 +152,7 @@ def dict_combinations(key_values: dict) -> list:
     return list_of_dicts
 
 
-@njit(nopython=True, fastmath=True)
+@njit(parallel=True)
 def batch_convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
     args:
@@ -176,14 +176,14 @@ def batch_convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     )
 
     # perform n_arrays * n_kernels convolutions
-    for i in range(n_arrays):
-        for j in range(n_kernels):
+    for i in prange(n_arrays):
+        for j in prange(n_kernels):
             out[i, j, ...] = convolve2d(arrs[i, ...], kernels[j, ...])
 
     return out
 
 
-@njit(nopython=True, fastmath=True)
+@njit
 def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
     args:
