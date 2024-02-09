@@ -294,7 +294,7 @@ class AdvectionSolver(Integrator):
                 raise BaseException("PP2D limiting is for two-dimensional solutions.")
             if fallback_to_first_order:
                 raise BaseException("PP2D does not fall back to first order.")
-            self.fallback_limiter = "PP2D"
+            self.fallback_limiter = compute_PP2D_interpolations
         self.SED = SED
 
         self.convex = convex
@@ -732,10 +732,12 @@ class AdvectionSolver(Integrator):
             h=self.hx,
             v_cell_centers=self.a_cell_centers,
         )
+        left_fallback_face = self.apply_bc(left_fallback_face, gw=1)
+        right_fallback_face = self.apply_bc(right_fallback_face, gw=1)
         fallback_fluxes = self.riemann_solver(
             v=self.a,
-            left_value=self.apply_bc(right_fallback_face, gw=1)[:-1],
-            right_value=self.apply_bc(left_fallback_face, gw=1)[1:],
+            left_value=right_fallback_face[:-1],
+            right_value=left_fallback_face[1:],
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)
@@ -764,7 +766,7 @@ class AdvectionSolver(Integrator):
         # compute fallback fluxes
         if self.fallback_limiter.__name__ in {"minmod", "moncen"}:
             fallback_faces = compute_MUSCL_interpolations_2d(
-                u=self.apply_bc(u, gw=2),
+                u=self.apply_bc(u, gw=1),
                 slope_limiter=self.fallback_limiter,
                 fallback_to_1st_order=self.fallback_to_first_order,
                 PAD=self.PAD,
@@ -773,24 +775,27 @@ class AdvectionSolver(Integrator):
                 h=(1 / self.hx, 1 / self.hy),
                 v_cell_centers=self.a_cell_centers,
             )
-        elif self.fallback_limiter == "PP2D":
-            fallback_faces = compute_PP2D_interpolations(
-                u=self.apply_bc(u, gw=2),
-                PAD=self.PAD,
+        elif self.fallback_limiter.__name__ == "compute_PP2D_interpolations":
+            fallback_faces = self.fallback_limiter(
+                u=self.apply_bc(u, gw=1),
                 hancock=self.hancock,
                 dt=self.dt,
                 h=(1 / self.hx, 1 / self.hy),
                 v_cell_centers=self.a_cell_centers,
             )
+        north_face = self.apply_bc(fallback_faces[1][1], gw=1)
+        south_face = self.apply_bc(fallback_faces[1][0], gw=1)
+        east_face = self.apply_bc(fallback_faces[0][1], gw=1)
+        west_face = self.apply_bc(fallback_faces[0][0], gw=1)
         fallback_fluxes_x = self.riemann_solver(
             v=self.a_midpoint,
-            left_value=fallback_faces[0][1][1:-1, :-1],
-            right_value=fallback_faces[0][0][1:-1, 1:],
+            left_value=east_face[1:-1, :-1],
+            right_value=west_face[1:-1, 1:],
         )
         fallback_fluxes_y = self.riemann_solver(
             v=self.b_midpoint,
-            left_value=fallback_faces[0][1][:-1, 1:-1],
-            right_value=fallback_faces[0][0][1:, 1:-1],
+            left_value=south_face[:-1, 1:-1],
+            right_value=north_face[1:, 1:-1],
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)

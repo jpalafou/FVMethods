@@ -118,10 +118,12 @@ class Integrator:
         """
         pass
 
-    def integrate(self, step, method_name: str):
+    def integrate(self, step, method_name: str, overwrite_snapshot_dt: float = None):
         """
         args:
-            step    function to calculate u1 from u0
+            step                    function to calculate u1 from u0
+            method_name             name of integrating step
+            overwrite_snapshot_dt   does nothing if None
         overwrites:
             t, u
         """
@@ -139,7 +141,9 @@ class Integrator:
 
         # time loop
         dt = self.dt  # initial timestep size
-        snap_time = self.snapshot_dt
+        snap_time = (
+            self.snapshot_dt if overwrite_snapshot_dt is None else overwrite_snapshot_dt
+        )
         snapshot_counter = 0
         starting_time = time.time()
         while snapshot_counter < self.num_snapshots:
@@ -193,7 +197,11 @@ class Integrator:
             u1 = u0 + dt * k1
             return u1
 
-        self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)
+        self.integrate(
+            step=step,
+            method_name=inspect.currentframe().f_code.co_name,
+            overwrite_snapshot_dt=self.dt,
+        )
 
     def euler(self):
         """

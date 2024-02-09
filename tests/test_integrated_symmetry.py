@@ -22,6 +22,18 @@ def cleanup(request):
     request.addfinalizer(remove_test_dir)
 
 
+def l1(x: np.ndarray) -> float:
+    return np.mean(np.abs(x))
+
+
+def l2(x: np.ndarray) -> float:
+    return np.sqrt(np.mean(np.square(x)))
+
+
+def linf(x: np.ndarray) -> float:
+    return np.max(np.abs(x))
+
+
 """
 1D
 """
@@ -50,13 +62,14 @@ limiter_configs_1d = [
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("a", [1, -1])
-@pytest.mark.parametrize("k", [-1, 0, 1])
-@pytest.mark.parametrize("ic_type", ["sinus", "square"])
+@pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
+@pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("limiter_config", limiter_configs_1d)
-def test_vertical_shift_equivariance_1d(p, a, k, ic_type, limiter_config):
+def test_translation_equivariance_1d(p, a, k, ic_type__PAD, limiter_config):
     """
     advection_solution(a * u(x) + k) = a * advection_solution(u(x)) + k
     """
+    ic_type, PAD = ic_type__PAD
 
     def linear_transformation(x):
         return a * x + k
@@ -83,44 +96,39 @@ def test_vertical_shift_equivariance_1d(p, a, k, ic_type, limiter_config):
     solver = AdvectionSolver(
         **shared_config,
         u0=u0,
-        PAD=(0, 1),
+        PAD=PAD,
     )
     solver.rkorder()
 
     # shifted initial condition
-    shifted_solver = AdvectionSolver(
+    print(sorted((linear_transformation(PAD[0]), linear_transformation(PAD[1]))))
+    translated_solver = AdvectionSolver(
         **shared_config,
         u0=u0_shifted,
-        PAD=sorted((linear_transformation(0), linear_transformation(1))),
+        PAD=sorted((linear_transformation(PAD[0]), linear_transformation(PAD[1]))),
     )
-    shifted_solver.rkorder()
+    translated_solver.rkorder()
 
     # check equivariance
-    print(
-        np.max(
-            np.abs(
-                linear_transformation(solver.u_snapshots[-1][1])
-                - shifted_solver.u_snapshots[-1][1]
-            )
-        )
+    diffs = (
+        linear_transformation(solver.u_snapshots[-1][1])
+        - translated_solver.u_snapshots[-1][1]
     )
-
-    assert np.all(
-        np.isclose(
-            linear_transformation(solver.u_snapshots[-1][1]),
-            shifted_solver.u_snapshots[-1][1],
-            atol=1e-10,
-        )
-    )
+    print(f"{l1(diffs)=}")
+    print(f"{l2(diffs)=}")
+    print(f"{linf(diffs)=}")
+    err = l1(diffs)
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("p", range(8))
-@pytest.mark.parametrize("ic_type", ["sinus", "square"])
+@pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("limiter_config", limiter_configs_1d)
-def test_velocity_equivariance_1d(p, ic_type, limiter_config):
+def test_velocity_equivariance_1d(p, ic_type__PAD, limiter_config):
     """
     advection_solution(u(x), -v_x) = advection_solution(u(-x), v_x)
     """
+    ic_type, PAD = ic_type__PAD
 
     def u0(x):
         return generate_ic(type=ic_type, x=x, y=None)
@@ -131,7 +139,7 @@ def test_velocity_equivariance_1d(p, ic_type, limiter_config):
     shared_config = dict(
         **limiter_config,
         save_directory=test_directory,
-        PAD=(0, 1),
+        PAD=PAD,
         n=64,
         order=p + 1,
         courant=0.8,
@@ -155,13 +163,15 @@ def test_velocity_equivariance_1d(p, ic_type, limiter_config):
     solver_negative_velocity.rkorder()
 
     # check equivariance
-    assert np.all(
-        np.isclose(
-            solver.u_snapshots[-1][1],
-            np.flip(solver_negative_velocity.u_snapshots[-1][1]),
-            atol=1e-10,
-        )
+    diffs = solver.u_snapshots[-1][1] - np.flip(
+        solver_negative_velocity.u_snapshots[-1][1]
     )
+
+    print(f"{l1(diffs)=}")
+    print(f"{l2(diffs)=}")
+    print(f"{linf(diffs)=}")
+    err = l1(diffs)
+    assert err < 1e-14
 
 
 """
@@ -200,16 +210,17 @@ limiter_configs_2d = [
 ]
 
 
-@pytest.mark.parametrize("p", range(6, 8))
+@pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("a", [1, -1])
-@pytest.mark.parametrize("k", [-1, 0, 1])
-@pytest.mark.parametrize("ic_type", ["sinus", "square"])
+@pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
+@pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("limiter_config", limiter_configs_2d)
-def test_vertical_shift_equivariance_2d(p, a, k, ic_type, quadrature, limiter_config):
+def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_config):
     """
     advection_solution(a * u(x, y) + k) = a * advection_solution(u(x, y)) + k
     """
+    ic_type, PAD = ic_type__PAD
 
     def linear_transformation(x):
         return a * x + k
@@ -237,52 +248,49 @@ def test_vertical_shift_equivariance_2d(p, a, k, ic_type, quadrature, limiter_co
     solver = AdvectionSolver(
         **shared_config,
         u0=u0,
-        PAD=(0, 1),
+        PAD=PAD,
     )
     solver.rkorder()
 
     # shifted initial condition
-    shifted_solver = AdvectionSolver(
+    translated_solver = AdvectionSolver(
         **shared_config,
         u0=u0_shifted,
-        PAD=sorted((linear_transformation(0), linear_transformation(1))),
+        PAD=sorted((linear_transformation(PAD[0]), linear_transformation(PAD[1]))),
     )
-    shifted_solver.rkorder()
+    translated_solver.rkorder()
 
     # check equivariance
-    print(
-        np.max(
-            np.abs(
-                linear_transformation(solver.u_snapshots[-1][1])
-                - shifted_solver.u_snapshots[-1][1]
-            )
-        )
+    diffs = (
+        linear_transformation(solver.u_snapshots[-1][1])
+        - translated_solver.u_snapshots[-1][1]
     )
-
-    assert np.all(
-        np.isclose(
-            linear_transformation(solver.u_snapshots[-1][1]),
-            shifted_solver.u_snapshots[-1][1],
-            atol=1e-10,
-        )
-    )
+    print(f"{l1(diffs)=}")
+    print(f"{l2(diffs)=}")
+    print(f"{linf(diffs)=}")
+    err = l1(diffs)
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("p", range(8))
-@pytest.mark.parametrize("ic_type", ["sinus"])
+@pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
-@pytest.mark.parametrize("limiter_config", limiter_configs_1d[:1])
-def test_velocity_equivariance_2d(p, ic_type, n_rotations, limiter_config):
+@pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
+@pytest.mark.parametrize("limiter_config", limiter_configs_1d)
+def test_velocity_equivariance_2d(
+    p, ic_type__PAD, n_rotations, quadrature, limiter_config
+):
     """
     C_n in [C_1, C_2, C_3, C_4]
     advection_solution(u(x, y), (v, 0)) = C_n^-1 advection_...((u(x, y),  C_n (v, 0))
     """
+    ic_type, PAD = ic_type__PAD
 
     def u0(x, y):
         return generate_ic(type=ic_type, x=x, y=y)
 
     def u0_rotated(x, y):
-        return np.rot90(u0(x, y), k=n_rotations)
+        return np.rot90(u0(x, y), k=n_rotations, axes=(1, 0))
 
     u0_rotated.__name__ += f"_{n_rotations}"
 
@@ -292,9 +300,10 @@ def test_velocity_equivariance_2d(p, ic_type, n_rotations, limiter_config):
     shared_config = dict(
         **limiter_config,
         save_directory=test_directory,
-        PAD=(0, 1),
+        PAD=PAD,
         n=(64,),
         order=p + 1,
+        flux_strategy=quadrature,
         courant=0.8,
         snapshot_dt=1,
     )
@@ -316,10 +325,10 @@ def test_velocity_equivariance_2d(p, ic_type, n_rotations, limiter_config):
     solver_rotated.rkorder()
 
     # check equivariance
-    assert np.all(
-        np.isclose(
-            solver.u_snapshots[-1][1],
-            np.rot90(solver_rotated.u_snapshots[-1][1], k=-n_rotations),
-            atol=1e-10,
+    err = np.mean(
+        np.abs(
+            solver.u_snapshots[-1][1]
+            - np.rot90(solver_rotated.u_snapshots[-1][1], k=-n_rotations, axes=(1, 0))
         )
     )
+    assert err < 1e-14
