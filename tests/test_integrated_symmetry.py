@@ -325,10 +325,11 @@ def test_velocity_equivariance_2d(
     solver_rotated.rkorder()
 
     # check equivariance
-    err = np.mean(
-        np.abs(
-            solver.u_snapshots[-1][1]
-            - np.rot90(solver_rotated.u_snapshots[-1][1], k=-n_rotations, axes=(1, 0))
-        )
+    diffs = solver.u_snapshots[-1][1] - np.rot90(
+        solver_rotated.u_snapshots[-1][1], k=-n_rotations, axes=(1, 0)
     )
+    print(f"{l1(diffs)=}")
+    print(f"{l2(diffs)=}")
+    print(f"{linf(diffs)=}")
+    err = l1(diffs)
     assert err < 1e-14
