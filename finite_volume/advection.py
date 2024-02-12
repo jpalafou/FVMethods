@@ -769,7 +769,7 @@ class AdvectionSolver(Integrator):
                 u=self.apply_bc(u, gw=1),
                 slope_limiter=self.fallback_limiter,
                 fallback_to_1st_order=self.fallback_to_first_order,
-                PAD=self.PAD,
+                PAD=self.approximated_maximum_principle,
                 hancock=self.hancock,
                 dt=self.dt,
                 h=(1 / self.hx, 1 / self.hy),

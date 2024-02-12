@@ -187,7 +187,7 @@ class Integrator:
         progress_bar.refresh()
 
     # integrators
-    def one_euler_step(self):
+    def one_euler_step(self, n: int = 1):
         """
         1st order ODE integrator
         """
@@ -196,11 +196,15 @@ class Integrator:
             k1 = self.udot(u=u0, t=t0, dt=dt)
             u1 = u0 + dt * k1
             return u1
+        
+        overwrite_snapshot_dt = 0.
+        for _ in range(n):
+            overwrite_snapshot_dt += self.dt
 
         self.integrate(
             step=step,
             method_name=inspect.currentframe().f_code.co_name,
-            overwrite_snapshot_dt=self.dt,
+            overwrite_snapshot_dt=overwrite_snapshot_dt,
         )
 
     def euler(self):

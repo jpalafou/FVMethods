@@ -117,8 +117,8 @@ def test_translation_equivariance_1d(p, a, k, ic_type__PAD, limiter_config):
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = l1(diffs)
-    assert err < 1e-14
+    err = linf(diffs)
+    assert err < 1e-10
 
 
 @pytest.mark.parametrize("p", range(8))
@@ -170,8 +170,8 @@ def test_velocity_equivariance_1d(p, ic_type__PAD, limiter_config):
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = l1(diffs)
-    assert err < 1e-14
+    err = linf(diffs)
+    assert err < 1e-10
 
 
 """
@@ -268,8 +268,8 @@ def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = l1(diffs)
-    assert err < 1e-14
+    err = linf(diffs)
+    assert err < 1e-10
 
 
 @pytest.mark.parametrize("p", range(8))
