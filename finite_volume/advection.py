@@ -773,7 +773,7 @@ class AdvectionSolver(Integrator):
                 hancock=self.hancock,
                 dt=self.dt,
                 h=(1 / self.hx, 1 / self.hy),
-                v_cell_centers=self.a_cell_centers,
+                v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
             )
         elif self.fallback_limiter.__name__ == "compute_PP2D_interpolations":
             fallback_faces = self.fallback_limiter(
@@ -781,7 +781,7 @@ class AdvectionSolver(Integrator):
                 hancock=self.hancock,
                 dt=self.dt,
                 h=(1 / self.hx, 1 / self.hy),
-                v_cell_centers=self.a_cell_centers,
+                v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
             )
         north_face = self.apply_bc(fallback_faces[1][1], gw=1)
         south_face = self.apply_bc(fallback_faces[1][0], gw=1)
