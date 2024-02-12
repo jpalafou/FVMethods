@@ -196,8 +196,8 @@ class Integrator:
             k1 = self.udot(u=u0, t=t0, dt=dt)
             u1 = u0 + dt * k1
             return u1
-        
-        overwrite_snapshot_dt = 0.
+
+        overwrite_snapshot_dt = 0.0
         for _ in range(n):
             overwrite_snapshot_dt += self.dt
 
