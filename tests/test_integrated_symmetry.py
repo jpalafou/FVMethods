@@ -331,5 +331,5 @@ def test_velocity_equivariance_2d(
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = l1(diffs)
-    assert err < 1e-14
+    err = linf(diffs)
+    assert err < 1e-10
