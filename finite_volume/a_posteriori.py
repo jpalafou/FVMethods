@@ -191,6 +191,10 @@ def compute_MUSCL_interpolations_2d(
     du_x = slope_limiter(cell_centers - u[1:-1, :-2], u[1:-1, 2:] - cell_centers)
     du_y = slope_limiter(cell_centers - u[:-2, 1:-1], u[2:, 1:-1] - cell_centers)
 
+    # print(cell_centers)
+    # print(du_x)
+    # print(du_y)
+
     if hancock:
         dudx = v_cell_centers[0] * (1 / h[0]) * du_x
         dudy = v_cell_centers[1] * (1 / h[1]) * du_y

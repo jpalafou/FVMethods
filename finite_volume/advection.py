@@ -772,7 +772,7 @@ class AdvectionSolver(Integrator):
                 PAD=self.approximated_maximum_principle,
                 hancock=self.hancock,
                 dt=self.dt,
-                h=(1 / self.hx, 1 / self.hy),
+                h=(self.hx, self.hy),
                 v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
             )
         elif self.fallback_limiter.__name__ == "compute_PP2D_interpolations":
@@ -780,7 +780,7 @@ class AdvectionSolver(Integrator):
                 u=self.apply_bc(u, gw=1),
                 hancock=self.hancock,
                 dt=self.dt,
-                h=(1 / self.hx, 1 / self.hy),
+                h=(self.hx, self.hy),
                 v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
             )
         north_face = self.apply_bc(fallback_faces[1][1], gw=1)
@@ -794,8 +794,8 @@ class AdvectionSolver(Integrator):
         )
         fallback_fluxes_y = self.riemann_solver(
             v=self.b_midpoint,
-            left_value=south_face[:-1, 1:-1],
-            right_value=north_face[1:, 1:-1],
+            left_value=north_face[:-1, 1:-1],
+            right_value=south_face[1:, 1:-1],
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)
