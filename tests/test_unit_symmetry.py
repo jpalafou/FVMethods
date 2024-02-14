@@ -71,6 +71,17 @@ def linear_transformation(x, a, b):
     return a * x + b
 
 
+def rotate(x, n: int):
+    if isinstance(x, tuple):
+        return tuple(rotate(i, n) for i in x)
+    if x.ndim == 2:
+        return np.rot90(x, n)
+    elif x.ndim == 3:
+        return np.rot90(x, n, axes=(1, 2))
+    elif x.ndim == 4:
+        return np.rot90(x, n, axes=(2, 3))
+
+
 @pytest.mark.parametrize("n_test", range(10))
 @pytest.mark.parametrize("arr_shape", [(100, 100), (14, 100, 100)])
 @pytest.mark.parametrize("kernel_shape", [(10, 10), (20, 10, 10)])
@@ -100,23 +111,18 @@ def test_batch_convolve2d_translation_equivariance(
 
 
 @pytest.mark.parametrize("n_test", range(10))
-@pytest.mark.parametrize("arr_shape", [(100, 100)])
-@pytest.mark.parametrize("kernel_shape", [(1, 10), (10, 10)])
+@pytest.mark.parametrize("arr_shape", [(100, 100), (20, 100, 100)])
+@pytest.mark.parametrize("kernel_shape", [(1, 10), (10, 10), (20, 10, 10)])
 @pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
 def test_batch_convolve2d_rotation_equivariance(
     n_test, arr_shape, kernel_shape, n_rotations
 ):
     """
-    batch_convolve2d(a * arr + b, kernel) == a * batch_convolve2d(arr, kernel) + b
+    batch_convolve2d(rotate(arr), rotate(kernel))
+    == rotate(batch_convolve2d(arr, kernel))
     """
     arr = np.random.rand(*arr_shape)
     kernel = np.random.rand(*kernel_shape)
-
-    def rotate(x):
-        if x.ndim == 2:
-            return np.rot90(x, n_rotations)
-        elif x.ndim == 4:
-            return np.rot90(x[0, 0, ...], n_rotations)
 
     # kernel must have unit weight
     if kernel.ndim == 2:
@@ -125,7 +131,7 @@ def test_batch_convolve2d_rotation_equivariance(
         kernel /= np.sum(kernel, axis=(1, 2), keepdims=True)
     err = equivariant(
         batch_convolve2d,
-        rotate,
+        lambda x: rotate(x, n=n_rotations),
         fargs=dict(arr=arr, kernel=kernel),
         vnorm="l1",
     )
@@ -135,7 +141,7 @@ def test_batch_convolve2d_rotation_equivariance(
 @pytest.mark.parametrize("n_test", range(200))
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_compute_alpha_1d_invariance(n_test, a, b):
+def test_compute_alpha_1d_translation_invariance(n_test, a, b):
     """
     compute_alpha_1d(a * u + b) == compute_alpha_1d(u)
     """
@@ -153,9 +159,9 @@ def test_compute_alpha_1d_invariance(n_test, a, b):
 @pytest.mark.parametrize("n_test", range(200))
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_compute_alpha_2d_invariance(n_test, a, b):
+def test_compute_alpha_2d_translation_invariance(n_test, a, b):
     """
-    compute_alpha_2d(a * u + b) == compute_alpha_1d(u)
+    compute_alpha_2d(a * u + b) == compute_alpha_2d(u)
     """
     u = np.random.rand(64, 64)
     err = equivariant(
@@ -163,6 +169,22 @@ def test_compute_alpha_2d_invariance(n_test, a, b):
         lambda x: linear_transformation(x, a, b),
         fargs=dict(u=u),
         invariant=True,
+        vnorm="l1",
+    )
+    assert err < 1e-15
+
+
+@pytest.mark.parametrize("n_test", range(10))
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_compute_alpha_2d_rotation_equivariance(n_test, n_rotations):
+    """
+    compute_alpha_2d(rotate(u)) == rotate(compute_alpha_2d(u))
+    """
+    u = np.random.rand(64, 64)
+    err = equivariant(
+        compute_alpha_2d,
+        lambda x: rotate(x, n=n_rotations),
+        fargs=dict(u=u),
         vnorm="l1",
     )
     assert err < 1e-15
@@ -180,7 +202,7 @@ def test_compute_alpha_2d_invariance(n_test, a, b):
 )
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_mpp_limiter_invariance(n_test, shapes, a, b):
+def test_mpp_limiter_translation_invariance(n_test, shapes, a, b):
     """
     mpp_limiter(a * u + b, a * points + b) == mpp_limiter(u, points)
     """
@@ -201,6 +223,31 @@ def test_mpp_limiter_invariance(n_test, shapes, a, b):
 @pytest.mark.parametrize(
     "shapes",
     [
+        ((66, 130), (1, 1, 64, 128)),
+        ((66, 130), (10, 10, 64, 128)),
+    ],
+)
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_mpp_limiter_rotation_equivariance(n_test, shapes, n_rotations):
+    """
+    mpp_limiter(rotate(u), rotate(points)) == rotate(mpp_limiter(u, points))
+    """
+    u = np.random.rand(*shapes[0])
+    points = np.random.rand(*shapes[1])
+    err = equivariant(
+        mpp_limiter,
+        lambda x: rotate(x, n=n_rotations),
+        out_argnums=0,
+        fargs=dict(u=u, points=points),
+        vnorm="l1",
+    )
+    assert err < 1e-15
+
+
+@pytest.mark.parametrize("n_test", range(10))
+@pytest.mark.parametrize(
+    "shapes",
+    [
         ((34,), (38,)),
         ((34, 66), (38, 70)),
     ],
@@ -210,7 +257,7 @@ def test_mpp_limiter_invariance(n_test, shapes, a, b):
 @pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_find_trouble_invariance(n_test, shapes, NAD, PAD, SED, a, b):
+def test_find_trouble_translation_invariance(n_test, shapes, NAD, PAD, SED, a, b):
     """
     find_trouble(a * u + b, a * u_candidate + b) == find_trouble(u, u_candidate)
     """
@@ -228,10 +275,31 @@ def test_find_trouble_invariance(n_test, shapes, NAD, PAD, SED, a, b):
 
 
 @pytest.mark.parametrize("n_test", range(10))
+@pytest.mark.parametrize("NAD", [0.0, 1e-10, 1e-3])
+@pytest.mark.parametrize("PAD", [np.array((-np.inf, np.inf)), np.array((0, 1))])
+@pytest.mark.parametrize("SED", [False, True])
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_find_trouble_rotation_equivariance(n_test, NAD, PAD, SED, n_rotations):
+    """
+    find_trouble(rotate(u), rotate(u_candidate)) == rotate(find_trouble(u, u_candidate))
+    """
+    u = np.random.rand(34, 66)
+    u_candidate = np.random.rand(38, 70)
+    err = equivariant(
+        f=find_trouble,
+        action=lambda x: rotate(x, n=n_rotations),
+        fargs=dict(u=u, u_candidate=u_candidate),
+        fargs_fixed=dict(NAD=NAD, SED=SED, PAD=PAD),
+        vnorm="linf",
+    )
+    assert err == 0
+
+
+@pytest.mark.parametrize("n_test", range(10))
 @pytest.mark.parametrize("slope_limiter", [minmod, moncen])
 @pytest.mark.parametrize("a", [1, -1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_minmod_moncen_equivariance(n_test, slope_limiter, a, b):
+def test_minmod_moncen_translation_invariance(n_test, slope_limiter, a, b):
     """
     slopelim(a * du_left + b, a * du_right + b) == a * slopelim(du_left, du_right) + b
     """
@@ -269,7 +337,7 @@ def test_minmod_moncen_equivariance(n_test, slope_limiter, a, b):
 @pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("a", [1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_compute_MUSCL_interpolations_1d_equivariance(
+def test_compute_MUSCL_interpolations_1d_translation_equivariance(
     n_test, slope_limiter, fallback_to_1st_order, PAD, hancock, a, b
 ):
     """
@@ -303,7 +371,7 @@ def test_compute_MUSCL_interpolations_1d_equivariance(
 @pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("a", [1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_compute_MUSCL_interpolations_2d_equivariance(
+def test_compute_MUSCL_interpolations_2d_translation_equivariance(
     n_test, slope_limiter, fallback_to_1st_order, PAD, hancock, a, b
 ):
     """
@@ -332,10 +400,52 @@ def test_compute_MUSCL_interpolations_2d_equivariance(
 
 
 @pytest.mark.parametrize("n_test", range(10))
+@pytest.mark.parametrize("slope_limiter", [minmod, moncen])
+@pytest.mark.parametrize("fallback_to_1st_order", [False, True])
+@pytest.mark.parametrize("PAD", [np.array((-np.inf, np.inf)), np.array((0, 1))])
+@pytest.mark.parametrize("hancock", [False, True])
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_compute_MUSCL_interpolations_2d_rotation_equivariance(
+    n_test, slope_limiter, fallback_to_1st_order, PAD, hancock, n_rotations
+):
+    """
+    compute_MUSCL_interpolations_2d(rotate(u))
+    == rotate(compute_MUSCL_interpolations_2d(u))
+    """
+    u = np.random.rand(34, 66)
+    vx = np.random.rand(32, 64) - 0.5
+    vy = np.random.rand(32, 64) - 0.5
+    config = dict(
+        slope_limiter=slope_limiter,
+        fallback_to_1st_order=fallback_to_1st_order,
+        hancock=hancock,
+        dt=0.01,
+        h=(0.02, 0.02),
+        PAD=PAD,
+    )
+    idxs = {0: (0, 0), 1: (1, 0), 2: (0, 1), 3: (1, 1)}  # west south east north
+    vs = {
+        0: (vx, vy),
+        1: (rotate(vy, 1), -rotate(vx, 1)),
+        2: (-rotate(vx, 2), -rotate(vy, 2)),
+        3: (-rotate(vy, 3), rotate(vx, 3)),
+    }
+    inner = compute_MUSCL_interpolations_2d(
+        rotate(u, n_rotations), v_cell_centers=vs[n_rotations], **config
+    )[0][0]
+    outer = rotate(
+        compute_MUSCL_interpolations_2d(u, v_cell_centers=(vx, vy), **config),
+        n_rotations,
+    )[idxs[n_rotations][0]][idxs[n_rotations][1]]
+    err = np.mean(np.abs(inner - outer))
+    assert err < 1e-15
+
+
+@pytest.mark.parametrize("n_test", range(10))
 @pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("a", [1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_compute_PP2D_interpolations_equivariance(n_test, hancock, a, b):
+def test_compute_PP2D_interpolations_translation_equivariance(n_test, hancock, a, b):
     """
     compute_MUSCL_interpolations_2d(a * u + b)
     == a * compute_MUSCL_interpolations_2d(u) + b
@@ -356,4 +466,40 @@ def test_compute_PP2D_interpolations_equivariance(n_test, hancock, a, b):
         ),
         vnorm="l1",
     )
+    assert err < 1e-15
+
+
+@pytest.mark.parametrize("n_test", range(10))
+@pytest.mark.parametrize("hancock", [False, True])
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_compute_PP2D_interpolations_rotation_equivariance(
+    n_test, hancock, n_rotations
+):
+    """
+    compute_MUSCL_interpolations_2d(rotate(u))
+    == rotate(compute_MUSCL_interpolations_2d(u))
+    """
+    u = np.random.rand(34, 66)
+    vx = np.random.rand(32, 64) - 0.5
+    vy = np.random.rand(32, 64) - 0.5
+    config = dict(
+        hancock=hancock,
+        dt=0.01,
+        h=(0.02, 0.02),
+    )
+    idxs = {0: (0, 0), 1: (1, 0), 2: (0, 1), 3: (1, 1)}  # west south east north
+    vs = {
+        0: (vx, vy),
+        1: (rotate(vy, 1), -rotate(vx, 1)),
+        2: (-rotate(vx, 2), -rotate(vy, 2)),
+        3: (-rotate(vy, 3), rotate(vx, 3)),
+    }
+    inner = compute_PP2D_interpolations(
+        rotate(u, n_rotations), v_cell_centers=vs[n_rotations], **config
+    )[0][0]
+    outer = rotate(
+        compute_PP2D_interpolations(u, v_cell_centers=(vx, vy), **config),
+        n_rotations,
+    )[idxs[n_rotations][0]][idxs[n_rotations][1]]
+    err = np.mean(np.abs(inner - outer))
     assert err < 1e-15
