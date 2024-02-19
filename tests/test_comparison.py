@@ -32,6 +32,7 @@ def _generate_solutions(
         n=n,
         courant=cfl,
         u0="composite",
+        PAD=(-np.inf, np.inf),
         x=(0, 1),
         v=1,
         order=space_order,
@@ -90,17 +91,15 @@ def test_dt(n):
 def test_solutions(order, limiting, smooth_extrema_detection):
     romain_solution, my_solution = _generate_solutions(
         space_order=order,
-        time_order=4,
+        time_order=order,
         n=n,
-        periods=cfl / n,
+        periods=20 * cfl / n,
         cfl=cfl,
         apriori_lite=limiting,
         smooth_extrema_detection=smooth_extrema_detection,
     )
-    rmse = np.sqrt(
-        np.mean(np.square(romain_solution[-1] - my_solution.u_snapshots[-1][1]))
-    )
-    assert rmse < 1e-16
+    max_err = np.max(np.abs(romain_solution[-1] - my_solution.u_snapshots[-1][1]))
+    assert max_err < 1e-10
 
 
 def test_MUSCLHancock():
@@ -110,7 +109,7 @@ def test_MUSCLHancock():
     u0 = "composite"
     n = 128
     snapshot_dt = 1
-    num_snapshots = 10
+    num_snapshots = 20
     courant = 0.8
 
     # romain solution
@@ -138,6 +137,7 @@ def test_MUSCLHancock():
         order=2,
         aposteriori_limiting=True,
         fallback_limiter="moncen",
+        fallback_to_first_order=False,
         hancock=True,
         cause_trouble=True,
         load=False,
@@ -145,4 +145,5 @@ def test_MUSCLHancock():
     )
     solution.euler()
 
-    assert np.mean(np.square(solution.u_snapshots[-1][1] - romain[-1])) < 1e-16
+    max_err = np.max(np.abs(solution.u_snapshots[-1][1] - romain[-1]))
+    assert max_err < 1e-10
