@@ -439,3 +439,53 @@ def test_reflection_equivariance_2d(p, ic_type__PAD, v, quadrature, limiter_conf
     print(f"{linf(diffs)=}")
     err = linf(diffs)
     assert err < 1e-10
+
+
+@pytest.mark.parametrize("p", range(8))
+@pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
+def test_disk_slotted_disk_velocity_equivariance(p, quadrature, limiter_config):
+    """
+    test equivariance of slotted disk rotated counterclockwise and clockwise
+    """
+
+    def v_ccw(x, y):
+        """
+        counterclockwise vortex about (0, 0)
+        """
+        return -y, x
+
+    def v_cw(x, y):
+        """
+        clockwise vortex about (0, 0)
+        """
+        return y, -x
+
+    shared_config = dict(
+        **limiter_config,
+        save_directory=test_directory,
+        PAD=(0, 1),
+        NAD=1e-5,
+        n=(128,),
+        u0="disk",
+        x=(-1, 1),
+        order=p + 1,
+        flux_strategy=quadrature,
+        courant=0.8,
+        snapshot_dt=2 * np.pi,
+    )
+
+    solver_cw = AdvectionSolver(**shared_config, v=v_cw)
+    solver_cw.rkorder()
+
+    solver_ccw = AdvectionSolver(**shared_config, v=v_ccw)
+    solver_ccw.rkorder()
+
+    cw_solution = solver_cw.u_snapshots[-1][1]
+    ccw_solution = np.fliplr(solver_ccw.u_snapshots[-1][1])
+    diffs = cw_solution - ccw_solution
+    print(f"{l1(diffs)=}")
+    print(f"{l2(diffs)=}")
+    print(f"{linf(diffs)=}")
+    err = linf(diffs)
+    assert err < 1e-10
