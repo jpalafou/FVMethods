@@ -35,7 +35,7 @@ def find_trouble(
         u_candidate_inner = u_candidate[3:-3, 3:-3]
 
     if ones:
-        return np.ones_like(u_candidate_inner, dtype=np.int64)
+        return np.ones_like(u_candidate_inner, dtype=np.intc)
 
     # max and min of immediate neighbors
     M = f_of_neighbors(u, f=np.maximum)
@@ -44,7 +44,8 @@ def find_trouble(
     # NAD
     u_range = np.max(u) - np.min(u)
     tolerance = NAD * u_range
-    upper_differences, lower_differences = u_candidate_inner - M, u_candidate_inner - m
+    upper_differences = u_candidate_inner - M
+    lower_differences = u_candidate_inner - m
     NAD_trouble = np.where(lower_differences < -tolerance, 1, 0)
     NAD_trouble = np.where(upper_differences > tolerance, 1, NAD_trouble)
 
@@ -191,10 +192,6 @@ def compute_MUSCL_interpolations_2d(
     du_x = slope_limiter(cell_centers - u[1:-1, :-2], u[1:-1, 2:] - cell_centers)
     du_y = slope_limiter(cell_centers - u[:-2, 1:-1], u[2:, 1:-1] - cell_centers)
 
-    # print(cell_centers)
-    # print(du_x)
-    # print(du_y)
-
     if hancock:
         dudx = v_cell_centers[0] * (1 / h[0]) * du_x
         dudy = v_cell_centers[1] * (1 / h[1]) * du_y
@@ -289,7 +286,7 @@ def broadcast_troubled_cells_to_faces_1d(trouble: np.ndarray) -> np.ndarray:
     returns:
         troubled_interface  facewise trouble boolean    (m + 1,)
     """
-    troubled_interface = np.zeros(trouble.shape[0] + 1, dtype=int)
+    troubled_interface = np.zeros(trouble.shape[0] + 1, dtype=np.intc)
     troubled_interface[:-1] = trouble
     troubled_interface[1:] = np.where(trouble, 1, troubled_interface[1:])
     return troubled_interface
@@ -305,7 +302,7 @@ def broadcast_troubled_cells_to_faces_with_blending_1d(
         troubled_interface_mask     facewise trouble mask                   (m + 1,)
     """
     # initialize theta
-    troubled_interface_mask = np.zeros(trouble.shape[0] - 3, dtype=float)
+    troubled_interface_mask = np.zeros(trouble.shape[0] - 3, dtype=np.double)
     theta = trouble.astype("float")
 
     # First neighbors
@@ -332,8 +329,12 @@ def broadcast_troubled_cells_to_faces_2d(
         troubled_interface_y    facewise trouble boolean            (m + 1, n)
     """
     # flag faces of troubled cells as troubled
-    troubled_interface_x = np.zeros((trouble.shape[0], trouble.shape[1] + 1), dtype=int)
-    troubled_interface_y = np.zeros((trouble.shape[0] + 1, trouble.shape[0]), dtype=int)
+    troubled_interface_x = np.zeros(
+        (trouble.shape[0], trouble.shape[1] + 1), dtype=np.intc
+    )
+    troubled_interface_y = np.zeros(
+        (trouble.shape[0] + 1, trouble.shape[0]), dtype=np.intc
+    )
     troubled_interface_x[:, :-1] = trouble
     troubled_interface_x[:, 1:] = np.where(trouble, 1, troubled_interface_x[:, 1:])
     troubled_interface_y[:-1, :] = trouble
@@ -354,10 +355,10 @@ def broadcast_troubled_cells_to_faces_with_blending_2d(
     """
     # initialize theta
     interface_trouble_mask_x = np.zeros(
-        (trouble.shape[0] - 4, trouble.shape[1] - 3), dtype=float
+        (trouble.shape[0] - 4, trouble.shape[1] - 3), dtype=np.double
     )
     interface_trouble_mask_y = np.zeros(
-        (trouble.shape[0] - 3, trouble.shape[1] - 4), dtype=float
+        (trouble.shape[0] - 3, trouble.shape[1] - 4), dtype=np.double
     )
     theta = trouble.astype("float")
 

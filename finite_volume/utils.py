@@ -172,7 +172,7 @@ def batch_convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     # intialize empty array
     out = np.empty(
         (n_arrays, n_kernels, arr_rows - kern_rows + 1, arr_cols - kern_cols + 1),
-        dtype=np.float64,
+        dtype=np.double,
     )
 
     # perform n_arrays * n_kernels convolutions
@@ -198,7 +198,7 @@ def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 
     # initialize empty array
     out = np.empty(
-        (arr_rows - kern_rows + 1, arr_cols - kern_cols + 1), dtype=np.float64
+        (arr_rows - kern_rows + 1, arr_cols - kern_cols + 1), dtype=np.double
     )
     out_rows, out_cols = out.shape
 
@@ -223,3 +223,59 @@ def np_floor(x: np.ndarray, floor: float) -> np.ndarray:
         x which doesn't subceed floor
     """
     return np.where(x < floor, floor, x)
+
+
+def avoid_0(x: np.ndarray, eps: float, postive_at_0: bool = True) -> np.ndarray:
+    """
+    args:
+        x               array
+        eps             tolerance
+        positive_at_0   whether to use positive eps where x is 0
+    returns:
+        x with near-zero elements rounded to +eps or -eps depending on sign
+    """
+    if postive_at_0:
+        negative_eps = np.logical_and(x > -eps, x < 0.0)
+        positive_eps = np.logical_and(x >= 0.0, x < eps)
+    else:
+        negative_eps = np.logical_and(x > -eps, x <= 0.0)
+        positive_eps = np.logical_and(x > 0.0, x < eps)
+    return np.where(positive_eps, eps, np.where(negative_eps, -eps, x))
+
+
+@njit
+def apply_f_over_neighbors(x: np.ndarray, f: callable, neighbors: int) -> np.ndarray:
+    """
+    args:
+        x           (m + 1, n + 1) array
+        f           function of kernel (np.min, np.max, etc)
+        neighbors   3 (1D), 4 (2D), 9 (2D)
+    returns:
+        out         (m, n) array with f applied to cells and their neighbors
+    """
+    if neighbors == 3:
+        out = np.empty(x.shape[0] - 2)
+        n_elements = out.shape[0]
+
+        for i in range(n_elements):
+            out[i] = f(f(x[i], x[i + 1]), x[i + 2])
+
+    elif neighbors == 4 or neighbors == 9:
+        out = np.empty(x.shape[0] - 2, x.shape[1] - 2)
+        n_rows, n_cols = out.shape
+
+        for i in range(n_rows):
+            for j in range(n_cols):
+                row1 = f(f(x[i, j], x[i, j + 1]), x[i, j + 2])
+                row2 = f(f(x[i + 1, j], x[i + 1, j + 1]), x[i + 1, j + 2])
+                row3 = f(f(x[i + 2, j], x[i + 2, j + 1]), x[i + 2, j + 2])
+                out[i, j] = f(f(row1, row2), row3)
+
+    return out
+
+
+def transpose_in_other_direction(x: np.ndarray) -> np.ndarray:
+    """
+    np.transpose but about the other axis
+    """
+    return np.fliplr(np.transpose(np.fliplr(x)))

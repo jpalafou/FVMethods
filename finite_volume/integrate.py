@@ -199,7 +199,7 @@ class Integrator:
 
         overwrite_snapshot_dt = 0.0
         for _ in range(n):
-            overwrite_snapshot_dt += self.dt
+            overwrite_snapshot_dt += self.snapshot_dt
 
         self.integrate(
             step=step,

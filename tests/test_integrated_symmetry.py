@@ -3,7 +3,7 @@ import numpy as np
 import os
 from finite_volume.advection import AdvectionSolver
 from finite_volume.initial_conditions import generate_ic
-from finite_volume.utils import dict_combinations
+from finite_volume.utils import dict_combinations, transpose_in_other_direction
 
 test_directory = "data/test_solutions/"
 
@@ -274,33 +274,64 @@ def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
-@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+@pytest.mark.parametrize(
+    "transformation", [np.fliplr, np.flipud, "rotate 1", "rotate 2", "rotate 3"]
+)
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
-@pytest.mark.parametrize("limiter_config", limiter_configs_1d)
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
 def test_velocity_equivariance_2d(
-    p, ic_type__PAD, n_rotations, quadrature, limiter_config
+    p, ic_type__PAD, transformation, quadrature, limiter_config
 ):
     """
-    C_n in [C_1, C_2, C_3, C_4]
-    advection_solution(u(x, y), (v, 0)) = C_n^-1 advection_...((u(x, y),  C_n (v, 0))
+    for f in
+        reflection about x=0
+        reflection about y=0
+        rotation by 90 degrees
+        rotation by 180 degrees
+        rotation by 270 degrees
+    advection_solution(f(u(x, y)), f(v)) = f(advection_solution(u(x, y), f(v)))
     """
     ic_type, PAD = ic_type__PAD
 
     def u0(x, y):
-        return generate_ic(type=ic_type, x=x, y=y)
+        # offset to avoid inherent rotational symmetry
+        return generate_ic(type=ic_type, x=x - 0.2, y=y - 0.1)
 
-    def u0_rotated(x, y):
-        return np.rot90(u0(x, y), k=n_rotations, axes=(1, 0))
+    if transformation == np.fliplr:
+        f = transformation
+        v_outer = (1, 0)
+        v_inner = (-1, 0)
+    elif transformation == np.flipud:
+        f = transformation
+        v_outer = (0, 1)
+        v_inner = (0, -1)
+    elif isinstance(transformation, str) and transformation[:7] == "rotate ":
+        i = int(transformation.split(" ")[1])
 
-    u0_rotated.__name__ += f"_{n_rotations}"
+        def f(x):
+            return np.flipud(np.rot90(np.flipud(x), i))
 
-    vx_vy = (1, 0)
-    vx_vy_C4 = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
+        f.__name__ = f"rotation_{i}"
+        if i == 1:
+            v_outer = (1, 0)
+            v_inner = (0, 1)
+        elif i == 2:
+            v_outer = (1, 0)
+            v_inner = (-1, 0)
+        elif i == 3:
+            v_outer = (1, 0)
+            v_inner = (0, -1)
+
+    def u0_inner(x, y):
+        return f(u0(x, y))
+
+    u0_inner.__name__ += "_" + f.__name__
 
     shared_config = dict(
         **limiter_config,
         save_directory=test_directory,
         PAD=PAD,
+        NAD=1e-5,
         n=(64,),
         order=p + 1,
         flux_strategy=quadrature,
@@ -309,25 +340,100 @@ def test_velocity_equivariance_2d(
     )
 
     # baseline
-    solver = AdvectionSolver(
+    solver_outer = AdvectionSolver(
         **shared_config,
         u0=u0,
-        v=vx_vy,
+        v=v_outer,
     )
-    solver.rkorder()
+    solver_outer.rkorder()
 
     # reflected
-    solver_rotated = AdvectionSolver(
+    solver_inner = AdvectionSolver(
         **shared_config,
-        u0=u0_rotated,
-        v=vx_vy_C4[n_rotations],
+        u0=u0_inner,
+        v=v_inner,
     )
-    solver_rotated.rkorder()
+    solver_inner.rkorder()
 
     # check equivariance
-    diffs = solver.u_snapshots[-1][1] - np.rot90(
-        solver_rotated.u_snapshots[-1][1], k=-n_rotations, axes=(1, 0)
+    outer = f(solver_outer.u_snapshots[-1][1])
+    inner = solver_inner.u_snapshots[-1][1]
+    diffs = inner - outer
+    print(f"{l1(diffs)=}")
+    print(f"{l2(diffs)=}")
+    print(f"{linf(diffs)=}")
+    err = linf(diffs)
+    assert err < 1e-10
+
+
+@pytest.mark.parametrize("p", range(8))
+@pytest.mark.parametrize("ic_type__PAD", [("square", (0, 1))])
+@pytest.mark.parametrize(
+    "v",
+    [
+        (np.sqrt(2), 0.0),
+        (1, 1),
+        (0, np.sqrt(2)),
+        (-1, 1),
+        (-np.sqrt(2), 0),
+        (-1, -1),
+        (0, -np.sqrt(2)),
+        (1, -1),
+    ],
+)
+@pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
+def test_reflection_equivariance_2d(p, ic_type__PAD, v, quadrature, limiter_config):
+    """
+    test symmetry of solution about
+        y=0
+        y=x
+        x=0
+        y=-x
+    """
+    ic_type, PAD = ic_type__PAD
+
+    def u0(x, y):
+        # offset to avoid inherent rotational symmetry
+        return generate_ic(type=ic_type, x=x, y=y)
+
+    if v in {(np.sqrt(2), 0.0), (-np.sqrt(2), 0)}:
+        f = np.flipud
+    elif v in {(1, 1), (-1, -1)}:
+
+        def f(x):
+            return np.flipud(transpose_in_other_direction(np.flipud(x)))
+
+    elif v in {(0, np.sqrt(2)), (0, -np.sqrt(2))}:
+        f = np.fliplr
+    elif v in {(-1, 1), (1, -1)}:
+
+        def f(x):
+            return np.flipud(np.transpose(np.flipud(x)))
+
+    shared_config = dict(
+        **limiter_config,
+        save_directory=test_directory,
+        PAD=PAD,
+        NAD=1e-5,
+        n=(64,),
+        order=p + 1,
+        flux_strategy=quadrature,
+        courant=0.8,
+        snapshot_dt=1,
     )
+
+    solver_outer = AdvectionSolver(
+        **shared_config,
+        u0=u0,
+        v=v,
+    )
+    solver_outer.rkorder()
+
+    # check reflection equivariance
+    solution = solver_outer.u_snapshots[-1][1]
+    reflected_solution = f(solution)
+    diffs = solution - reflected_solution
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")

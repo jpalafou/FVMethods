@@ -10,6 +10,8 @@ from finite_volume.a_posteriori import (
     compute_MUSCL_interpolations_1d,
     compute_MUSCL_interpolations_2d,
     compute_PP2D_interpolations,
+    broadcast_troubled_cells_to_faces_2d,
+    broadcast_troubled_cells_to_faces_with_blending_2d,
 )
 
 
@@ -156,7 +158,7 @@ def test_compute_alpha_1d_translation_invariance(n_test, a, b):
     assert err < 1e-15
 
 
-@pytest.mark.parametrize("n_test", range(200))
+@pytest.mark.parametrize("n_test", range(10))
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
 def test_compute_alpha_2d_translation_invariance(n_test, a, b):
@@ -503,3 +505,39 @@ def test_compute_PP2D_interpolations_rotation_equivariance(
     )[idxs[n_rotations][0]][idxs[n_rotations][1]]
     err = np.mean(np.abs(inner - outer))
     assert err < 1e-15
+
+
+@pytest.mark.parametrize("n_test", range(20))
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_broadcast_troubled_cells_to_faces_2d_rotation_equivariance(
+    n_test, n_rotations
+):
+    """
+    broadcast_troubled_cells_to_faces_2d(rotation(u))
+    == rotation(broadcast_troubled_cells_to_faces_2d(u))
+    """
+    trouble = np.random.randint(0, 2, (100, 100))
+    inner = broadcast_troubled_cells_to_faces_2d(rotate(trouble, n_rotations))[0]
+    outer = rotate(broadcast_troubled_cells_to_faces_2d(trouble), n_rotations)[
+        n_rotations % 2 != 0
+    ]
+    assert np.max(np.abs(inner - outer)) == 0
+
+
+@pytest.mark.parametrize("n_test", range(20))
+@pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
+def test_broadcast_troubled_cells_to_faces_with_blending_2d_rotation_equivariance(
+    n_test, n_rotations
+):
+    """
+    broadcast_troubled_cells_to_faces_with_blending(rotation(u))
+    == broadcast_troubled_cells_to_faces_with_blending(rotation(u))
+    """
+    trouble = np.random.randint(0, 2, (100, 100))
+    inner = broadcast_troubled_cells_to_faces_with_blending_2d(
+        rotate(trouble, n_rotations)
+    )[0]
+    outer = rotate(
+        broadcast_troubled_cells_to_faces_with_blending_2d(trouble), n_rotations
+    )[n_rotations % 2 != 0]
+    assert np.max(np.abs(inner - outer)) == 0

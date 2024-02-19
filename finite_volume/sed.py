@@ -1,5 +1,5 @@
 import numpy as np
-from finite_volume.utils import chopchop
+from finite_volume.utils import chopchop, avoid_0
 
 
 def detect_smooth_extrema(u: np.ndarray, h: float = 1.0, axis: int = 0):
@@ -15,42 +15,43 @@ def detect_smooth_extrema(u: np.ndarray, h: float = 1.0, axis: int = 0):
         chopchop(u, chop_size=(2, 0), axis=axis)
         - chopchop(u, chop_size=(0, 2), axis=axis)
     ) / (2 * h)
-    ddu = (
-        chopchop(du, chop_size=(2, 0), axis=axis)
+    S_left = (
+        chopchop(du, chop_size=(1, 1), axis=axis)
         - chopchop(du, chop_size=(0, 2), axis=axis)
-    ) / (2 * h)
-    dv = 0.5 * h * ddu
+    ) / h
+    S_right = (
+        chopchop(du, chop_size=(2, 0), axis=axis)
+        - chopchop(du, chop_size=(1, 1), axis=axis)
+    ) / h
+    S_center = avoid_0(0.5 * (S_left + S_right), 1e-10)
 
-    v_left = chopchop(du, chop_size=(0, 2), axis=axis) - chopchop(
-        du, chop_size=(1, 1), axis=axis
-    )
-    alpha_left = -np.where(
-        dv < 0, np.where(v_left > 0, v_left, 0), np.where(v_left < 0, v_left, 0)
-    ) / np.where(np.abs(dv) < 1e-16, 1e-16 * np.where(dv >= 0, 1.0, -1.0), dv)
-    alpha_left = np.where(np.abs(dv) <= 0, 1, alpha_left)
-    alpha_left = np.where(alpha_left < 1, alpha_left, 1)
-    v_right = chopchop(du, chop_size=(2, 0), axis=axis) - chopchop(
-        du, chop_size=(1, 1), axis=axis
-    )
-    alpha_right = np.where(
-        dv > 0, np.where(v_right > 0, v_right, 0), np.where(v_right < 0, v_right, 0)
-    ) / np.where(np.abs(dv) < 1e-16, 1e-16 * np.where(dv >= 0, 1.0, -1.0), dv)
-    alpha_right = np.where(np.abs(dv) <= 0, 1, alpha_right)
-    alpha_right = np.where(alpha_right < 1, alpha_right, 1)
-    alpha = np.where(alpha_left < alpha_right, alpha_left, alpha_right)
+    def alpha_direction(S_direction):
+        alpha_direction_min_min = np.minimum(
+            1.0, np.minimum(2 * S_direction, 0.0) / S_center
+        )
+        alpha_direction_min_max = np.minimum(
+            1.0, np.maximum(2 * S_direction, 0.0) / S_center
+        )
+        alpha_direction = np.where(
+            S_center < 0.0,
+            alpha_direction_min_min,
+            np.where(S_center > 0.0, alpha_direction_min_max, 1.0),
+        )
+        return alpha_direction
 
-    # find minimum of alpha and neighbors
-    alpha_min = np.amin(
-        np.array(
-            [
-                chopchop(alpha, chop_size=(2, 0), axis=axis),
-                chopchop(alpha, chop_size=(1, 1), axis=axis),
-                chopchop(alpha, chop_size=(0, 2), axis=axis),
-            ]
+    alpha_left = alpha_direction(S_left)
+    alpha_right = alpha_direction(S_right)
+    alpha = np.minimum(alpha_left, alpha_right)
+
+    alpha = np.minimum(
+        np.minimum(
+            chopchop(alpha, chop_size=(0, 2), axis=axis),
+            chopchop(alpha, chop_size=(1, 1), axis=axis),
         ),
-        axis=0,
+        chopchop(alpha, chop_size=(2, 0), axis=axis),
     )
-    return alpha_min
+
+    return alpha
 
 
 def compute_alpha_1d(u: np.ndarray, zeros: bool = None) -> np.ndarray:
@@ -67,7 +68,7 @@ def compute_alpha_1d(u: np.ndarray, zeros: bool = None) -> np.ndarray:
     return detect_smooth_extrema(u, axis=0)
 
 
-def compute_alpha_2d(u, zeros: bool = None):
+def compute_alpha_2d(u, zeros: bool = False):
     """
     args:
         u       cell volume averages (m + 6, n + 6)
@@ -81,5 +82,5 @@ def compute_alpha_2d(u, zeros: bool = None):
         return np.zeros_like(u[3:-3, 3:-3])
     alpha_x = detect_smooth_extrema(u, axis=1)[3:-3, :]
     alpha_y = detect_smooth_extrema(u, axis=0)[:, 3:-3]
-    alpha = np.where(alpha_x < alpha_y, alpha_x, alpha_y)
+    alpha = np.minimum(alpha_x, alpha_y)
     return alpha
