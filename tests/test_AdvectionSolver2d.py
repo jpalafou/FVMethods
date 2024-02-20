@@ -151,102 +151,121 @@ def test_mesh_convergence(order):
     assert all(errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1))
 
 
-@pytest.mark.parametrize("order", order_list)
 @pytest.mark.parametrize(
-    "config",
+    "initial_condition_config",
     [
-        {
-            "x": (-1, 1),
-            "snapshot_dt": np.pi / 4,
-            "num_snapshots": 8,
-            "v": vortex,
-            "u0": "disk",
-            "bc": "dirichlet",
-            "const": 0,
-        },
-        {
-            "x": (0, 1),
-            "snapshot_dt": np.pi / 4,
-            "num_snapshots": 8,
-            "v": (1, 2),
-            "u0": "square",
-            "bc": "periodic",
-            "const": None,
-        },
-    ],
-)
-def test_mpp(order, config):
-    tolerance = 1e-16
-    solution = AdvectionSolver(
-        n=(64,),
-        order=order,
-        x=config["x"],
-        snapshot_dt=config["snapshot_dt"],
-        num_snapshots=config["num_snapshots"],
-        v=config["v"],
-        u0=config["u0"],
-        bc=config["bc"],
-        const=config["const"],
-        courant=C_for_mpp[order],
-        flux_strategy="gauss-legendre",
-        apriori_limiting=True,
-        save_directory=test_directory,
-    )
-    solution.ssprk3()
-    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
-    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
-
-
-@pytest.mark.parametrize("n", [64, 128])
-@pytest.mark.parametrize(
-    "problem_config",
-    [
-        {
-            "u0": "square",
-            "v": (2, 1),
-            "x": (0, 1),
-            "bc": "periodic",
-            "snapshot_dt": 1,
-            "num_snapshots": 1,
-        },
-        {
-            "u0": "disk",
-            "v": vortex,
-            "x": (-1, 1),
-            "bc": "dirichlet",
-            "const": 0,
-            "snapshot_dt": 2 * np.pi,
-            "num_snapshots": 1,
-        },
+        dict(
+            u0="sinus",
+            v=(2, 1),
+            PAD=(-1, 1),
+            x=(0, 1),
+            snapshot_dt=1,
+            bc="periodic",
+            const=None,
+        ),
+        dict(
+            u0="square",
+            v=(2, 1),
+            PAD=(0, 1),
+            x=(0, 1),
+            snapshot_dt=1,
+            bc="periodic",
+            const=None,
+        ),
+        dict(
+            u0="disk",
+            v=vortex,
+            PAD=(0, 1),
+            x=(-1, 1),
+            snapshot_dt=2 * np.pi,
+            bc="dirichlet",
+            const=0.0,
+        ),
     ],
 )
 @pytest.mark.parametrize(
-    "musclhancock_config",
-    [dict(fallback_limiter="minmod"), dict(fallback_limiter="PP2D")],
+    "limiter_config",
+    [
+        dict(apriori_limiting=True, mpp_lite=False),
+        dict(apriori_limiting=True, mpp_lite=True),
+    ],
 )
-@pytest.mark.parametrize(
-    "integrator_config",
-    [("euler", dict(hancock=True)), ("ssprk2", dict(hancock=False))],
-)
-@pytest.mark.parametrize("flux_strategy", ["gauss-legendre", "transverse"])
-def test_MUSCLHancock(
-    n, problem_config, musclhancock_config, integrator_config, flux_strategy
+@pytest.mark.parametrize("modify_time_step", [False, True])
+@pytest.mark.parametrize("mpp_tolerance", [1e-10, 1e-15])
+@pytest.mark.parametrize("order", [1, 2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("SED", [False, True])
+def test_a_priori_mpp_2d(
+    initial_condition_config,
+    limiter_config,
+    modify_time_step,
+    mpp_tolerance,
+    order,
+    SED,
 ):
     solution = AdvectionSolver(
-        order=2,
-        n=(n,),
-        flux_strategy=flux_strategy,
-        courant=0.8,
-        aposteriori_limiting=True,
-        cause_trouble=True,
-        PAD=(0, 1),
+        n=(128,),
+        num_snapshots=1,
+        **initial_condition_config,
+        **limiter_config,
+        courant=C_for_mpp[order] if not modify_time_step else 0.8,
+        modify_time_step=modify_time_step,
+        mpp_tolerance=mpp_tolerance,
+        order=order,
+        SED=SED,
         save_directory=test_directory,
-        **problem_config,
-        **musclhancock_config,
-        **integrator_config[1]
     )
-    if integrator_config[0] == "euler":
+    solution.rkorder()
+    assert solution.compute_violations()[1]["worst"] > -mpp_tolerance
+
+
+@pytest.mark.parametrize(
+    "initial_condition_config",
+    [
+        dict(
+            u0="sinus",
+            v=(2, 1),
+            PAD=(-1, 1),
+            x=(0, 1),
+            snapshot_dt=1,
+            bc="periodic",
+            const=None,
+        ),
+        dict(
+            u0="square",
+            v=(2, 1),
+            PAD=(0, 1),
+            x=(0, 1),
+            snapshot_dt=1,
+            bc="periodic",
+            const=None,
+        ),
+        dict(
+            u0="disk",
+            v=vortex,
+            PAD=(0, 1),
+            x=(-1, 1),
+            snapshot_dt=2 * np.pi,
+            bc="dirichlet",
+            const=0.0,
+        ),
+    ],
+)
+@pytest.mark.parametrize("hancock", [False, True])
+def test_MUSCL_mpp_2d(initial_condition_config, hancock):
+    solution = AdvectionSolver(
+        **initial_condition_config,
+        hancock=hancock,
+        n=(256,),
+        num_snapshots=1,
+        courant=0.5,
+        order=2,
+        aposteriori_limiting=True,
+        fallback_limiter="PP2D",
+        cause_trouble=True,
+        save_directory=test_directory,
+    )
+    if hancock:
         solution.euler()
-    if integrator_config[0] == "ssprk2":
+    else:
         solution.ssprk2()
-    assert solution.compute_violations()[1]["worst"] <= solution.mpp_tolerance
+    assert solution.compute_violations()[1]["worst"] >= -1e-10

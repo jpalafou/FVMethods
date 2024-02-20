@@ -1,5 +1,4 @@
 import pytest
-import numpy as np
 import os
 from finite_volume.advection import AdvectionSolver
 
@@ -7,7 +6,7 @@ test_directory = "data/test_solutions/"
 
 n_list = [16, 32, 64]
 order_list = [1, 2, 3, 4, 5]
-C_for_mpp = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833}
+C_for_mpp = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833, 6: 0.0833, 7: 0.05, 8: 0.05}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -135,52 +134,70 @@ def test_mesh_convergence(order):
     assert all(errorlist[i] - errorlist[i + 1] > 0 for i in range(len(errorlist) - 1))
 
 
-@pytest.mark.parametrize("order", order_list)
 @pytest.mark.parametrize(
-    "config",
+    "limiter_config",
     [
-        {"n": 64, "u0": "square"},
-        {"n": 256, "u0": "composite"},
+        dict(apriori_limiting=True, mpp_lite=False),
+        dict(apriori_limiting=True, mpp_lite=True),
     ],
 )
-def test_apriori_mpp(order, config):
-    tolerance = 1e-16
+@pytest.mark.parametrize("modify_time_step", [False, True])
+@pytest.mark.parametrize("mpp_tolerance", [1e-10, 1e-15])
+@pytest.mark.parametrize("order", [1, 2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("SED", [False, True])
+def test_a_priori_mpp_1d(limiter_config, modify_time_step, mpp_tolerance, order, SED):
     solution = AdvectionSolver(
-        n=config["n"],
-        order=order,
+        u0="composite",
+        bc="periodic",
+        PAD=(0, 1),
+        const=None,
+        n=256,
         v=1,
-        u0=config["u0"],
-        courant=C_for_mpp[order],
-        apriori_limiting=True,
-        save_directory=test_directory,
-    )
-    solution.ssprk3()
-    assert np.min(solution.u_snapshots[-1][1]) >= 0 - tolerance
-    assert np.max(solution.u_snapshots[-1][1]) <= 1 + tolerance
-
-
-@pytest.mark.parametrize(
-    "config",
-    [
-        {"n": 64, "u0": "square"},
-        {"n": 256, "u0": "composite"},
-    ],
-)
-@pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("fallback_limiter", ["minmod", "moncen"])
-def test_MUSCLHancock(config, order, fallback_limiter):
-    solution = AdvectionSolver(
-        n=config["n"],
+        snapshot_dt=1,
+        num_snapshots=1,
+        courant=C_for_mpp[order] if not modify_time_step else 0.8,
+        modify_time_step=modify_time_step,
+        mpp_tolerance=mpp_tolerance,
+        **limiter_config,
+        SED=SED,
         order=order,
-        v=1,
-        u0=config["u0"],
-        courant=0.5,
-        aposteriori_limiting=True,
-        cause_trouble=True,
-        hancock=True,
-        fallback_to_first_order=True,
-        fallback_limiter=fallback_limiter,
         save_directory=test_directory,
     )
     solution.rkorder()
-    assert solution.compute_violations()[1]["violation frequency"] == 0
+    assert solution.compute_violations()[1]["worst"] > -mpp_tolerance
+
+
+@pytest.mark.parametrize(
+    "IC_PAD", [("composite", (0, 1)), ("square", (0, 1)), ("sinus", (-1, 1))]
+)
+@pytest.mark.parametrize("hancock", [False, True])
+@pytest.mark.parametrize("fallback_limiter", ["minmod", "moncen"])
+@pytest.mark.parametrize("fallback_to_first_order", [False, True])
+@pytest.mark.parametrize("SED", [False, True])
+def test_MUSCL_mpp_1d(IC_PAD, hancock, fallback_limiter, fallback_to_first_order, SED):
+    IC, PAD = IC_PAD
+    solution = AdvectionSolver(
+        u0=IC,
+        bc="periodic",
+        PAD=PAD,
+        const=None,
+        n=256,
+        v=1,
+        snapshot_dt=1,
+        num_snapshots=1,
+        courant=0.8,
+        mpp_tolerance=1e-10,
+        order=2,
+        aposteriori_limiting=True,
+        hancock=hancock,
+        fallback_limiter=fallback_limiter,
+        fallback_to_first_order=fallback_to_first_order,
+        cause_trouble=True,
+        SED=SED,
+        save_directory=test_directory,
+    )
+    if hancock:
+        solution.euler()
+    else:
+        solution.ssprk2()
+    assert solution.compute_violations()[1]["worst"] >= 0.0
