@@ -345,10 +345,12 @@ class Integrator:
         """
 
         def step(u0, t0, dt):
-            _u1 = u0
-            _u2 = _u1 + dt * self.udot(u=_u1, t=t0, dt=dt)
-            _u3 = (3 / 4) * _u1 + (1 / 4) * (_u2 + dt * self.udot(u=_u2, t=t0, dt=dt))
-            u1 = (1 / 3) * _u1 + (2 / 3) * (_u3 + dt * self.udot(u=_u3, t=t0, dt=dt))
+            k1 = self.udot(u=u0, t=t0, dt=dt)
+            k2 = self.udot(u=u0 + dt * k1, t=t0 + dt, dt=dt)
+            k3 = self.udot(
+                u=u0 + 0.25 * dt * k1 + 0.25 * dt * k2, t=t0 + 0.5 * dt, dt=0.5 * dt
+            )
+            u1 = u0 + (dt / 6) * (k1 + k2 + 4 * k3)
             return u1
 
         self.integrate(step=step, method_name=inspect.currentframe().f_code.co_name)

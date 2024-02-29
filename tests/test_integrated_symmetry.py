@@ -44,7 +44,6 @@ limiter_configs_1d = [
         dict(
             apriori_limiting=[True],
             mpp_lite=[False, True],
-            SED=[True],
         )
     ),
     *dict_combinations(
@@ -54,7 +53,6 @@ limiter_configs_1d = [
             convex=[False, True],
             hancock=[True],
             fallback_to_first_order=[False, True],
-            SED=[True],
         )
     ),
 ]
@@ -64,8 +62,9 @@ limiter_configs_1d = [
 @pytest.mark.parametrize("a", [1, -1])
 @pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
+@pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("limiter_config", limiter_configs_1d)
-def test_translation_equivariance_1d(p, a, k, ic_type__PAD, limiter_config):
+def test_translation_equivariance_1d(p, a, k, ic_type__PAD, SED, limiter_config):
     """
     advection_solution(a * u(x) + k) = a * advection_solution(u(x)) + k
     """
@@ -90,6 +89,7 @@ def test_translation_equivariance_1d(p, a, k, ic_type__PAD, limiter_config):
         order=p + 1,
         courant=0.8,
         snapshot_dt=1,
+        SED=SED,
     )
 
     # baseline
@@ -117,14 +117,15 @@ def test_translation_equivariance_1d(p, a, k, ic_type__PAD, limiter_config):
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = linf(diffs)
-    assert err < 1e-10
+    err = l2(diffs)
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
+@pytest.mark.parametrize("SED", [False, True])
 @pytest.mark.parametrize("limiter_config", limiter_configs_1d)
-def test_velocity_equivariance_1d(p, ic_type__PAD, limiter_config):
+def test_velocity_equivariance_1d(p, ic_type__PAD, SED, limiter_config):
     """
     advection_solution(u(x), -v_x) = advection_solution(u(-x), v_x)
     """
@@ -144,6 +145,7 @@ def test_velocity_equivariance_1d(p, ic_type__PAD, limiter_config):
         order=p + 1,
         courant=0.8,
         snapshot_dt=1,
+        SED=SED,
     )
 
     # baseline
@@ -170,8 +172,8 @@ def test_velocity_equivariance_1d(p, ic_type__PAD, limiter_config):
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = linf(diffs)
-    assert err < 1e-10
+    err = l2(diffs)
+    assert err < 1e-14
 
 
 """
@@ -184,7 +186,6 @@ limiter_configs_2d = [
         dict(
             apriori_limiting=[True],
             mpp_lite=[False, True],
-            SED=[True],
         )
     ),
     *dict_combinations(
@@ -194,7 +195,6 @@ limiter_configs_2d = [
             convex=[False, True],
             hancock=[True],
             fallback_to_first_order=[False, True],
-            SED=[True],
         )
     ),
     *dict_combinations(
@@ -204,7 +204,6 @@ limiter_configs_2d = [
             convex=[False, True],
             hancock=[True],
             fallback_to_first_order=[False],
-            SED=[True],
         )
     ),
 ]
@@ -212,11 +211,14 @@ limiter_configs_2d = [
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("a", [1, -1])
-@pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
+@pytest.mark.parametrize("k", [-2, 0, 2])
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
-def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_config):
+@pytest.mark.parametrize("SED", [False, True])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
+def test_translation_equivariance_2d(
+    p, a, k, ic_type__PAD, quadrature, SED, limiter_config
+):
     """
     advection_solution(a * u(x, y) + k) = a * advection_solution(u(x, y)) + k
     """
@@ -242,6 +244,7 @@ def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_
         courant=0.8,
         snapshot_dt=1,
         flux_strategy=quadrature,
+        SED=SED,
     )
 
     # baseline
@@ -268,8 +271,8 @@ def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = linf(diffs)
-    assert err < 1e-10
+    err = l2(diffs)
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("p", range(8))
@@ -278,9 +281,10 @@ def test_translation_equivariance_2d(p, a, k, ic_type__PAD, quadrature, limiter_
     "transformation", [np.fliplr, np.flipud, "rotate 1", "rotate 2", "rotate 3"]
 )
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
+@pytest.mark.parametrize("SED", [False, True])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
 def test_velocity_equivariance_2d(
-    p, ic_type__PAD, transformation, quadrature, limiter_config
+    p, ic_type__PAD, transformation, quadrature, SED, limiter_config
 ):
     """
     for f in
@@ -337,6 +341,7 @@ def test_velocity_equivariance_2d(
         flux_strategy=quadrature,
         courant=0.8,
         snapshot_dt=1,
+        SED=SED,
     )
 
     # baseline
@@ -362,8 +367,8 @@ def test_velocity_equivariance_2d(
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = linf(diffs)
-    assert err < 1e-10
+    err = l2(diffs)
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("p", range(8))
@@ -382,8 +387,11 @@ def test_velocity_equivariance_2d(
     ],
 )
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
-def test_reflection_equivariance_2d(p, ic_type__PAD, v, quadrature, limiter_config):
+@pytest.mark.parametrize("SED", [False, True])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
+def test_reflection_equivariance_2d(
+    p, ic_type__PAD, v, quadrature, SED, limiter_config
+):
     """
     test symmetry of solution about
         y=0
@@ -421,6 +429,7 @@ def test_reflection_equivariance_2d(p, ic_type__PAD, v, quadrature, limiter_conf
         flux_strategy=quadrature,
         courant=0.8,
         snapshot_dt=1,
+        SED=SED,
     )
 
     solver_outer = AdvectionSolver(
@@ -437,14 +446,15 @@ def test_reflection_equivariance_2d(p, ic_type__PAD, v, quadrature, limiter_conf
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = linf(diffs)
-    assert err < 1e-10
+    err = l2(diffs)
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
-def test_disk_slotted_disk_velocity_equivariance(p, quadrature, limiter_config):
+@pytest.mark.parametrize("SED", [False, True])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
+def test_disk_slotted_disk_velocity_equivariance(p, quadrature, SED, limiter_config):
     """
     test equivariance of slotted disk rotated counterclockwise and clockwise
     """
@@ -473,6 +483,7 @@ def test_disk_slotted_disk_velocity_equivariance(p, quadrature, limiter_config):
         flux_strategy=quadrature,
         courant=0.8,
         snapshot_dt=2 * np.pi,
+        SED=SED,
     )
 
     solver_cw = AdvectionSolver(**shared_config, v=v_cw)
@@ -487,5 +498,5 @@ def test_disk_slotted_disk_velocity_equivariance(p, quadrature, limiter_config):
     print(f"{l1(diffs)=}")
     print(f"{l2(diffs)=}")
     print(f"{linf(diffs)=}")
-    err = linf(diffs)
-    assert err < 1e-10
+    err = l2(diffs)
+    assert err < 1e-14

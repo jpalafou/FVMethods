@@ -1,5 +1,5 @@
 from itertools import product
-from numba import njit, prange
+from numba import njit, prange, double
 import numpy as np
 
 
@@ -172,7 +172,7 @@ def batch_convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     # intialize empty array
     out = np.empty(
         (n_arrays, n_kernels, arr_rows - kern_rows + 1, arr_cols - kern_cols + 1),
-        dtype=np.double,
+        dtype=double,
     )
 
     # perform n_arrays * n_kernels convolutions
@@ -197,9 +197,7 @@ def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     kern_rows, kern_cols = kernel.shape
 
     # initialize empty array
-    out = np.empty(
-        (arr_rows - kern_rows + 1, arr_cols - kern_cols + 1), dtype=np.double
-    )
+    out = np.empty((arr_rows - kern_rows + 1, arr_cols - kern_cols + 1), dtype=double)
     out_rows, out_cols = out.shape
 
     # perform convolution
