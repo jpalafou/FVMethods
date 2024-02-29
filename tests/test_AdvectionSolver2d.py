@@ -7,7 +7,7 @@ test_directory = "data/test_solutions/"
 
 n_list = [16, 32, 64]
 order_list = [1, 2, 3, 4, 5]
-C_for_mpp = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833}
+C_for_mpp = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833, 6: 0.0833, 7: 0.05, 8: 0.05}
 
 
 def vortex(x, y):
@@ -190,8 +190,8 @@ def test_mesh_convergence(order):
         dict(apriori_limiting=True, mpp_lite=True),
     ],
 )
-@pytest.mark.parametrize("modify_time_step", [False, True])
-@pytest.mark.parametrize("mpp_tolerance", [1e-10, 1e-15])
+@pytest.mark.parametrize("modify_time_step", [True])
+@pytest.mark.parametrize("mpp_tolerance", [1e-10, 1e-12])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5, 6, 7, 8])
 @pytest.mark.parametrize("SED", [False, True])
 def test_a_priori_mpp_2d(

@@ -333,7 +333,7 @@ def broadcast_troubled_cells_to_faces_2d(
         (trouble.shape[0], trouble.shape[1] + 1), dtype=np.intc
     )
     troubled_interface_y = np.zeros(
-        (trouble.shape[0] + 1, trouble.shape[0]), dtype=np.intc
+        (trouble.shape[0] + 1, trouble.shape[1]), dtype=np.intc
     )
     troubled_interface_x[:, :-1] = trouble
     troubled_interface_x[:, 1:] = np.where(trouble, 1, troubled_interface_x[:, 1:])
