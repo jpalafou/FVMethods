@@ -235,7 +235,7 @@ class AdvectionSolver(Integrator):
 
         # initialize simulation/visualized theta and trouble
         self.ones_i = np.ones_like(u0, dtype="int")
-        self.ones_f = np.ones_like(u0, dtype="float")
+        self.ones_f = np.ones_like(u0, dtype="double")
         self.theta = self.ones_f
         self.visualized_theta = self.ones_f
         self.trouble = 0 * self.ones_i
@@ -574,6 +574,7 @@ class AdvectionSolver(Integrator):
         not_smooth_extrema = alpha < 1
         # PAD then SED
         theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
+        self.theta = theta
         # limit slopes
         first_order_fallback = self.apply_bc(u, gw=1)
         points = theta * (points - first_order_fallback) + first_order_fallback
@@ -652,8 +653,10 @@ class AdvectionSolver(Integrator):
         riemann_slice = slice(
             self.excess_riemann_gw or None, -self.excess_riemann_gw or None
         )
+        self.theta += theta[riemann_slice, riemann_slice][1:-1, 1:-1]
         horizontal_points = horizontal_points[:, :, trans_slice, riemann_slice]
         vertical_points = vertical_points[:, :, riemann_slice, trans_slice]
+
         ns_pointwise_fluxes = self.riemann_solver(
             v=self.b,
             left_value=vertical_points[:, -1, :-1, :],  # north points
@@ -799,6 +802,7 @@ class AdvectionSolver(Integrator):
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)
+        self.trouble += trouble
         # overwrite fluxes
         if not self.convex:
             (

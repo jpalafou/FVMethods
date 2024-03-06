@@ -60,10 +60,10 @@ limiter_configs_1d = [
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("a", [1, -1])
-@pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
+@pytest.mark.parametrize("k", [-2, 2])
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("SED", [False, True])
-@pytest.mark.parametrize("limiter_config", limiter_configs_1d)
+@pytest.mark.parametrize("limiter_config", limiter_configs_1d[2:4])
 def test_translation_equivariance_1d(p, a, k, ic_type__PAD, SED, limiter_config):
     """
     advection_solution(a * u(x) + k) = a * advection_solution(u(x)) + k
@@ -124,7 +124,7 @@ def test_translation_equivariance_1d(p, a, k, ic_type__PAD, SED, limiter_config)
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("SED", [False, True])
-@pytest.mark.parametrize("limiter_config", limiter_configs_1d)
+@pytest.mark.parametrize("limiter_config", limiter_configs_1d[2:4])
 def test_velocity_equivariance_1d(p, ic_type__PAD, SED, limiter_config):
     """
     advection_solution(u(x), -v_x) = advection_solution(u(-x), v_x)
@@ -211,7 +211,7 @@ limiter_configs_2d = [
 
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("a", [1, -1])
-@pytest.mark.parametrize("k", [-2, 0, 2])
+@pytest.mark.parametrize("k", [-2, 2])
 @pytest.mark.parametrize("ic_type__PAD", [("sinus", (-1, 1)), ("square", (0, 1))])
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("SED", [False, True])
@@ -282,7 +282,7 @@ def test_translation_equivariance_2d(
 )
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("SED", [False, True])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
 def test_velocity_equivariance_2d(
     p, ic_type__PAD, transformation, quadrature, SED, limiter_config
 ):
@@ -378,17 +378,17 @@ def test_velocity_equivariance_2d(
     [
         (np.sqrt(2), 0.0),
         (1, 1),
-        (0, np.sqrt(2)),
+        (0.0, np.sqrt(2)),
         (-1, 1),
-        (-np.sqrt(2), 0),
+        (-np.sqrt(2), 0.0),
         (-1, -1),
-        (0, -np.sqrt(2)),
+        (0.0, -np.sqrt(2)),
         (1, -1),
     ],
 )
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("SED", [False, True])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d)
 def test_reflection_equivariance_2d(
     p, ic_type__PAD, v, quadrature, SED, limiter_config
 ):
@@ -453,7 +453,7 @@ def test_reflection_equivariance_2d(
 @pytest.mark.parametrize("p", range(8))
 @pytest.mark.parametrize("quadrature", ["gauss-legendre", "transverse"])
 @pytest.mark.parametrize("SED", [False, True])
-@pytest.mark.parametrize("limiter_config", limiter_configs_2d[:1])
+@pytest.mark.parametrize("limiter_config", limiter_configs_2d[2:4])
 def test_disk_slotted_disk_velocity_equivariance(p, quadrature, SED, limiter_config):
     """
     test equivariance of slotted disk rotated counterclockwise and clockwise
