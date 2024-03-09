@@ -1,5 +1,5 @@
 import numpy as np
-from finite_volume.utils import f_of_3_neighbors, f_of_4_neighbors, np_floor
+from finite_volume.utils import f_of_3_neighbors, f_of_5_neighbors, np_floor
 
 
 def mpp_limiter(
@@ -22,7 +22,7 @@ def mpp_limiter(
         f_of_neighbors = f_of_3_neighbors
         u_inner = u[1:-1]
     elif u.ndim == 2:
-        f_of_neighbors = f_of_4_neighbors
+        f_of_neighbors = f_of_5_neighbors
         u_inner = u[1:-1, 1:-1]
 
     if zeros:

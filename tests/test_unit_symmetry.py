@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from finite_volume.utils import batch_convolve2d
+from finite_volume.utils import convolve_batch2d
 from finite_volume.a_priori import mpp_limiter
 from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
 from finite_volume.a_posteriori import (
@@ -85,15 +85,15 @@ def rotate(x, n: int):
 
 
 @pytest.mark.parametrize("n_test", range(10))
-@pytest.mark.parametrize("arr_shape", [(100, 100), (14, 100, 100)])
-@pytest.mark.parametrize("kernel_shape", [(10, 10), (20, 10, 10)])
+@pytest.mark.parametrize("arr_shape", [(20, 20), (14, 20, 20)])
+@pytest.mark.parametrize("kernel_shape", [(10, 10), (2, 10, 10)])
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
-def test_batch_convolve2d_translation_equivariance(
+def test_convolve_batch2d_translation_equivariance(
     n_test, arr_shape, kernel_shape, a, b
 ):
     """
-    batch_convolve2d(a * arr + b, kernel) == a * batch_convolve2d(arr, kernel) + b
+    convolve_batch2d(a * arr + b, kernel) == a * convolve_batch2d(arr, kernel) + b
     """
     arr = np.random.rand(*arr_shape)
     kernel = np.random.rand(*kernel_shape)
@@ -103,7 +103,7 @@ def test_batch_convolve2d_translation_equivariance(
     elif kernel.ndim == 3:
         kernel /= np.sum(kernel, axis=(1, 2), keepdims=True)
     err = equivariant(
-        batch_convolve2d,
+        convolve_batch2d,
         lambda x: linear_transformation(x, a, b),
         fargs=dict(arr=arr),
         fargs_fixed=dict(kernel=kernel),
@@ -113,15 +113,15 @@ def test_batch_convolve2d_translation_equivariance(
 
 
 @pytest.mark.parametrize("n_test", range(10))
-@pytest.mark.parametrize("arr_shape", [(100, 100), (20, 100, 100)])
-@pytest.mark.parametrize("kernel_shape", [(1, 10), (10, 10), (20, 10, 10)])
+@pytest.mark.parametrize("arr_shape", [(20, 20), (14, 20, 20)])
+@pytest.mark.parametrize("kernel_shape", [(1, 10), (10, 10), (2, 10, 10)])
 @pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
-def test_batch_convolve2d_rotation_equivariance(
+def test_convolve_batch2d_rotation_equivariance(
     n_test, arr_shape, kernel_shape, n_rotations
 ):
     """
-    batch_convolve2d(rotate(arr), rotate(kernel))
-    == rotate(batch_convolve2d(arr, kernel))
+    convolve_batch2d(rotate(arr), rotate(kernel))
+    == rotate(convolve_batch2d(arr, kernel))
     """
     arr = np.random.rand(*arr_shape)
     kernel = np.random.rand(*kernel_shape)
@@ -132,7 +132,7 @@ def test_batch_convolve2d_rotation_equivariance(
     elif kernel.ndim == 3:
         kernel /= np.sum(kernel, axis=(1, 2), keepdims=True)
     err = equivariant(
-        batch_convolve2d,
+        convolve_batch2d,
         lambda x: rotate(x, n=n_rotations),
         fargs=dict(arr=arr, kernel=kernel),
         vnorm="l1",
@@ -270,6 +270,7 @@ def test_find_trouble_translation_invariance(n_test, shapes, NAD, PAD, SED, a, b
         action=lambda x: linear_transformation(x, a, b),
         fargs=dict(u=u, u_candidate=u_candidate, PAD=PAD),
         fargs_fixed=dict(NAD=NAD, SED=SED),
+        out_argnums=0,
         invariant=True,
         vnorm="linf",
     )
@@ -292,6 +293,7 @@ def test_find_trouble_rotation_equivariance(n_test, NAD, PAD, SED, n_rotations):
         action=lambda x: rotate(x, n=n_rotations),
         fargs=dict(u=u, u_candidate=u_candidate),
         fargs_fixed=dict(NAD=NAD, SED=SED, PAD=PAD),
+        out_argnums=0,
         vnorm="linf",
     )
     assert err == 0

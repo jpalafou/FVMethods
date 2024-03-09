@@ -118,7 +118,9 @@ def test_udot(
         PAD=PAD,
         save_directory=test_directory,
     )
-    solution.udot(solution.u_snapshots[0][1], t=solution.timestamps[0], dt=solution.dt)
+    solution.udot(
+        solution.snapshots[0]["u"], t=solution.snapshots[0]["t"], dt=solution.dt
+    )
 
 
 @pytest.mark.parametrize("n", n_list)
@@ -191,7 +193,7 @@ def test_mesh_convergence(order):
     ],
 )
 @pytest.mark.parametrize("modify_time_step", [True])
-@pytest.mark.parametrize("mpp_tolerance", [1e-10, 1e-12])
+@pytest.mark.parametrize("mpp_tolerance", [1e-12])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5, 6, 7, 8])
 @pytest.mark.parametrize("SED", [False, True])
 def test_a_priori_mpp_2d(
@@ -215,7 +217,7 @@ def test_a_priori_mpp_2d(
         save_directory=test_directory,
     )
     solution.rkorder()
-    assert solution.compute_violations()[1]["worst"] > -mpp_tolerance
+    assert solution.compute_mpp_violations()[1]["worst"] > -mpp_tolerance
 
 
 @pytest.mark.parametrize(
@@ -268,4 +270,4 @@ def test_MUSCL_mpp_2d(initial_condition_config, hancock):
         solution.euler()
     else:
         solution.ssprk2()
-    assert solution.compute_violations()[1]["worst"] >= -1e-10
+    assert solution.compute_mpp_violations()[1]["worst"] >= -1e-10

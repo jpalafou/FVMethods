@@ -1,58 +1,26 @@
 from itertools import product
-from numba import njit, prange, double
 import numpy as np
 
 
-def rk4_dt_adjust(n: int, spatial_order: int) -> float:
+def avoid_0(x: np.ndarray, eps: float, postive_at_0: bool = True) -> np.ndarray:
     """
     args:
-        n:              number of cells
-        spatial_order:  of accuracy
+        x               array
+        eps             tolerance
+        positive_at_0   whether to use positive eps where x is 0
     returns:
-        courant factor which makes rk4 have the same order of accuracy as spatial_order
+        x with near-zero elements rounded to +eps or -eps depending on sign
     """
-    return (1 / n) ** max((spatial_order - 4) / 4, 0)
+    if postive_at_0:
+        negative_eps = np.logical_and(x > -eps, x < 0.0)
+        positive_eps = np.logical_and(x >= 0.0, x < eps)
+    else:
+        negative_eps = np.logical_and(x > -eps, x <= 0.0)
+        positive_eps = np.logical_and(x > 0.0, x < eps)
+    return np.where(positive_eps, eps, np.where(negative_eps, -eps, x))
 
 
-def stack(u: np.ndarray, stacks: int, axis: int = 0):
-    """
-    args:
-        u       array of arbitrary shape
-        stacks  number of stacks to form
-        axis
-    returns:
-        array with a new first axis of length (stacks)
-        and (stacks - 1) reduced length along (axis + 1)
-    """
-    shape = list(u.shape)
-    shape[axis] -= stacks - 1
-    out = np.concatenate(
-        [
-            np.expand_dims(u.take(range(i, i + shape[axis]), axis=axis), axis=0)
-            for i in range(stacks)
-        ],
-        axis=0,
-    )
-    return out
-
-
-def apply_stencil(u: np.ndarray, stencil: np.ndarray, axis: int = 0):
-    """
-    args:
-        u       array of arbitrary shape
-        stencil 1d np array
-        axis
-    returns:
-        stensil weighted sum of neighbors
-        with (stensil.size - 1) reduced length along (axis)
-    """
-    new_stencil_shape = np.ones(u.ndim, dtype=int)
-    new_stencil_shape[axis] = -1
-    reshaped_stencil = stencil.reshape(new_stencil_shape)
-    return np.sum(u * reshaped_stencil, axis=axis) / np.sum(stencil)
-
-
-def chop(u, chop_size, axis):
+def chop(u: np.ndarray, chop_size: int, axis: int) -> np.ndarray:
     """
     symmetric chop of array edges about axis
     args:
@@ -67,7 +35,7 @@ def chop(u, chop_size, axis):
     return u[tuple(index)]
 
 
-def chopchop(u, chop_size, axis):
+def chopchop(u: np.ndarray, chop_size: tuple, axis: int):
     """
     asymmetric chop of array edges about axis
     args:
@@ -82,7 +50,67 @@ def chopchop(u, chop_size, axis):
     return u[tuple(index)]
 
 
-def f_of_3_neighbors(u: np.array, f):
+def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """
+    args:
+        arr     2D array
+        kernel  2D array
+    returns:
+        out     arr convolved with kernel, excluding boundaries
+    """
+    consumed_elements = kernel.shape[0] - 1, kernel.shape[1] - 1
+    stack_of_windows = []
+    for i in range(kernel.shape[0]):
+        for j in range(kernel.shape[1]):
+            row_slice = slice(i, i + arr.shape[0] - consumed_elements[0])
+            col_slice = slice(j, j + arr.shape[1] - consumed_elements[1])
+            stack_of_windows.append(arr[row_slice, col_slice])
+    out = np.sum(
+        np.asarray(stack_of_windows) * kernel.reshape(kernel.size, 1, 1), axis=0
+    )
+    return out
+
+
+def convolve_batch2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """
+    args:
+        arrs    (m, n) or (# of arrays, m, n)
+        kernel  (p, q) or (# of kernels, p, q)
+    returns:
+        out     (# of arrays, # of kernels, m - p + 1, n - q + 1)
+    """
+    arrs = arr
+    kernels = kernel
+    if arr.ndim == 2:
+        arrs = arrs[np.newaxis]
+    if kernel.ndim == 2:
+        kernels = kernels[np.newaxis]
+    n_arrs = arrs.shape[0]
+    n_kernels = kernels.shape[0]
+    n_rows = arrs.shape[1] - kernels.shape[1] + 1
+    n_cols = arrs.shape[2] - kernels.shape[2] + 1
+    out = np.empty((n_arrs, n_kernels, n_rows, n_cols))
+    for i, arr in enumerate(arrs):
+        for j, kernel in enumerate(kernels):
+            out[i, j] = convolve2d(arr, kernel)
+    return out
+
+
+def dict_combinations(key_values: dict) -> list:
+    """
+    args:
+        key_values  {key0: [val0, val1, ...], ...}
+    returns:
+        [{key0: val0, ...}, {key0: val1, ...}, ...]
+    """
+    value_combinations = list(product(*key_values.values()))
+    list_of_dicts = [
+        dict(zip(key_values.keys(), values)) for values in value_combinations
+    ]
+    return list_of_dicts
+
+
+def f_of_3_neighbors(u: np.array, f: callable) -> np.ndarray:
     """
     apply a function f (np.minimum or np.maximum) to each cell and it's 2 neighbors
     args:
@@ -98,25 +126,25 @@ def f_of_3_neighbors(u: np.array, f):
     return f.reduce(list_of_3_neighbors)
 
 
-def f_of_4_neighbors(u: np.array, f):
+def f_of_5_neighbors(u: np.array, f: callable) -> np.ndarray:
     """
-    apply a function f (np.minimum or np.maximum) to each cell and it's 8 neighbors
+    apply a function f (np.minimum or np.maximum) to each cell and it's 4 neighbors
     args:
         u   (m, n)
     returns:
         out (m - 2, n - 2)
     """
-    list_of_9_neighbors = [
+    list_of_5_neighbors = [
         u[..., 1:-1, 1:-1],
         u[..., :-2, 1:-1],
         u[..., 2:, 1:-1],
         u[..., 1:-1, :-2],
         u[..., 1:-1, 2:],
     ]
-    return f.reduce(list_of_9_neighbors)
+    return f.reduce(list_of_5_neighbors)
 
 
-def f_of_9_neighbors(u: np.array, f):
+def f_of_9_neighbors(u: np.array, f: callable) -> np.ndarray:
     """
     apply a function f (np.minimum or np.maximum) to each cell and it's 8 neighbors
     args:
@@ -138,80 +166,6 @@ def f_of_9_neighbors(u: np.array, f):
     return f.reduce(list_of_9_neighbors)
 
 
-def dict_combinations(key_values: dict) -> list:
-    """
-    args:
-        key_values  {key0: [val0, val1, ...], ...}
-    returns:
-        [{key0: val0, ...}, {key0: val1, ...}, ...]
-    """
-    value_combinations = list(product(*key_values.values()))
-    list_of_dicts = [
-        dict(zip(key_values.keys(), values)) for values in value_combinations
-    ]
-    return list_of_dicts
-
-
-@njit(parallel=True)
-def batch_convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
-    """
-    args:
-        arrs    (m, n) or (# of arrays, m, n)
-        kernel  (p, q) or (# of kernels, p, q)
-    returns:
-        out     (# of arrays, # of kernels, m - p + 1, n - q + 1)
-    """
-    # add extra first axis where necessary
-    arrs = arr[np.newaxis, ...] if arr.ndim == 2 else arr
-    kernels = kernel[np.newaxis, ...] if kernel.ndim == 2 else kernel
-
-    # get array shapes
-    n_arrays, arr_rows, arr_cols = arrs.shape
-    n_kernels, kern_rows, kern_cols = kernels.shape
-
-    # intialize empty array
-    out = np.empty(
-        (n_arrays, n_kernels, arr_rows - kern_rows + 1, arr_cols - kern_cols + 1),
-        dtype=double,
-    )
-
-    # perform n_arrays * n_kernels convolutions
-    for i in prange(n_arrays):
-        for j in prange(n_kernels):
-            out[i, j, ...] = convolve2d(arrs[i, ...], kernels[j, ...])
-
-    return out
-
-
-@njit
-def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
-    """
-    args:
-        arr     2D array
-        kernel  2D array
-    returns:
-        out     arr convolved with kernel, excluding boundaries
-    """
-    # get array shapes
-    arr_rows, arr_cols = arr.shape
-    kern_rows, kern_cols = kernel.shape
-
-    # initialize empty array
-    out = np.empty((arr_rows - kern_rows + 1, arr_cols - kern_cols + 1), dtype=double)
-    out_rows, out_cols = out.shape
-
-    # perform convolution
-    for i in range(out_rows):
-        for j in range(out_cols):
-            value = 0.0
-            for p in range(kern_rows):
-                for q in range(kern_cols):
-                    value += arr[i + p, j + q] * kernel[p, q]
-            out[i, j] = value
-
-    return out
-
-
 def np_floor(x: np.ndarray, floor: float) -> np.ndarray:
     """
     args:
@@ -223,53 +177,15 @@ def np_floor(x: np.ndarray, floor: float) -> np.ndarray:
     return np.where(x < floor, floor, x)
 
 
-def avoid_0(x: np.ndarray, eps: float, postive_at_0: bool = True) -> np.ndarray:
+def rk4_dt_adjust(n: int, spatial_order: int) -> float:
     """
     args:
-        x               array
-        eps             tolerance
-        positive_at_0   whether to use positive eps where x is 0
+        n:              number of cells
+        spatial_order:  of accuracy
     returns:
-        x with near-zero elements rounded to +eps or -eps depending on sign
+        courant factor which makes rk4 have the same order of accuracy as spatial_order
     """
-    if postive_at_0:
-        negative_eps = np.logical_and(x > -eps, x < 0.0)
-        positive_eps = np.logical_and(x >= 0.0, x < eps)
-    else:
-        negative_eps = np.logical_and(x > -eps, x <= 0.0)
-        positive_eps = np.logical_and(x > 0.0, x < eps)
-    return np.where(positive_eps, eps, np.where(negative_eps, -eps, x))
-
-
-@njit
-def apply_f_over_neighbors(x: np.ndarray, f: callable, neighbors: int) -> np.ndarray:
-    """
-    args:
-        x           (m + 1, n + 1) array
-        f           function of kernel (np.min, np.max, etc)
-        neighbors   3 (1D), 4 (2D), 9 (2D)
-    returns:
-        out         (m, n) array with f applied to cells and their neighbors
-    """
-    if neighbors == 3:
-        out = np.empty(x.shape[0] - 2)
-        n_elements = out.shape[0]
-
-        for i in range(n_elements):
-            out[i] = f(f(x[i], x[i + 1]), x[i + 2])
-
-    elif neighbors == 4 or neighbors == 9:
-        out = np.empty(x.shape[0] - 2, x.shape[1] - 2)
-        n_rows, n_cols = out.shape
-
-        for i in range(n_rows):
-            for j in range(n_cols):
-                row1 = f(f(x[i, j], x[i, j + 1]), x[i, j + 2])
-                row2 = f(f(x[i + 1, j], x[i + 1, j + 1]), x[i + 1, j + 2])
-                row3 = f(f(x[i + 2, j], x[i + 2, j + 1]), x[i + 2, j + 2])
-                out[i, j] = f(f(row1, row2), row3)
-
-    return out
+    return (1 / n) ** max((spatial_order - 4) / 4, 0)
 
 
 def transpose_in_other_direction(x: np.ndarray) -> np.ndarray:

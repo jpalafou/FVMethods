@@ -23,7 +23,7 @@ from finite_volume.a_posteriori import (
 )
 from finite_volume.utils import (
     rk4_dt_adjust,
-    batch_convolve2d,
+    convolve_batch2d,
 )
 from finite_volume.riemann import upwinding
 
@@ -103,7 +103,7 @@ class AdvectionSolver(Integrator):
         fallback_to_first_order: bool = False,
         cause_trouble: bool = False,
         SED: bool = False,
-        NAD: float = 1e-10,
+        NAD: float = 1e-5,
         PAD: tuple = (0, 1),
         visualization_tolerance: float = None,
         adjust_time_step: bool = False,
@@ -236,10 +236,12 @@ class AdvectionSolver(Integrator):
         # initialize simulation/visualized theta and trouble
         self.ones_i = np.ones_like(u0, dtype="int")
         self.ones_f = np.ones_like(u0, dtype="double")
-        self.theta = self.ones_f
-        self.visualized_theta = self.ones_f
+        self.theta = 0.0 * self.ones_f
         self.trouble = 0 * self.ones_i
-        self.visualized_trouble = 0 * self.ones_i
+        self.theta_M_denominator = 0.0 * self.ones_f
+        self.theta_m_denominator = 0.0 * self.ones_f
+        self.NAD_upper = 0 * self.ones_f
+        self.NAD_lower = 0 * self.ones_f
 
         # initialize timeseries lists
         self.u0_min = np.min(u0)
@@ -249,14 +251,20 @@ class AdvectionSolver(Integrator):
         self.max_history = [self.u0_max]
 
         # initialize snapshots
-        self.u_snapshots = [(t0, u0)]
-        self.theta_snapshots = [(t0, self.theta)]
-        self.visualized_theta_snapshots = [(t0, self.visualized_theta)]
-        self.trouble_snapshots = [(t0, self.trouble)]
-        self.visualized_trouble_snapshots = [(t0, self.visualized_trouble)]
+        self.snapshots = [
+            {
+                "t": t0,
+                "u": u0,
+                "theta": self.theta + 1.0,
+                "trouble": self.trouble.copy(),
+                "abs(M_ij - u)": self.theta_M_denominator.copy(),
+                "abs(m_ij - u)": self.theta_m_denominator.copy(),
+                "unew - M": self.NAD_upper.copy(),
+                "m - unew": self.NAD_lower.copy(),
+            }
+        ]
 
         # initialize integrator
-        self.timestamps = [t0]
         super().__init__(
             u0=u0,
             dt=dt,
@@ -548,36 +556,52 @@ class AdvectionSolver(Integrator):
             self.a  (nx + 1,)
         """
         # interpolate points from line averages
-        points = batch_convolve2d(
+        points = convolve_batch2d(
             arr=self.apply_bc(u, gw=self.conservative_width + 1).reshape(1, -1),
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
         )
         points = points[0, :, 0, :]  # (# of interpolated points, # cells x
-        # slope limiting
-        mpp_limiting_points = points
-        if self.mpp_lite:
-            midpoints = self.compute_cell_center(u)
-            mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
-        theta, M_i, m_i = mpp_limiter(
-            u=self.apply_bc(u, gw=2),
-            points=mpp_limiting_points,
-            ones=not self.apriori_limiting,
-            zeros=self.cause_trouble,
-        )
-        # PAD
-        PAD = np.logical_or(
-            m_i < self.approximated_maximum_principle[0],
-            M_i > self.approximated_maximum_principle[1],
-        )
-        # smooth extrema detection
-        alpha = self.compute_alpha(self.apply_bc(u, gw=4), zeros=not self.SED)
-        not_smooth_extrema = alpha < 1
-        # PAD then SED
-        theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
-        self.theta = theta
+        fallback = self.apply_bc(u, gw=1)
+
+        # initialize trivial theta and related terms
+        theta = np.ones_like(fallback)
+        M_i = fallback
+        m_i = fallback
+
+        # a priori limiting
+        if self.apriori_limiting:
+            mpp_limiting_points = points
+            if self.mpp_lite:
+                midpoints = self.compute_cell_center(u)
+                mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
+            theta, M_i, m_i = mpp_limiter(
+                u=self.apply_bc(u, gw=2),
+                points=mpp_limiting_points,
+                ones=not self.apriori_limiting,
+                zeros=self.cause_trouble,
+            )
+
+            # PAD
+            PAD = np.logical_or(
+                m_i < self.approximated_maximum_principle[0],
+                M_i > self.approximated_maximum_principle[1],
+            )
+
+            # smooth extrema detection
+            alpha = self.compute_alpha(self.apply_bc(u, gw=4), zeros=not self.SED)
+            not_smooth_extrema = alpha < 1
+
+            # revise theta with PAD then SED
+            theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
+
+        # log theta and related terms for snapshot
+        self.theta += theta[1:-1]
+        self.theta_M_denominator += np.abs(M_i[1:-1] - u)
+        self.theta_m_denominator += np.abs(m_i[1:-1] - u)
+
         # limit slopes
-        first_order_fallback = self.apply_bc(u, gw=1)
-        points = theta * (points - first_order_fallback) + first_order_fallback
+        points = theta * (points - fallback) + fallback
+
         # riemann problem
         right_points = points[-1, :-1]
         left_points = points[0, 1:]
@@ -594,58 +618,70 @@ class AdvectionSolver(Integrator):
             self.b  (ny + 1, nx)
         """
         # interpolate line averages from cell averages
-        horizontal_lines = batch_convolve2d(
+        horizontal_lines = convolve_batch2d(
             arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, -1, 1),
         )
-        vertical_lines = batch_convolve2d(
+        vertical_lines = convolve_batch2d(
             arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, 1, -1),
         )
+
         # interpolate points from line averages
-        horizontal_points = batch_convolve2d(
+        horizontal_points = convolve_batch2d(
             arr=horizontal_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
         )
-        vertical_points = batch_convolve2d(
+        vertical_points = convolve_batch2d(
             arr=vertical_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, -1, 1),
         )
-        # slope limiting
-        h_shp = horizontal_points.shape
-        hps = horizontal_points.reshape(h_shp[0] * h_shp[1], h_shp[2], h_shp[3])
-        v_shp = vertical_points.shape
-        vps = vertical_points.reshape(v_shp[0] * v_shp[1], v_shp[2], v_shp[3])
-        mpp_limiting_points = np.concatenate((hps, vps))
-        if self.mpp_lite:
-            midpoints = self.compute_cell_center(u)
-            mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
-        theta, M_ij, m_ij = mpp_limiter(
-            u=self.apply_bc(u, gw=self.riemann_gw + 1),
-            points=mpp_limiting_points,
-            ones=not self.apriori_limiting,
-            zeros=self.cause_trouble,
-        )
-        # PAD
-        PAD = np.logical_or(
-            m_ij < self.approximated_maximum_principle[0],
-            M_ij > self.approximated_maximum_principle[1],
-        )
-        # smooth extrema detection
-        alpha = self.compute_alpha(
-            self.apply_bc(u, gw=self.riemann_gw + 3), zeros=not self.SED
-        )
-        not_smooth_extrema = alpha < 1
-        # PAD then SED
-        theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
-        # limit slopes
         fallback = self.apply_bc(u, gw=self.riemann_gw)
+
+        # initialize trivial theta and related terms
+        theta = np.ones_like(fallback)
+        M_ij = fallback
+        m_ij = fallback
+
+        # a priori slope limiting
+        if self.apriori_limiting:
+            h_shp = horizontal_points.shape
+            hps = horizontal_points.reshape(h_shp[0] * h_shp[1], h_shp[2], h_shp[3])
+            v_shp = vertical_points.shape
+            vps = vertical_points.reshape(v_shp[0] * v_shp[1], v_shp[2], v_shp[3])
+            mpp_limiting_points = np.concatenate((hps, vps))
+            if self.mpp_lite:
+                midpoints = self.compute_cell_center(u)
+                mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
+            theta, M_ij, m_ij = mpp_limiter(
+                u=self.apply_bc(u, gw=self.riemann_gw + 1),
+                points=mpp_limiting_points,
+                zeros=self.cause_trouble,
+            )
+
+            # PAD
+            PAD = np.logical_or(
+                m_ij < self.approximated_maximum_principle[0],
+                M_ij > self.approximated_maximum_principle[1],
+            )
+
+            # smooth extrema detection
+            alpha = self.compute_alpha(
+                self.apply_bc(u, gw=self.riemann_gw + 3), zeros=not self.SED
+            )
+            not_smooth_extrema = alpha < 1
+
+            # revise theta with PAD then SED
+            theta = np.where(PAD, theta, np.where(not_smooth_extrema, theta, 1.0))
+
+        # limit slopes
         horizontal_points = theta * (horizontal_points - fallback) + fallback
         vertical_points = theta * (vertical_points - fallback) + fallback
+
         # remove excess due to uniform ghost zone
         trans_slice = slice(
             self.excess_transverse_gw or None, -self.excess_transverse_gw or None
@@ -653,10 +689,19 @@ class AdvectionSolver(Integrator):
         riemann_slice = slice(
             self.excess_riemann_gw or None, -self.excess_riemann_gw or None
         )
-        self.theta += theta[riemann_slice, riemann_slice][1:-1, 1:-1]
         horizontal_points = horizontal_points[:, :, trans_slice, riemann_slice]
         vertical_points = vertical_points[:, :, riemann_slice, trans_slice]
 
+        # log theta and related terms for snapshot
+        self.theta += theta[riemann_slice, riemann_slice][1:-1, 1:-1]
+        self.theta_M_denominator += np.abs(
+            M_ij[riemann_slice, riemann_slice][1:-1, 1:-1] - u
+        )
+        self.theta_m_denominator += np.abs(
+            m_ij[riemann_slice, riemann_slice][1:-1, 1:-1] - u
+        )
+
+        # riemann solver
         ns_pointwise_fluxes = self.riemann_solver(
             v=self.b,
             left_value=vertical_points[:, -1, :-1, :],  # north points
@@ -667,6 +712,7 @@ class AdvectionSolver(Integrator):
             left_value=horizontal_points[:, -1, :, :-1],  # east points
             right_value=horizontal_points[:, 0, :, 1:],  # west points
         )
+
         # integrate fluxes with gauss-legendre quadrature
         self.f[...] = self.integrate_fluxes(ew_pointwise_fluxes, axis=0)
         self.g[...] = self.integrate_fluxes(ns_pointwise_fluxes, axis=1)
@@ -679,19 +725,19 @@ class AdvectionSolver(Integrator):
             out     cell midpoints  (m,) or (m, n)
         """
         if self.ndim == 1:
-            midpoints = batch_convolve2d(
+            midpoints = convolve_batch2d(
                 arr=self.apply_bc(u, gw=self.conservative_width + 1)[np.newaxis],
                 kernel=self.cell_center_stencil.reshape(1, -1),
             )
             return midpoints[0, 0, ...]
         elif self.ndim == 2:
-            horizontal_lines = batch_convolve2d(
+            horizontal_lines = convolve_batch2d(
                 arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
                     np.newaxis
                 ],
                 kernel=self.cell_center_stencil.reshape(1, -1, 1),
             )
-            midpoints = batch_convolve2d(
+            midpoints = convolve_batch2d(
                 arr=horizontal_lines[0],
                 kernel=self.cell_center_stencil.reshape(1, 1, -1),
             )
@@ -706,7 +752,7 @@ class AdvectionSolver(Integrator):
             trouble     boolean array           (m,) or (m, n)
         """
         unew = u + dt * self.get_dynamics()
-        trouble = find_trouble(
+        trouble, M, m = find_trouble(
             u=self.apply_bc(u, gw=1),
             u_candidate=self.apply_bc(unew, gw=3),
             NAD=self.NAD,
@@ -714,6 +760,10 @@ class AdvectionSolver(Integrator):
             SED=self.SED,
             ones=self.cause_trouble,
         )
+        # log troubled cells and related terms for snapshot
+        self.trouble += trouble
+        self.NAD_upper += unew - M
+        self.NAD_lower += m - unew
         return trouble
 
     def revise_fluxes_1d(self, u: np.ndarray, dt: float):
@@ -802,7 +852,6 @@ class AdvectionSolver(Integrator):
         )
         # find troubled cells
         trouble = self.find_trouble(u, dt)
-        self.trouble += trouble
         # overwrite fluxes
         if not self.convex:
             (
@@ -842,7 +891,7 @@ class AdvectionSolver(Integrator):
         """
         kernel_shape = [1, 1, 1]
         kernel_shape[axis + 1] = len(self.transverse_stencil)
-        return batch_convolve2d(
+        return convolve_batch2d(
             arr=pointwise_fluxes, kernel=self.transverse_stencil.reshape(kernel_shape)
         )
 
@@ -872,8 +921,8 @@ class AdvectionSolver(Integrator):
         returns:
             norm specified error    (ny, nx)
         """
-        approx = self.u_snapshots[-1][1]
-        truth = self.u_snapshots[0][1]
+        approx = self.snapshots[-1]["u"]
+        truth = self.snapshots[0]["u"]
         if norm == "l1":
             return np.sum(np.abs(approx - truth) * self.hx * self.hy)
         if norm == "l2":
@@ -893,20 +942,17 @@ class AdvectionSolver(Integrator):
         self.max_history.append(np.max(self.u0))
 
     def snapshot(self):
-        snap_time = self.t0
-        self.timestamps.append(snap_time)
-        self.u_snapshots.append((snap_time, self.u0))
-        self.theta_snapshots.append(
-            (snap_time, self.theta / self.udot_evaluation_count)
-        )
-        self.visualized_theta_snapshots.append(
-            (snap_time, self.visualized_theta / self.udot_evaluation_count)
-        )
-        self.trouble_snapshots.append(
-            (snap_time, self.trouble / self.udot_evaluation_count)
-        )
-        self.visualized_trouble_snapshots.append(
-            (snap_time, self.visualized_trouble / self.udot_evaluation_count)
+        self.snapshots.append(
+            {
+                "t": self.t0,
+                "u": self.u0,
+                "theta": self.theta / self.udot_evaluation_count,
+                "trouble": self.trouble / self.udot_evaluation_count,
+                "abs(M_ij - u)": self.theta_M_denominator / self.udot_evaluation_count,
+                "abs(m_ij - u)": self.theta_m_denominator / self.udot_evaluation_count,
+                "unew - M": self.NAD_upper / self.udot_evaluation_count,
+                "m - unew": self.NAD_lower / self.udot_evaluation_count,
+            }
         )
 
     def step_cleanup(self):
@@ -916,9 +962,11 @@ class AdvectionSolver(Integrator):
         """
         # clear theta sum, troubled cell sum, and evaluation count
         self.theta[...] = 0.0
-        self.visualized_theta[...] = 0
         self.trouble[...] = 0
-        self.visualized_trouble[...] = 0
+        self.theta_M_denominator[...] = 0.0
+        self.theta_m_denominator[...] = 0.0
+        self.NAD_upper[...] = 0.0
+        self.NAD_lower[...] = 0.0
         self.udot_evaluation_count = 0
         self.append_to_timeseries_lists()
 
@@ -973,31 +1021,26 @@ class AdvectionSolver(Integrator):
         self.abs_max = np.max(max_history)
         self.write_to_file()
 
-    def minmax(self):
-        headers = [
-            "abs min/max",
-            "mean min/max",
-            "std min/max",
-        ]
-        values1 = [
-            self.abs_min,
-            self.mean_min,
-            self.std_min,
-        ]
-        values2 = [
-            self.abs_max,
-            self.mean_max,
-            self.std_max,
-        ]
-        print("---------------------------------")
-        print("{:>14}{:>14}     {:>11}".format(*headers))
-        print("{:14.5e}{:14.5e} +/- {:11.5e}".format(*values1))
-        print("{:14.5e}{:14.5e} +/- {:11.5e}".format(*values2))
-        print()
-        print("{:>10}{:10.5f}".format("time (s):", self.solution_time))
-        print()
+    def report_mpp_violations(self):
+        _, stats = self.compute_mpp_violations()
 
-    def compute_violations(self) -> Tuple[np.ndarray, Dict]:
+        headers = [
+            "",
+            "worst",
+            "frequency",
+            "mean",
+        ]
+
+        upper_values = ["upper", stats["worst upper"], stats["upper frequency"], ""]
+        lower_values = ["lower", stats["worst lower"], stats["lower frequency"], ""]
+        total_values = ["total", stats["worst"], stats["frequency"], stats["mean"]]
+
+        print("\n{:>14}{:>14}{:>14}{:>14}".format(*headers))
+        print("{:>14}{:14.5e}{:14.5e}{:>14}".format(*upper_values))
+        print("{:>14}{:14.5e}{:14.5e}{:>14}".format(*lower_values))
+        print("{:>14}{:14.5e}{:14.5e}{:14.5e}\n".format(*total_values))
+
+    def compute_mpp_violations(self) -> Tuple[np.ndarray, Dict]:
         mins = np.array(self.min_history)
         maxs = np.array(self.max_history)
         lower_bound_violations = mins - self.PAD[0]
@@ -1006,15 +1049,17 @@ class AdvectionSolver(Integrator):
         # negative values indicate violation
         stats = {}
         stats["worst"] = np.min(violations)
+        stats["worst upper"] = np.min(upper_bound_violations)
+        stats["worst lower"] = np.min(lower_bound_violations)
         stats["mean"] = np.mean(violations)
         stats["standard deviation"] = np.std(violations)
-        stats["lower bound violation frequency"] = np.sum(
+        stats["lower frequency"] = np.sum(
             np.where(lower_bound_violations < 0, 1, 0)
         ) / (self.step_count + 1)
-        stats["upper bound violation frequency"] = np.sum(
+        stats["upper frequency"] = np.sum(
             np.where(upper_bound_violations < 0, 1, 0)
         ) / (self.step_count + 1)
-        stats["violation frequency"] = np.sum(np.where(violations < 0, 1, 0)) / (
+        stats["frequency"] = np.sum(np.where(violations < 0, 1, 0)) / (
             self.step_count + 1
         )
         return violations, stats

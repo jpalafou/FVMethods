@@ -256,12 +256,12 @@ class Integrator:
         """
 
         def step(u0, t0, dt):
-            k1 = self.udot(u=u0, t=t0, dt=dt)
+            k1 = self.udot(u=u0, t=t0, dt=(1 / 2) * dt)
             k2 = self.udot(
                 u=u0 + (1 / 2) * dt * k1, t=t0 + (1 / 2) * dt, dt=(1 / 2) * dt
             )
             k3 = self.udot(u=u0 + (1 / 2) * dt * k2, t=t0 + (1 / 2) * dt, dt=dt)
-            k4 = self.udot(u=u0 + dt * k3, t=t0 + dt, dt=(1 / 6) * dt)
+            k4 = self.udot(u=u0 + dt * k3, t=t0 + dt, dt=dt)
             u1 = u0 + (1 / 6) * dt * (k1 + 2 * k2 + 2 * k3 + k4)
             return u1
 

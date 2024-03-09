@@ -10,11 +10,12 @@ eggs/
 
 # Ignore these also
 .DS_Store
-*/__pycache__/
+**/__pycache__/
 .pytest_cache/
-*.py[cod]
+**.py[cod]
 *$py.class
 .vscode/
 **/*.out
 **/*.slurm
 **/*.log
+**/.ipynb_checkpoints/

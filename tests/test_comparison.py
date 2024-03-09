@@ -68,7 +68,7 @@ def test_initial_condition(n):
         apriori_lite=False,
         smooth_extrema_detection=False,
     )
-    assert np.all(romain_solution[0] == my_solution.u_snapshots[0][1])
+    assert np.all(romain_solution[0] == my_solution.snapshots[0]["u"])
 
 
 @pytest.mark.parametrize("n", [128, 256, 512])
@@ -98,7 +98,7 @@ def test_solutions(order, limiting, smooth_extrema_detection):
         apriori_lite=limiting,
         smooth_extrema_detection=smooth_extrema_detection,
     )
-    max_err = np.max(np.abs(romain_solution[-1] - my_solution.u_snapshots[-1][1]))
+    max_err = np.max(np.abs(romain_solution[-1] - my_solution.snapshots[-1]["u"]))
     assert max_err < 1e-10
 
 
@@ -145,5 +145,5 @@ def test_MUSCLHancock():
     )
     solution.euler()
 
-    max_err = np.max(np.abs(solution.u_snapshots[-1][1] - romain[-1]))
+    max_err = np.max(np.abs(solution.snapshots[-1]["u"] - romain[-1]))
     assert max_err < 1e-10

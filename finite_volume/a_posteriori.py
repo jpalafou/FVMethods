@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Tuple
 from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
-from finite_volume.utils import f_of_3_neighbors, f_of_4_neighbors
+from finite_volume.utils import f_of_3_neighbors, f_of_5_neighbors
 
 
 def find_trouble(
@@ -23,6 +23,8 @@ def find_trouble(
         ones            return all trouble
     overwrites:
         trouble         boolean array                       (m,) or (m, n)
+        M               maximum of neighbor                 (m,) or (m, n)
+        m               minimum of neighbors                (m,) or (m, n)
     """
     # setup
     if u.ndim == 1:
@@ -30,16 +32,16 @@ def find_trouble(
         compute_alpha = compute_alpha_1d
         u_candidate_inner = u_candidate[3:-3]
     elif u.ndim == 2:
-        f_of_neighbors = f_of_4_neighbors
+        f_of_neighbors = f_of_5_neighbors
         compute_alpha = compute_alpha_2d
         u_candidate_inner = u_candidate[3:-3, 3:-3]
-
-    if ones:
-        return np.ones_like(u_candidate_inner, dtype=np.intc)
 
     # max and min of immediate neighbors
     M = f_of_neighbors(u, f=np.maximum)
     m = f_of_neighbors(u, f=np.minimum)
+
+    if ones:
+        return np.ones_like(u_candidate_inner, dtype=np.intc), M, m
 
     # NAD
     u_range = np.max(u) - np.min(u)
@@ -59,7 +61,7 @@ def find_trouble(
     not_smooth_extrema = alpha < 1
     trouble = np.where(PAD_trouble, 1, np.where(not_smooth_extrema, NAD_trouble, 0))
 
-    return trouble
+    return trouble, M, m
 
 
 def minmod(du_left: np.ndarray, du_right: np.ndarray) -> np.ndarray:
