@@ -16,20 +16,20 @@ def find_trouble(
     PAD: Tuple[float, float],
     SED: bool = False,
     ones: bool = None,
-):
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     args:
-        u               current cell averages with padding  (m + 2,) or (m + 2, n + 2)
-        u_candidate     candidate values with padding       (m + 6,) or (m + 6, n + 6)
-        NAD             numerical admissibility detection
-        PAD             physical admissibility detection
+        u:              current cell averages with padding  (m + 2,) or (m + 2, n + 2)
+        u_candidate:    candidate values with padding       (m + 6,) or (m + 6, n + 6)
+        NAD:            numerical admissibility detection
+        PAD:            physical admissibility detection
                         (lower, upper)
-        SED             whether to use SED
-        ones            return all trouble
+        SED:            whether to use SED
+        ones:           return all trouble
     overwrites:
-        trouble         boolean array                       (m,) or (m, n)
-        M               maximum of neighbor                 (m,) or (m, n)
-        m               minimum of neighbors                (m,) or (m, n)
+        trouble:        boolean array                       (m,) or (m, n)
+        M:              maximum of neighbor                 (m,) or (m, n)
+        m:              minimum of neighbors                (m,) or (m, n)
     """
     # setup
     if u.ndim == 1:
@@ -72,8 +72,8 @@ def find_trouble(
 def minmod(du_left: np.ndarray, du_right: np.ndarray) -> np.ndarray:
     """
     args:
-        du_left     left difference
-        du_right    right difference
+        du_left:    left difference
+        du_right:   right difference
     returns:
         minmod limited difference
     """
@@ -89,8 +89,8 @@ def minmod(du_left: np.ndarray, du_right: np.ndarray) -> np.ndarray:
 def moncen(du_left: np.ndarray, du_right: np.ndarray) -> np.ndarray:
     """
     args:
-        du_left     left difference
-        du_right    right difference
+        du_left:    left difference
+        du_right:   right difference
     returns:
         moncen limited difference
     """
@@ -105,11 +105,11 @@ def PAD_fallback(
 ) -> np.ndarray:
     """
     args:
-        x           any shape
-        fallback    same shape as x
-        PAD         (lower, upper)
+        x:          any shape
+        fallback:   same shape as x
+        PAD:        (lower, upper)
     return:
-        out         x where elements not bounded by PAD are replaced with fallback
+        out:        x where elements not bounded by PAD are replaced with fallback
     """
     PAD_violation = np.logical_or(x < min(PAD), x > max(PAD))
     return np.where(PAD_violation, fallback, x)
@@ -127,18 +127,18 @@ def compute_MUSCL_interpolations_1d(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     args:
-        u                       cell volme averages with padding    (m + 2,)
-        slope_limiter           f(du_left, du_right)
-        fallback_to_1st_order   whether to fall back to 1st order
+        u:                      cell volme averages with padding    (m + 2,)
+        slope_limiter:          f(du_left, du_right)
+        fallback_to_1st_order:  whether to fall back to 1st order
                                 in the presence of a PAD violation
-        PAD                     (lower, upper)
-        hancock                 whether to include redictor step
-        dt                      time step size
-        h                       mesh size
-        v_cell_centers          velocity at cell centers            (m,)
+        PAD:                    (lower, upper)
+        hancock:                whether to include redictor step
+        dt:                     time step size
+        h:                      mesh size
+        v_cell_centers:         velocity at cell centers            (m,)
     overwrites:
-        left_face               left interpolated face value        (m,)
-        right_face              right interpolated face value       (m,)
+        left_face:              left interpolated face value        (m,)
+        right_face:             right interpolated face value       (m,)
     """
     # compute second order slopes
     cell_centers = np.copy(u[1:-1])
@@ -173,26 +173,26 @@ def compute_MUSCL_interpolations_2d(
 ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
     """
     args:
-        u                       cell volme averages with padding    (m + 2, n + 2)
-        slope_limiter           f(du_left, du_right)
-        fallback_to_1st_order   whether to fall back to 1st order
+        u:                      cell volme averages with padding    (m + 2, n + 2)
+        slope_limiter:          f(du_left, du_right)
+        fallback_to_1st_order:  whether to fall back to 1st order
                                 in the presence of a PAD violation
-        PAD                     (lower, upper)
-        hancock                 whether to include redictor step
-        dt                      time step size
-        h                       mesh sizes
+        PAD:                    (lower, upper)
+        hancock:                whether to include redictor step
+        dt:                     time step size
+        h:                      mesh sizes
             h_x
             h_y
-        v_cell_centers          velocity at cell centers
+        v_cell_centers:         velocity at cell centers
             v_x                                                     (m, n)
             v_y                                                     ...
     overwrites:
         x faces
-            west_face           left interpolated face value        (m, n)
-            east_face           right interpolated face value       ...
+            west_face:          left interpolated face value        (m, n)
+            east_face:          right interpolated face value       ...
         y faces
-            south_face          bottom interpolated face value      ...
-            north_face          top interpolated face value         ...
+            south_face:         bottom interpolated face value      ...
+            north_face:         top interpolated face value         ...
     """
     # compute second order slopes
     cell_centers = np.copy(u[1:-1, 1:-1])
@@ -229,22 +229,22 @@ def compute_PP2D_interpolations(
 ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
     """
     args:
-        u                       cell volme averages with padding    (m + 2, n + 2)
-        hancock                 whether to include redictor step
-        dt                      time step size
-        h                       mesh sizes
+        u:                      cell volme averages with padding    (m + 2, n + 2)
+        hancock:                whether to include redictor step
+        dt:                     time step size
+        h:                      mesh sizes
             h_x
             h_y
-        v_cell_centers          velocity at cell centers
+        v_cell_centers:         velocity at cell centers
             v_x                                                     (m, n)
             v_y                                                     ...
     overwrites:
         x faces
-            west_face           left interpolated face value        (m, n)
-            east_face           right interpolated face value       ...
+            west_face:          left interpolated face value        (m, n)
+            east_face:          right interpolated face value       ...
         y faces
-            south_face          bottom interpolated face value      ...
-            north_face          top interpolated face value         ...
+            south_face:         bottom interpolated face value      ...
+            north_face:         top interpolated face value         ...
     """
     # second order slopes
     Sx = 0.5 * (u[1:-1, 2:] - u[1:-1, :-2])
@@ -289,9 +289,9 @@ def compute_PP2D_interpolations(
 def broadcast_troubled_cells_to_faces_1d(trouble: np.ndarray) -> np.ndarray:
     """
     args:
-        trouble             cellwise trouble boolean    (m,)
+        trouble:                cellwise trouble boolean    (m,)
     returns:
-        troubled_interface  facewise trouble boolean    (m + 1,)
+        troubled_interface:     facewise trouble boolean    (m + 1,)
     """
     troubled_interface = np.zeros(trouble.shape[0] + 1, dtype=np.intc)
     troubled_interface[:-1] = trouble
@@ -304,9 +304,9 @@ def broadcast_troubled_cells_to_faces_with_blending_1d(
 ) -> np.ndarray:
     """
     args:
-        trouble                     cellwise trouble boolean with padding   (m + 4,)
+        trouble:                    cellwise trouble boolean with padding   (m + 4,)
     returns:
-        troubled_interface_mask     facewise trouble mask                   (m + 1,)
+        troubled_interface_mask:    facewise trouble mask                   (m + 1,)
     """
     # initialize theta
     troubled_interface_mask = np.zeros(trouble.shape[0] - 3, dtype=np.double)
@@ -330,10 +330,10 @@ def broadcast_troubled_cells_to_faces_2d(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     args:
-        trouble                 trouble cellwise trouble boolean    (m, n)
+        trouble:                trouble cellwise trouble boolean    (m, n)
     returns:
-        troubled_interface_x    facewise trouble boolean            (m, n + 1)
-        troubled_interface_y    facewise trouble boolean            (m + 1, n)
+        troubled_interface_x:   facewise trouble boolean            (m, n + 1)
+        troubled_interface_y:   facewise trouble boolean            (m + 1, n)
     """
     # flag faces of troubled cells as troubled
     troubled_interface_x = np.zeros(
@@ -354,11 +354,11 @@ def broadcast_troubled_cells_to_faces_with_blending_2d(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     args:
-        trouble                 trouble cellwise trouble boolean    (m + 4, n + 4)
+        trouble:                trouble cellwise trouble boolean    (m + 4, n + 4)
                                 with padding
     returns:
-        interface_trouble_mask_x    facewise trouble mask           (m, n + 1)
-        interface_trouble_mask_y    facewise trouble mask           (m + 1, n)
+        interface_trouble_mask_x:   facewise trouble mask           (m, n + 1)
+        interface_trouble_mask_y:   facewise trouble mask           (m + 1, n)
     """
     # initialize theta
     interface_trouble_mask_x = np.zeros(

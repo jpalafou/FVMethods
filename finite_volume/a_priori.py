@@ -3,22 +3,22 @@ defines functions for computing the a priori slope limiting parameter, theta
 """
 
 import numpy as np
+from typing import Tuple
 from finite_volume.utils import f_of_3_neighbors, f_of_5_neighbors, np_floor
 
 
 def mpp_limiter(
-    u: np.ndarray, points: np.ndarray, zeros: bool = False, ones: bool = False
-):
+    u: np.ndarray, points: np.ndarray, zeros: bool = False
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     args:
-        u       cell volume averages with padding       (m + 2,) or (m + 2, n + 2)
-        points  u interpolated at quadrature points     (p, m) or (p, q, m, n)
-        zeros   whether to return all 0s
-        ones   whether to return all 1s
+        u:          cell volume averages with padding       (m + 2,) or (m + 2, n + 2)
+        points:     u interpolated at quadrature points     (p, m) or (p, q, m, n)
+        zeros:      whether to return all 0s
     returns:
-        theta   slope limiting factor                   (m,) or (m, n)
-        M_ij    cellwise maximum interpolation          (m,) or (m, n)
-        m_ij    cellwise minimum interpolation          (m,) or (m, n)
+        theta:      slope limiting factor                   (m,) or (m, n)
+        M_ij:       cellwise maximum interpolation          (m,) or (m, n)
+        m_ij:       cellwise minimum interpolation          (m,) or (m, n)
     """
 
     # setup
@@ -31,8 +31,6 @@ def mpp_limiter(
 
     if zeros:
         return np.zeros_like(u_inner), np.nan, np.nan
-    if ones:
-        return np.ones_like(u_inner), np.nan, np.nan
 
     # max and min of immediate neighbors
     M = f_of_neighbors(u, f=np.maximum)

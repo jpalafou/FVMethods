@@ -9,9 +9,9 @@ import numpy as np
 def avoid_0(x: np.ndarray, eps: float, postive_at_0: bool = True) -> np.ndarray:
     """
     args:
-        x               array
-        eps             tolerance
-        positive_at_0   whether to use positive eps where x is 0
+        x:              array
+        eps:            tolerance
+        positive_at_0:  whether to use positive eps where x is 0
     returns:
         x with near-zero elements rounded to +eps or -eps depending on sign
     """
@@ -28,11 +28,11 @@ def chop(u: np.ndarray, chop_size: int, axis: int) -> np.ndarray:
     """
     symmetric chop of array edges about axis
     args:
-        u           np array of arbitrary dimension
-        chop_size   int
-        axis        int or list of axes
+        u:          np array of arbitrary dimension
+        chop_size:  int
+        axis:       int or list of axes
     returns:
-        u           symmetrically cut at the ends along axis by cut_length
+        u:          symmetrically cut at the ends along axis by cut_length
     """
     index = np.array([slice(None)] * u.ndim)
     index[axis] = slice(chop_size, -chop_size or None)
@@ -43,11 +43,11 @@ def chopchop(u: np.ndarray, chop_size: tuple, axis: int):
     """
     asymmetric chop of array edges about axis
     args:
-        u           np array of arbitrary dimension
-        chop_size   tuple
-        axis        int or list of axes
+        u:          np array of arbitrary dimension
+        chop_size:  tuple
+        axis:       int or list of axes
     returns:
-        u           symmetrically cut at the ends along axis by cut_length
+        u:          symmetrically cut at the ends along axis by cut_length
     """
     index = np.array([slice(None)] * u.ndim)
     index[axis] = slice(chop_size[0], -chop_size[1] or None)
@@ -57,10 +57,10 @@ def chopchop(u: np.ndarray, chop_size: tuple, axis: int):
 def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
     args:
-        arr     2D array
-        kernel  2D array
+        arr:        2D array with padding (m + p - 1, n + q - 1) for kernel
+        kernel:     2D array (p, q)
     returns:
-        out     arr convolved with kernel, excluding boundaries
+        out:        arr convolved with kernel (m, n)
     """
     consumed_elements = kernel.shape[0] - 1, kernel.shape[1] - 1
     stack_of_windows = []
@@ -78,10 +78,10 @@ def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 def convolve_batch2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
     args:
-        arrs    (m, n) or (# of arrays, m, n)
-        kernel  (p, q) or (# of kernels, p, q)
+        arrs:       (m, n) or (# of arrays, m, n)
+        kernel:     (p, q) or (# of kernels, p, q)
     returns:
-        out     (# of arrays, # of kernels, m - p + 1, n - q + 1)
+        out:        (# of arrays, # of kernels, m - p + 1, n - q + 1)
     """
     arrs = arr
     kernels = kernel
@@ -103,7 +103,7 @@ def convolve_batch2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 def dict_combinations(key_values: dict) -> list:
     """
     args:
-        key_values  {key0: [val0, val1, ...], ...}
+        key_values:     {key0: [val0, val1, ...], ...}
     returns:
         [{key0: val0, ...}, {key0: val1, ...}, ...]
     """
@@ -114,13 +114,13 @@ def dict_combinations(key_values: dict) -> list:
     return list_of_dicts
 
 
-def f_of_3_neighbors(u: np.array, f: callable) -> np.ndarray:
+def f_of_3_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
     """
     apply a function f (np.minimum or np.maximum) to each cell and it's 2 neighbors
     args:
-        u   (m,)
+        u:      (m,)
     returns:
-        out (m - 2,)
+        out:    (m - 2,)
     """
     list_of_3_neighbors = [
         u[..., 1:-1],
@@ -130,13 +130,13 @@ def f_of_3_neighbors(u: np.array, f: callable) -> np.ndarray:
     return f.reduce(list_of_3_neighbors)
 
 
-def f_of_5_neighbors(u: np.array, f: callable) -> np.ndarray:
+def f_of_5_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
     """
     apply a function f (np.minimum or np.maximum) to each cell and it's 4 neighbors
     args:
-        u   (m, n)
+        u:      (m, n)
     returns:
-        out (m - 2, n - 2)
+        out:    (m - 2, n - 2)
     """
     list_of_5_neighbors = [
         u[..., 1:-1, 1:-1],
@@ -148,13 +148,13 @@ def f_of_5_neighbors(u: np.array, f: callable) -> np.ndarray:
     return f.reduce(list_of_5_neighbors)
 
 
-def f_of_9_neighbors(u: np.array, f: callable) -> np.ndarray:
+def f_of_9_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
     """
     apply a function f (np.minimum or np.maximum) to each cell and it's 8 neighbors
     args:
-        u   (m, n)
+        u:      (m, n)
     returns:
-        out (m - 2, n - 2)
+        out:    (m - 2, n - 2)
     """
     list_of_9_neighbors = [
         u[..., 1:-1, 1:-1],
@@ -173,8 +173,8 @@ def f_of_9_neighbors(u: np.array, f: callable) -> np.ndarray:
 def np_floor(x: np.ndarray, floor: float) -> np.ndarray:
     """
     args:
-        x       any shape
-        floor   constant
+        x:      any shape
+        floor:  constant
     returns:
         x which doesn't subceed floor
     """

@@ -578,7 +578,6 @@ class AdvectionSolver(Integrator):
             theta, M_i, m_i = mpp_limiter(
                 u=self.apply_bc(u, pad_width=2),
                 points=mpp_limiting_points,
-                ones=not self.apriori_limiting,
                 zeros=self.cause_trouble,
             )
 
