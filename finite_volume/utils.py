@@ -3,6 +3,7 @@ defines useful functions which I haven't bothered to categorize
 """
 
 from itertools import product
+from types import ModuleType
 import numpy as np
 
 
@@ -54,32 +55,34 @@ def chopchop(u: np.ndarray, chop_size: tuple, axis: int):
     return u[tuple(index)]
 
 
-def convolve2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+def convolve2d(arr: np.ndarray, kernel: np.ndarray, xp: ModuleType = np) -> np.ndarray:
     """
     args:
         arr:        2D array with padding (m + p - 1, n + q - 1) for kernel
         kernel:     2D array (p, q)
+        xp:         numpy or cupy
     returns:
         out:        arr convolved with kernel (m, n)
     """
-    consumed_elements = kernel.shape[0] - 1, kernel.shape[1] - 1
-    stack_of_windows = []
+    eaten = kernel.shape[0] - 1, kernel.shape[1] - 1
+    windows = xp.empty((kernel.size, arr.shape[0] - eaten[0], arr.shape[1] - eaten[1]))
     for i in range(kernel.shape[0]):
         for j in range(kernel.shape[1]):
-            row_slice = slice(i, i + arr.shape[0] - consumed_elements[0])
-            col_slice = slice(j, j + arr.shape[1] - consumed_elements[1])
-            stack_of_windows.append(arr[row_slice, col_slice])
-    out = np.sum(
-        np.asarray(stack_of_windows) * kernel.reshape(kernel.size, 1, 1), axis=0
-    )
+            row_slice = slice(i, i + windows.shape[1])
+            col_slice = slice(j, j + windows.shape[2])
+            windows[j + kernel.shape[1] * i] = arr[row_slice, col_slice]
+    out = np.sum(windows * kernel.reshape(kernel.size, 1, 1), axis=0)
     return out
 
 
-def convolve_batch2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+def convolve_batch2d(
+    arr: np.ndarray, kernel: np.ndarray, xp: ModuleType = np
+) -> np.ndarray:
     """
     args:
         arrs:       (m, n) or (# of arrays, m, n)
         kernel:     (p, q) or (# of kernels, p, q)
+        xp:         numpy or cupy
     returns:
         out:        (# of arrays, # of kernels, m - p + 1, n - q + 1)
     """
@@ -93,10 +96,10 @@ def convolve_batch2d(arr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     n_kernels = kernels.shape[0]
     n_rows = arrs.shape[1] - kernels.shape[1] + 1
     n_cols = arrs.shape[2] - kernels.shape[2] + 1
-    out = np.empty((n_arrs, n_kernels, n_rows, n_cols))
+    out = xp.empty((n_arrs, n_kernels, n_rows, n_cols))
     for i, arr in enumerate(arrs):
         for j, kernel in enumerate(kernels):
-            out[i, j] = convolve2d(arr, kernel)
+            out[i, j] = convolve2d(arr, kernel, xp)
     return out
 
 
@@ -114,11 +117,13 @@ def dict_combinations(key_values: dict) -> list:
     return list_of_dicts
 
 
-def f_of_3_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
+def f_of_3_neighbors(u: np.ndarray, f: callable, xp: ModuleType) -> np.ndarray:
     """
-    apply a function f (np.minimum or np.maximum) to each cell and it's 2 neighbors
+    apply a function f (np.min or np.max) to each cell and it's 2 neighbors
     args:
         u:      (m,)
+        f:      function of an array slice of u
+        xp:     numpy or cupy
     returns:
         out:    (m - 2,)
     """
@@ -127,14 +132,16 @@ def f_of_3_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
         u[..., :-2],
         u[..., 2:],
     ]
-    return f.reduce(list_of_3_neighbors)
+    return f(xp.asarray(list_of_3_neighbors), axis=0)
 
 
-def f_of_5_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
+def f_of_5_neighbors(u: np.ndarray, f: callable, xp: ModuleType) -> np.ndarray:
     """
-    apply a function f (np.minimum or np.maximum) to each cell and it's 4 neighbors
+    apply a function f (np.min or np.max) to each cell and it's 4 neighbors
     args:
         u:      (m, n)
+        f:      function of an array slice of u
+        xp:     numpy or cupy
     returns:
         out:    (m - 2, n - 2)
     """
@@ -145,14 +152,16 @@ def f_of_5_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
         u[..., 1:-1, :-2],
         u[..., 1:-1, 2:],
     ]
-    return f.reduce(list_of_5_neighbors)
+    return f(xp.asarray(list_of_5_neighbors), axis=0)
 
 
-def f_of_9_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
+def f_of_9_neighbors(u: np.ndarray, f: callable, xp: ModuleType) -> np.ndarray:
     """
-    apply a function f (np.minimum or np.maximum) to each cell and it's 8 neighbors
+    apply a function f (np.min or np.max) to each cell and it's 8 neighbors
     args:
         u:      (m, n)
+        f:      function of an array slice of u
+        xp:     numpy or cupy
     returns:
         out:    (m - 2, n - 2)
     """
@@ -167,7 +176,7 @@ def f_of_9_neighbors(u: np.ndarray, f: callable) -> np.ndarray:
         u[..., :-2, 2:],
         u[..., :-2, :-2],
     ]
-    return f.reduce(list_of_9_neighbors)
+    return f(xp.asarray(list_of_9_neighbors), axis=0)
 
 
 def np_floor(x: np.ndarray, floor: float) -> np.ndarray:

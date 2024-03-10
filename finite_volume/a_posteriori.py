@@ -3,8 +3,9 @@ defines functions for predicting whether a finite volume cell is "toubled" and c
 robust, fallback fluxes
 """
 
-import numpy as np
+from types import ModuleType
 from typing import Tuple
+import numpy as np
 from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
 from finite_volume.utils import f_of_3_neighbors, f_of_5_neighbors
 
@@ -16,6 +17,7 @@ def find_trouble(
     PAD: Tuple[float, float],
     SED: bool = False,
     ones: bool = None,
+    xp: ModuleType = np,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     args:
@@ -26,6 +28,7 @@ def find_trouble(
                         (lower, upper)
         SED:            whether to use SED
         ones:           return all trouble
+        xp:             numpy or cupy
     overwrites:
         trouble:        boolean array                       (m,) or (m, n)
         M:              maximum of neighbor                 (m,) or (m, n)
@@ -42,8 +45,8 @@ def find_trouble(
         u_candidate_inner = u_candidate[3:-3, 3:-3]
 
     # max and min of immediate neighbors
-    M = f_of_neighbors(u, f=np.maximum)
-    m = f_of_neighbors(u, f=np.minimum)
+    M = f_of_neighbors(u, f=np.max, xp=xp)
+    m = f_of_neighbors(u, f=np.min, xp=xp)
 
     if ones:
         return np.ones_like(u_candidate_inner, dtype=np.intc), M, m
@@ -226,6 +229,7 @@ def compute_PP2D_interpolations(
     dt: float = None,
     h: Tuple[float, float] = None,
     v_cell_centers: Tuple[np.ndarray, np.ndarray] = None,
+    xp: ModuleType = np,
 ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
     """
     args:
@@ -238,6 +242,7 @@ def compute_PP2D_interpolations(
         v_cell_centers:         velocity at cell centers
             v_x                                                     (m, n)
             v_y                                                     ...
+        xp:                     numpy or cupy
     overwrites:
         x faces
             west_face:          left interpolated face value        (m, n)
@@ -252,19 +257,21 @@ def compute_PP2D_interpolations(
 
     # gather neighbors
     cell_centers = np.copy(u[1:-1, 1:-1])
-    list_of_8_neighbor_differences = [
-        u[:-2, 1:-1] - cell_centers,
-        u[2:, 1:-1] - cell_centers,
-        u[1:-1, :-2] - cell_centers,
-        u[1:-1, 2:] - cell_centers,
-        u[2:, 2:] - cell_centers,
-        u[2:, :-2] - cell_centers,
-        u[:-2, 2:] - cell_centers,
-        u[:-2, :-2] - cell_centers,
-    ]
+    neighbor_differences = xp.asarray(
+        [
+            u[:-2, 1:-1] - cell_centers,
+            u[2:, 1:-1] - cell_centers,
+            u[1:-1, :-2] - cell_centers,
+            u[1:-1, 2:] - cell_centers,
+            u[2:, 2:] - cell_centers,
+            u[2:, :-2] - cell_centers,
+            u[:-2, 2:] - cell_centers,
+            u[:-2, :-2] - cell_centers,
+        ]
+    )
     eps = 1e-20
-    V_min = np.minimum(np.minimum.reduce(list_of_8_neighbor_differences), -eps)
-    V_max = np.maximum(np.maximum.reduce(list_of_8_neighbor_differences), eps)
+    V_min = np.minimum(np.min(neighbor_differences, axis=0), -eps)
+    V_max = np.maximum(np.max(neighbor_differences, axis=0), eps)
 
     # limit slopes
     V = 2 * np.minimum(np.abs(V_min), np.abs(V_max)) / (np.abs(Sx) + np.abs(Sy) + eps)
@@ -286,14 +293,17 @@ def compute_PP2D_interpolations(
     return (west_face, east_face), (south_face, north_face)
 
 
-def broadcast_troubled_cells_to_faces_1d(trouble: np.ndarray) -> np.ndarray:
+def broadcast_troubled_cells_to_faces_1d(
+    trouble: np.ndarray, xp: ModuleType = np
+) -> np.ndarray:
     """
     args:
-        trouble:                cellwise trouble boolean    (m,)
+        trouble:    cellwise trouble boolean (m,)
+        xp:         numpy or cupy
     returns:
-        troubled_interface:     facewise trouble boolean    (m + 1,)
+        troubled_interface:     facewise trouble boolean (m + 1,)
     """
-    troubled_interface = np.zeros(trouble.shape[0] + 1, dtype=np.intc)
+    troubled_interface = xp.zeros(trouble.shape[0] + 1, dtype=np.intc)
     troubled_interface[:-1] = trouble
     troubled_interface[1:] = np.where(trouble, 1, troubled_interface[1:])
     return troubled_interface
@@ -301,15 +311,17 @@ def broadcast_troubled_cells_to_faces_1d(trouble: np.ndarray) -> np.ndarray:
 
 def broadcast_troubled_cells_to_faces_with_blending_1d(
     trouble: np.ndarray,
+    xp: ModuleType = np,
 ) -> np.ndarray:
     """
     args:
-        trouble:                    cellwise trouble boolean with padding   (m + 4,)
+        trouble:    cellwise trouble boolean with padding (m + 4,)
+        xp:         numpy or cupy
     returns:
-        troubled_interface_mask:    facewise trouble mask                   (m + 1,)
+        troubled_interface_mask:    facewise trouble mask (m + 1,)
     """
     # initialize theta
-    troubled_interface_mask = np.zeros(trouble.shape[0] - 3, dtype=np.double)
+    troubled_interface_mask = xp.zeros(trouble.shape[0] - 3, dtype=np.double)
     theta = trouble.astype("float")
 
     # First neighbors
@@ -327,19 +339,21 @@ def broadcast_troubled_cells_to_faces_with_blending_1d(
 
 def broadcast_troubled_cells_to_faces_2d(
     trouble: np.ndarray,
+    xp: ModuleType = np,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     args:
-        trouble:                trouble cellwise trouble boolean    (m, n)
+        trouble:    trouble cellwise trouble boolean (m, n)
+        xp:         numpy or cupy
     returns:
-        troubled_interface_x:   facewise trouble boolean            (m, n + 1)
-        troubled_interface_y:   facewise trouble boolean            (m + 1, n)
+        troubled_interface_x:   facewise trouble boolean (m, n + 1)
+        troubled_interface_y:   facewise trouble boolean (m + 1, n)
     """
     # flag faces of troubled cells as troubled
-    troubled_interface_x = np.zeros(
+    troubled_interface_x = xp.zeros(
         (trouble.shape[0], trouble.shape[1] + 1), dtype=np.intc
     )
-    troubled_interface_y = np.zeros(
+    troubled_interface_y = xp.zeros(
         (trouble.shape[0] + 1, trouble.shape[1]), dtype=np.intc
     )
     troubled_interface_x[:, :-1] = trouble
@@ -351,20 +365,21 @@ def broadcast_troubled_cells_to_faces_2d(
 
 def broadcast_troubled_cells_to_faces_with_blending_2d(
     trouble: np.ndarray,
+    xp: ModuleType = np,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     args:
-        trouble:                trouble cellwise trouble boolean    (m + 4, n + 4)
-                                with padding
+        trouble:    trouble cellwise trouble boolean with padding (m + 4, n + 4)
+        xp:         numpy or cupy
     returns:
-        interface_trouble_mask_x:   facewise trouble mask           (m, n + 1)
-        interface_trouble_mask_y:   facewise trouble mask           (m + 1, n)
+        interface_trouble_mask_x:   facewise trouble mask (m, n + 1)
+        interface_trouble_mask_y:   facewise trouble mask (m + 1, n)
     """
     # initialize theta
-    interface_trouble_mask_x = np.zeros(
+    interface_trouble_mask_x = xp.zeros(
         (trouble.shape[0] - 4, trouble.shape[1] - 3), dtype=np.double
     )
-    interface_trouble_mask_y = np.zeros(
+    interface_trouble_mask_y = xp.zeros(
         (trouble.shape[0] - 3, trouble.shape[1] - 4), dtype=np.double
     )
     theta = trouble.astype("float")
