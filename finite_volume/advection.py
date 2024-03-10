@@ -151,6 +151,7 @@ class AdvectionSolver(Integrator):
         adaptive_stepsize: bool = False,
         mpp_tolerance: float = 1e-10,
         progress_bar: bool = True,
+        cupy: bool = False,
         load: bool = True,
         save: bool = True,
         save_directory: str = "data/solutions/",
@@ -159,6 +160,9 @@ class AdvectionSolver(Integrator):
         self.load = load
         u0_str = u0.__name__ if callable(u0) else str(u0)
         v_str = v.__name__ if callable(v) else str(v)
+        n_for_cupy = n[0] if isinstance(n, (tuple, list)) else n
+        if not isinstance(cupy, bool):
+            cupy = False if n_for_cupy < cupy else True
         filename_comps = [
             u0_str,
             bc[0],  # use only first character
@@ -187,12 +191,21 @@ class AdvectionSolver(Integrator):
             adjust_stepsize,
             adaptive_stepsize,
             mpp_tolerance,
+            "cupy" if cupy else "numpy",
         ]
         TF = {True: "T", False: "F"}
         filename_comps = [TF[s] if isinstance(s, bool) else s for s in filename_comps]
         self._filename = "_".join(str(s) for s in filename_comps)
         self._save_directory = save_directory
         self.save = save
+
+        # cupy?
+        self.cupy = cupy
+        self.xp = np
+        if cupy:
+            import cupy as cp
+
+            self.xp = cp
 
         # dimensionality
         if isinstance(n, int):
@@ -357,16 +370,15 @@ class AdvectionSolver(Integrator):
 
         # initialize a posteriori slope limiting
         self.aposteriori_limiting = aposteriori_limiting
-        if fallback_limiter == "minmod":
-            self.fallback_limiter = minmod
-        elif fallback_limiter == "moncen":
-            self.fallback_limiter = moncen
+        if fallback_limiter in {"minmod", "moncen"}:
+            self.slope_limiters = {"minmod": minmod, "moncen": moncen}
+            self.fallback_limiter_name = fallback_limiter
         elif fallback_limiter == "PP2D":
             if self.ndim != 2:
                 raise TypeError("PP2D limiting is not defined for a 1D solver.")
             if fallback_to_1st_order:
                 raise TypeError("PP2D does not fall back to first order.")
-            self.fallback_limiter = compute_PP2D_interpolations
+            self.fallback_limiter_name = "PP2D"
         else:
             raise ValueError("Invalid slope limiter")
         self.convex = convex
@@ -614,6 +626,7 @@ class AdvectionSolver(Integrator):
         points = convolve_batch2d(
             arr=self.apply_bc(u, pad_width=self.conservative_width + 1).reshape(1, -1),
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
+            xp=self.xp,
         )
         points = points[0, :, 0, :]  # (# of interpolated points, # cells x
         fallback = self.apply_bc(u, pad_width=1)
@@ -633,6 +646,7 @@ class AdvectionSolver(Integrator):
                 u=self.apply_bc(u, pad_width=2),
                 points=mpp_limiting_points,
                 zeros=self.cause_trouble,
+                xp=self.xp,
             )
 
             # PAD
@@ -679,22 +693,26 @@ class AdvectionSolver(Integrator):
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, -1, 1),
+            xp=self.xp,
         )
         vertical_lines = convolve_batch2d(
             arr=self.apply_bc(u, pad_width=self.conservative_width + self.riemann_gw)[
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, 1, -1),
+            xp=self.xp,
         )
 
         # interpolate points from line averages
         horizontal_points = convolve_batch2d(
             arr=horizontal_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
+            xp=self.xp,
         )
         vertical_points = convolve_batch2d(
             arr=vertical_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, -1, 1),
+            xp=self.xp,
         )
         fallback = self.apply_bc(u, pad_width=self.riemann_gw)
 
@@ -717,6 +735,7 @@ class AdvectionSolver(Integrator):
                 u=self.apply_bc(u, pad_width=self.riemann_gw + 1),
                 points=mpp_limiting_points,
                 zeros=self.cause_trouble,
+                xp=self.xp,
             )
 
             # PAD
@@ -785,6 +804,7 @@ class AdvectionSolver(Integrator):
             midpoints = convolve_batch2d(
                 arr=self.apply_bc(u, pad_width=self.conservative_width + 1)[np.newaxis],
                 kernel=self.cell_center_stencil.reshape(1, -1),
+                xp=self.xp,
             )
             return midpoints[0, 0, ...]
         elif self.ndim == 2:
@@ -793,10 +813,12 @@ class AdvectionSolver(Integrator):
                     u, pad_width=self.conservative_width + self.riemann_gw
                 )[np.newaxis],
                 kernel=self.cell_center_stencil.reshape(1, -1, 1),
+                xp=self.xp,
             )
             midpoints = convolve_batch2d(
                 arr=horizontal_lines[0],
                 kernel=self.cell_center_stencil.reshape(1, 1, -1),
+                xp=self.xp,
             )
             return midpoints[0, ...]
 
@@ -816,6 +838,7 @@ class AdvectionSolver(Integrator):
             PAD=self.approximated_maximum_principle,
             SED=self.SED,
             ones=self.cause_trouble,
+            xp=self.xp,
         )
         # log troubled cells and related terms for snapshot
         self.trouble += trouble
@@ -834,7 +857,7 @@ class AdvectionSolver(Integrator):
         # compute fallback fluxes
         left_fallback_face, right_fallback_face = compute_MUSCL_interpolations_1d(
             u=self.apply_bc(u, pad_width=1),
-            slope_limiter=self.fallback_limiter,
+            slope_limiter=self.slope_limiters[self.fallback_limiter_name],
             fallback_to_1st_order=self.fallback_to_1st_order,
             PAD=self.approximated_maximum_principle,
             hancock=self.hancock,
@@ -853,11 +876,14 @@ class AdvectionSolver(Integrator):
         trouble = self.find_trouble(u, dt)
         # revise fluxes
         if not self.convex:
-            troubled_interface_mask = broadcast_troubled_cells_to_faces_1d(trouble)
+            troubled_interface_mask = broadcast_troubled_cells_to_faces_1d(
+                trouble=trouble, xp=self.xp
+            )
         else:
             troubled_interface_mask = (
                 broadcast_troubled_cells_to_faces_with_blending_1d(
-                    self.apply_bc(trouble, pad_width=2, mode="trouble")
+                    trouble=self.apply_bc(trouble, pad_width=2, mode="trouble"),
+                    xp=self.xp,
                 )
             )
         self.f[...] = (
@@ -874,10 +900,10 @@ class AdvectionSolver(Integrator):
             self.g:     (ny + 1, nx)
         """
         # compute fallback fluxes
-        if self.fallback_limiter.__name__ in {"minmod", "moncen"}:
+        if self.fallback_limiter_name in {"minmod", "moncen"}:
             fallback_faces = compute_MUSCL_interpolations_2d(
                 u=self.apply_bc(u, pad_width=1),
-                slope_limiter=self.fallback_limiter,
+                slope_limiter=self.slope_limiters[self.fallback_limiter_name],
                 fallback_to_1st_order=self.fallback_to_1st_order,
                 PAD=self.approximated_maximum_principle,
                 hancock=self.hancock,
@@ -885,13 +911,14 @@ class AdvectionSolver(Integrator):
                 h=(self.hx, self.hy),
                 v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
             )
-        elif self.fallback_limiter.__name__ == "compute_PP2D_interpolations":
-            fallback_faces = self.fallback_limiter(
+        elif self.fallback_limiter_name == "PP2D":
+            fallback_faces = compute_PP2D_interpolations(
                 u=self.apply_bc(u, pad_width=1),
                 hancock=self.hancock,
                 dt=self.dt,
                 h=(self.hx, self.hy),
                 v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
+                xp=self.xp,
             )
         north_face = self.apply_bc(fallback_faces[1][1], pad_width=1)
         south_face = self.apply_bc(fallback_faces[1][0], pad_width=1)
@@ -914,13 +941,13 @@ class AdvectionSolver(Integrator):
             (
                 troubled_interface_mask_x,
                 troubled_interface_mask_y,
-            ) = broadcast_troubled_cells_to_faces_2d(trouble)
+            ) = broadcast_troubled_cells_to_faces_2d(trouble=trouble, xp=self.xp)
         else:
             (
                 troubled_interface_mask_x,
                 troubled_interface_mask_y,
             ) = broadcast_troubled_cells_to_faces_with_blending_2d(
-                self.apply_bc(trouble, pad_width=2, mode="trouble")
+                trouble=self.apply_bc(trouble, pad_width=2, mode="trouble"), xp=self.xp
             )
         self.f[...] = (
             1 - troubled_interface_mask_x
@@ -953,7 +980,9 @@ class AdvectionSolver(Integrator):
         kernel_shape = [1, 1, 1]
         kernel_shape[axis + 1] = len(self.transverse_stencil)
         return convolve_batch2d(
-            arr=pointwise_fluxes, kernel=self.transverse_stencil.reshape(kernel_shape)
+            arr=pointwise_fluxes,
+            kernel=self.transverse_stencil.reshape(kernel_shape),
+            xp=self.xp,
         )
 
     def rkorder(self, ssp: bool = True, rk6: bool = False):
@@ -1006,10 +1035,12 @@ class AdvectionSolver(Integrator):
 
     def append_to_timeseries_lists(self):
         self.all_simulation_times.append(self.t0)
-        self.min_history.append(np.min(self.u0))
-        self.max_history.append(np.max(self.u0))
+        self.min_history.append(np.min(self.u0).item())
+        self.max_history.append(np.max(self.u0).item())
 
     def snapshot(self):
+        if self.cupy:
+            self.send_to_CPU()
         self.snapshots.append(
             {
                 "t": self.t0,
@@ -1022,6 +1053,8 @@ class AdvectionSolver(Integrator):
                 "m - unew": self.NAD_lower / self.udot_evaluation_count,
             }
         )
+        if self.cupy:
+            self.send_to_GPU()
 
     def step_cleanup(self):
         """
@@ -1071,6 +1104,9 @@ class AdvectionSolver(Integrator):
         except OSError:
             pass
         print("New solution instance...")
+        # send data to GPU
+        if self.cupy:
+            self.send_to_GPU()
         return True
 
     def write_to_file(self):
@@ -1084,6 +1120,9 @@ class AdvectionSolver(Integrator):
         """
         only runs if new solution is computed
         """
+        # send data to CPU
+        if self.cupy:
+            self.send_to_CPU()
         # compute max and min history
         min_history = np.asarray(self.min_history)
         max_history = np.asarray(self.max_history)
@@ -1137,6 +1176,76 @@ class AdvectionSolver(Integrator):
             self.step_count + 1
         )
         return violations, stats
+
+    def redefine_arrays(self, xp_asarray: callable):
+        """
+        redefine arrays as xp arrays
+        args:
+            xp_asarray:     cp.asnumpy or cp.asarray
+        """
+
+        # snapshot
+        self.u0 = xp_asarray(self.u0)
+        self.theta = xp_asarray(self.theta)
+        self.trouble = xp_asarray(self.trouble)
+        self.theta_M_denominator = xp_asarray(self.theta_M_denominator)
+        self.theta_m_denominator = xp_asarray(self.theta_m_denominator)
+        self.NAD_upper = xp_asarray(self.NAD_upper)
+        self.NAD_lower = xp_asarray(self.NAD_lower)
+
+        # velocities and fluxes
+        self.a = xp_asarray(self.a)
+        self.a_cell_centers = xp_asarray(self.a_cell_centers)
+        self.f = xp_asarray(self.f)
+        self.g = xp_asarray(self.g)
+        if self.ndim == 2:
+            self.b = xp_asarray(self.b)
+            self.a_midpoint = xp_asarray(self.a_midpoint)
+            self.b_midpoint = xp_asarray(self.b_midpoint)
+            self.b_cell_centers = xp_asarray(self.b_cell_centers)
+
+        # quadrature
+        self.line_stencils = xp_asarray(self.line_stencils)
+        self.pointwise_stencils = xp_asarray(self.pointwise_stencils)
+        if self.flux_strategy == "gauss-legendre":
+            self.leg_weights = xp_asarray(self.leg_weights)
+        elif self.flux_strategy == "transverse":
+            self.transverse_stencil = xp_asarray(self.transverse_stencil)
+
+        # slope limiting
+        if self.mpp_lite:
+            self.cell_center_stencil = xp_asarray(self.cell_center_stencil)
+
+    def send_to_CPU(self):
+        """
+        redefine all attribute arrays as numpy arrays
+        """
+        self.redefine_arrays(xp_asarray=self.xp.asnumpy)
+
+    def send_to_GPU(self):
+        """
+        redefine all attribute arrays as cupy arrays
+        """
+        self.redefine_arrays(xp_asarray=self.xp.asarray)
+
+    def __getstate__(self):
+        """
+        when pickling, remove xp attribute from state dictionary
+        """
+        state = self.__dict__.copy()
+        del state["xp"]
+        return state
+
+    def __setstate__(self, state):
+        """
+        restore xp attribute after pickling
+        """
+        self.__dict__.update(state)
+        self.xp = np
+        if self.cupy:
+            import cupy as cp
+
+            self.xp = cp
 
     def _hide_small_violations(
         self, i: int, spatial_slices: tuple, mode: str, tolerance: float

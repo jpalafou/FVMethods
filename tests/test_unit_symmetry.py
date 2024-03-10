@@ -85,8 +85,8 @@ def rotate(x, n: int):
 
 
 @pytest.mark.parametrize("n_test", range(10))
-@pytest.mark.parametrize("arr_shape", [(20, 20), (14, 20, 20)])
-@pytest.mark.parametrize("kernel_shape", [(10, 10), (2, 10, 10)])
+@pytest.mark.parametrize("arr_shape", [(20, 25), (14, 20, 25)])
+@pytest.mark.parametrize("kernel_shape", [(10, 15), (2, 10, 15)])
 @pytest.mark.parametrize("a", [-1, 1])
 @pytest.mark.parametrize("b", [-2, -1, 0, 1, 2])
 def test_convolve_batch2d_translation_equivariance(
@@ -113,8 +113,8 @@ def test_convolve_batch2d_translation_equivariance(
 
 
 @pytest.mark.parametrize("n_test", range(10))
-@pytest.mark.parametrize("arr_shape", [(20, 20), (14, 20, 20)])
-@pytest.mark.parametrize("kernel_shape", [(1, 10), (10, 10), (2, 10, 10)])
+@pytest.mark.parametrize("arr_shape", [(20, 25), (14, 20, 25)])
+@pytest.mark.parametrize("kernel_shape", [(1, 10), (10, 15), (2, 10, 15)])
 @pytest.mark.parametrize("n_rotations", [0, 1, 2, 3])
 def test_convolve_batch2d_rotation_equivariance(
     n_test, arr_shape, kernel_shape, n_rotations
