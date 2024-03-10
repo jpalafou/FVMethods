@@ -189,6 +189,8 @@ def pad_uniform_extrap(x: np.ndarray, pad_width: int) -> np.ndarray:
     returns:
         out:        1D array continuing the uniformly spaced array (m + 2 * pad_width,)
     """
+    if pad_width == 0:
+        return x
     h = np.mean(x[1:] - x[:-1])
     out = np.pad(x, pad_width)
     out[slice(None, pad_width)] = h * np.arange(-pad_width, 0) + x[0]
