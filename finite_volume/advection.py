@@ -290,6 +290,9 @@ class AdvectionSolver(Integrator):
 
         # boundary conditions for different variables
         variables = ["u", "trouble"]
+        if const is not None:
+            if not isinstance(const, dict) or not set(const.keys()) == set(variables):
+                raise BaseException(f"Invalid const: must have keys {variables}")
         if bc == "periodic":
             self.bc_config = {var: dict(mode="wrap") for var in variables}
         if bc == "dirichlet":

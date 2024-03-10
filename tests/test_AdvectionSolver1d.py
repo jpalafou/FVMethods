@@ -101,9 +101,7 @@ def test_udot(
         PAD=PAD,
         save_directory=test_directory,
     )
-    solution.udot(
-        solution.snapshots[0]["u"], t=solution.snapshots[0]["t"], dt=solution.dt
-    )
+    solution.one_euler_step()
 
 
 @pytest.mark.parametrize("n", n_list)

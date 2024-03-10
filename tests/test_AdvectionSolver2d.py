@@ -118,9 +118,7 @@ def test_udot(
         PAD=PAD,
         save_directory=test_directory,
     )
-    solution.udot(
-        solution.snapshots[0]["u"], t=solution.snapshots[0]["t"], dt=solution.dt
-    )
+    solution.one_euler_step()
 
 
 @pytest.mark.parametrize("n", n_list)
@@ -181,7 +179,7 @@ def test_mesh_convergence(order):
             x=(-1, 1),
             snapshot_dt=2 * np.pi,
             bc="dirichlet",
-            const=0.0,
+            const={"u": 0.0, "trouble": 0},
         ),
     ],
 )
@@ -248,7 +246,7 @@ def test_a_priori_mpp_2d(
             x=(-1, 1),
             snapshot_dt=2 * np.pi,
             bc="dirichlet",
-            const=0.0,
+            const={"u": 0.0, "trouble": 0},
         ),
     ],
 )
