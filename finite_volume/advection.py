@@ -1,3 +1,11 @@
+"""
+defines the AdvectionSolver class, a forward-stepping finite volume solver for
+du/dt + df/dx = 0           (1D)
+or
+du/dt + df/dx + dg/dy = 0   (2D)
+where u are cell volume averages and f and g are fluxes in x and y, respectively
+"""
+
 # advection solution schems
 import numpy as np
 import os
@@ -10,20 +18,22 @@ from finite_volume.mathematiques import gauss_lobatto
 from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
 from finite_volume.a_priori import mpp_limiter
 from finite_volume.a_posteriori import (
-    minmod,
-    moncen,
-    find_trouble,
-    compute_MUSCL_interpolations_1d,
-    compute_MUSCL_interpolations_2d,
-    compute_PP2D_interpolations,
     broadcast_troubled_cells_to_faces_1d,
     broadcast_troubled_cells_to_faces_2d,
     broadcast_troubled_cells_to_faces_with_blending_1d,
     broadcast_troubled_cells_to_faces_with_blending_2d,
+    compute_MUSCL_interpolations_1d,
+    compute_MUSCL_interpolations_2d,
+    compute_PP2D_interpolations,
+    find_trouble,
+    minmod,
+    moncen,
 )
 from finite_volume.utils import (
-    rk4_dt_adjust,
     convolve_batch2d,
+    rk4_dt_adjust,
+    pad_uniform_extrap,
+    quadrature_mesh,
 )
 from finite_volume.riemann import upwinding
 
@@ -32,58 +42,56 @@ from finite_volume.riemann import upwinding
 class AdvectionSolver(Integrator):
     """
     args:
-        u0                          initial condition, keywork or callable function
-        bc                          "periodic" or "dirichlet"
-        const                       for dirichlet bc
-        n                           tuple of number of cells in x and y
-        x                           tuple of boundaries in x
-        y                           tuple of boundaries in y
-        t0                          starting time
-        snapshot_dt                 dt for snapshots
-        num_snapshots               number of times to evolve system by snapshot_dt
-        v                           tuple of floating point velocity components or
-                                    callable function of x and y
-        courant                     stability condition
-        order                       accuracy requirement for polynomial interpolation
-        flux_strategy               'gauss-legendre' or 'transverse'
+        u0:                         initial condition, keywork or callable function
+        bc:                         "periodic" or "dirichlet"
+        const:                      for dirichlet bc
+                                    {"u": u_const, "trouble": trouble_const}
+        n:                          tuple of number of cells in x and y
+        x:                          tuple of boundaries in x
+        y:                          tuple of boundaries in y, x is used if None
+        t0:                         starting time
+        snapshot_dt:                dt for snapshots
+        num_snapshots:              number of times to evolve system by snapshot_dt
+        v:                          float v_1d for 1D solver
+                                    tuple (vx, vy) or (vxy_shared,) for 2D solver
+                                    callable v(xx, yy) for 2D solver
+        courant:                    stability condition
+        order:                      accuracy requirement for polynomial interpolation
+        flux_strategy:              'gauss-legendre' or 'transverse'
     slope limiter settings - - - - -
     a priori limiting ~
-        apriori_limiting            whether to follow zhang and shu mpp limiting
-        mpp_lite                    cell center is the only interior point
+        apriori_limiting:           whether to follow zhang and shu mpp limiting
+        mpp_lite:                   cell center is the only interior point
     a posteriori limiting ~
-        aposteriori_limiting        whether to call trouble detection and 2d fallback
-        fallback_limiter            'moncen', 'minmod', or 'PP2D'
-        convex                      a more mpp version of a posteriori limiting
-        hancock                     predictor corrector scheme for fallback
-        fallback_to_first_order     fallback again to first order in the fallback scheme
-        cause_trouble               set all cells to be troubled, forcing 2d fallback
+        aposteriori_limiting:       whether to call trouble detection and 2d fallback
+        fallback_limiter:           'moncen', 'minmod', or 'PP2D'
+        convex:                     a more mpp version of a posteriori limiting
+        hancock:                    predictor corrector scheme for fallback
+        fallback_to_first_order:    fallback again to first order in the fallback scheme
+        cause_trouble:              set all cells to be troubled, forcing 2d fallback
     ~
-        SED                         whether to enable smooth extrema detection
-        NAD                         simulation NAD tolerance for a posteriori limiting
+        SED:                        whether to enable smooth extrema detection
+        NAD:                        simulation NAD tolerance for a posteriori limiting
                                         set to None or +inf to disable NAD
-        PAD                         physical admissibility detection (lower, upper)
+        PAD:                        physical admissibility detection (lower, upper)
                                         set to None or (-inf, +inf) to disable PAD
-        visualization_tolerance     tolerance for whether to visualize theta and/or
-                                        troubled cells based on some violation
-                                        set to None or -inf to visualize simulation
-                                        values
     - - - - -
-        adjust_time_step            whether to reduce timestep for order >4
-        modify_time_step            whether to conditionally reduce dt by half
-        mpp_tolerance               maximum principle tolerance for adaptive time step
-        progress_bar                whether to print a progress bar in the loop
-        load                        whether to load precalculated solution
-        save                        whether to overwrite saved instance
-        save_directory              directory from which to read/write
+        adjust_time_step:           whether to reduce timestep for order >4
+        modify_time_step:           whether to conditionally reduce dt by half
+        mpp_tolerance:              maximum principle tolerance for adaptive time step
+        progress_bar:               whether to print a progress bar in the loop
+        load:                       whether to load precalculated solution
+        save:                       whether to overwrite saved instance
+        save_directory:             directory from which to read/write
     returns:
-        u   array of saved states
+        self.snapshots:             [{t: t0, u: u0, ...}, ...]
     """
 
     def __init__(
         self,
         u0: str = "square",
         bc: str = "periodic",
-        const: float = None,
+        const: dict = None,
         n: tuple = (32, 32),
         x: tuple = (0, 1),
         y: tuple = None,
@@ -105,7 +113,6 @@ class AdvectionSolver(Integrator):
         SED: bool = False,
         NAD: float = 1e-5,
         PAD: tuple = (0, 1),
-        visualization_tolerance: float = None,
         adjust_time_step: bool = False,
         modify_time_step: bool = False,
         mpp_tolerance: float = 1e-10,
@@ -143,7 +150,6 @@ class AdvectionSolver(Integrator):
             SED,
             NAD,
             PAD,
-            visualization_tolerance,
             adjust_time_step,
             modify_time_step,
             mpp_tolerance,
@@ -154,7 +160,12 @@ class AdvectionSolver(Integrator):
         self.save = save
 
         # dimensionality
-        self.ndim = 1 if isinstance(n, int) else 2
+        if isinstance(n, int):
+            self.ndim = 1
+        elif isinstance(n, tuple) and len(n) in {1, 2}:
+            self.ndim = 2
+        else:
+            raise BaseException("n: expected int or tuple of length 1 or 2")
 
         # spatial discretization in x
         if self.ndim == 1:
@@ -191,22 +202,25 @@ class AdvectionSolver(Integrator):
 
         # maximum expected advection velocities
         if self.ndim == 1:  # uniform 1d velocity
-            if isinstance(v, tuple) or isinstance(v, list):
-                raise BaseException("Defined vector velocity for 1d field")
-            vx_max, vy_max = abs(v), 0
+            if isinstance(v, int):
+                vx_max, vy_max = abs(v), 0
+            else:
+                raise BaseException("Expected scalar velocity for 1-dimensional domain")
         if self.ndim == 2:
             if isinstance(v, int):
-                raise BaseException("Defined scalar velocity for 2d field")
-            if isinstance(v, tuple) or isinstance(v, list):  # uniform 2d velocity
-                if len(v) < 2:
+                raise BaseException("Expected vector velocity for 2-dimensional domain")
+            elif isinstance(v, tuple):  # uniform 2d velocity
+                if len(v) == 1:
                     vx_max, vy_max = abs(v[0]), abs(v[0])
-                else:
+                elif len(v) == 2:
                     vx_max, vy_max = abs(v[0]), abs(v[1])
-            if callable(v):  # non-uniform 2d velocity
+            elif callable(v):  # non-uniform 2d velocity
                 # precompute velocity at cell corners and use this as estimate for max
                 xx, yy = np.meshgrid(self.x_interface, self.y_interface)
-                v_max = v(xx, yy)
-                vx_max, vy_max = np.max(abs(v_max[0])), np.max(abs(v_max[1]))
+                v_xx_yy = v(xx, yy)
+                vx_max, vy_max = np.max(abs(v_xx_yy[0])), np.max(abs(v_xx_yy[1]))
+            else:
+                raise BaseException("Invalid velocity vector for 2-dimensional domain")
 
         # time discretization
         self.adjust_time_step = adjust_time_step
@@ -226,16 +240,16 @@ class AdvectionSolver(Integrator):
 
         # initial condition
         if isinstance(u0, str):
-            u0 = generate_ic(type=u0, x=self.x, y=self.y)
+            u0_arr = generate_ic(type=u0, x=self.x, y=self.y)
         if callable(u0):
             if self.ndim == 1:
-                u0 = u0(x=self.x)
+                u0_arr = u0(x=self.x)
             if self.ndim == 2:
-                u0 = u0(x=self.x, y=self.y)
+                u0_arr = u0(x=self.x, y=self.y)
 
         # initialize simulation/visualized theta and trouble
-        self.ones_i = np.ones_like(u0, dtype="int")
-        self.ones_f = np.ones_like(u0, dtype="double")
+        self.ones_i = np.ones_like(u0_arr, dtype="int")
+        self.ones_f = np.ones_like(u0_arr, dtype="double")
         self.theta = 0.0 * self.ones_f
         self.trouble = 0 * self.ones_i
         self.theta_M_denominator = 0.0 * self.ones_f
@@ -244,8 +258,8 @@ class AdvectionSolver(Integrator):
         self.NAD_lower = 0 * self.ones_f
 
         # initialize timeseries lists
-        self.u0_min = np.min(u0)
-        self.u0_max = np.max(u0)
+        self.u0_min = np.min(u0_arr)
+        self.u0_max = np.max(u0_arr)
         self.all_simulation_times = [t0]
         self.min_history = [self.u0_min]
         self.max_history = [self.u0_max]
@@ -254,7 +268,7 @@ class AdvectionSolver(Integrator):
         self.snapshots = [
             {
                 "t": t0,
-                "u": u0,
+                "u": u0_arr,
                 "theta": self.theta + 1.0,
                 "trouble": self.trouble.copy(),
                 "abs(M_ij - u)": self.theta_M_denominator.copy(),
@@ -266,7 +280,7 @@ class AdvectionSolver(Integrator):
 
         # initialize integrator
         super().__init__(
-            u0=u0,
+            u0=u0_arr,
             dt=dt,
             snapshot_dt=snapshot_dt,
             num_snapshots=num_snapshots,
@@ -274,24 +288,24 @@ class AdvectionSolver(Integrator):
             progress_bar=progress_bar,
         )
 
-        # boundary conditions
-        self.const = const
-        constants = dict(
-            u=self.const,
-            trouble=0,
-        )
+        # boundary conditions for different variables
+        variables = ["u", "trouble"]
         if bc == "periodic":
-            self.bc_config = dict(mode="wrap")
-            self.constant_bc_config = {key: {} for key, _ in constants.items()}
+            self.bc_config = {var: dict(mode="wrap") for var in variables}
         if bc == "dirichlet":
-            self.bc_config = dict(mode="constant")
-            self.constant_bc_config = {
-                key: dict(constant_values=item) for key, item in constants.items()
+            self.bc_config = {
+                var: dict(constant_values=const[var]) for var in variables
             }
 
-        # initialize limiting
+        # initialize slope limiting in general
+        self.cause_trouble = cause_trouble
+        self.udot_evaluation_count = 0
+
+        # initialize a priori slope limiting
         self.apriori_limiting = apriori_limiting
         self.mpp_lite = mpp_lite
+
+        # initialize a posteriori slope limiting
         self.aposteriori_limiting = aposteriori_limiting
         if fallback_limiter == "minmod":
             self.fallback_limiter = minmod
@@ -299,31 +313,19 @@ class AdvectionSolver(Integrator):
             self.fallback_limiter = moncen
         elif fallback_limiter == "PP2D":
             if self.ndim != 2:
-                raise BaseException("PP2D limiting is for two-dimensional solutions.")
+                raise BaseException("PP2D limiting is not defined for a 1D solver.")
             if fallback_to_first_order:
                 raise BaseException("PP2D does not fall back to first order.")
             self.fallback_limiter = compute_PP2D_interpolations
-        self.SED = SED
-
+        else:
+            raise BaseException("Invalid slope limiter")
         self.convex = convex
         self.hancock = hancock
         self.fallback_to_first_order = fallback_to_first_order
 
-        # arrays for storing local min/max
-        self.m = 0 * self.ones_f
-        self.M = 0 * self.ones_f
-
-        # initialize cause_trouble and udot_evaluation_count
-        self.cause_trouble = cause_trouble
-        self.udot_evaluation_count = 0
-        # initialize tolerances
+        # SED, NAD, PAD
+        self.SED = SED
         self.NAD = np.inf if NAD is None else NAD
-        self.visualization_tolerance = (
-            -np.inf
-            if visualization_tolerance is None or cause_trouble
-            else visualization_tolerance
-        )
-        # initialize PAD
         self.PAD = (-np.inf, np.inf) if PAD is None else PAD
         self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
         self.approximated_maximum_principle = (
@@ -331,7 +333,7 @@ class AdvectionSolver(Integrator):
             self.PAD[1] + self.mpp_tolerance,
         )
 
-        # quadrature setup
+        # flux reconstruction
         self.flux_strategy = flux_strategy if self.ndim > 1 else "gauss-legendre"
         cons_left = ConservativeInterpolation.construct_from_order(
             self.p + 1, "left"
@@ -394,6 +396,7 @@ class AdvectionSolver(Integrator):
             list_of_point_stencils.append(s)
         self.pointwise_stencils = np.array(list_of_point_stencils)
 
+        # define stencil for transverse flux
         if self.flux_strategy == "transverse":
             leg_points = np.array([0.0])
             self.transverse_stencil = TransverseIntegral.construct_from_order(
@@ -401,11 +404,13 @@ class AdvectionSolver(Integrator):
             ).nparray()
             self.transverse_width = len(self.transverse_stencil) // 2
 
+        # define central interpolation for mpp_lite
         if self.mpp_lite:
             self.cell_center_stencil = ConservativeInterpolation.construct_from_order(
                 self.p + 1, "center"
             ).nparray(size=conservative_stencil_size)
 
+        # useful stencil counts
         self.n_line_stencils = self.line_stencils.shape[0]
         self.n_pointwise_stencils = self.pointwise_stencils.shape[0]
 
@@ -420,47 +425,59 @@ class AdvectionSolver(Integrator):
             self.a_cell_centers = v * np.ones(nx)
         if self.ndim == 2:
             # x and y values at interface points
-            na = np.newaxis
             # EW interface
-            EW_interface_x, EW_interface_y = np.meshgrid(self.x_interface, self.y)
-            EW_interface_x = np.repeat(EW_interface_x[na], len(leg_points), axis=0)
-            EW_interface_y = np.repeat(EW_interface_y[na], len(leg_points), axis=0)
-            EW_interface_y += leg_points[:, na, na] * self.hy
+            EW_interface_x, EW_interface_y = quadrature_mesh(
+                x=self.x_interface, y=self.y, quadrature=leg_points, axis=0
+            )
             EW_midpoint_x, EW_midpoint_y = np.meshgrid(self.x_interface, self.y)
             # NS interface
-            NS_interface_x, NS_interface_y = np.meshgrid(self.x, self.y_interface)
-            NS_interface_x = np.repeat(NS_interface_x[na], len(leg_points), axis=0)
-            NS_interface_y = np.repeat(NS_interface_y[na], len(leg_points), axis=0)
-            NS_interface_x += leg_points[:, na, na] * self.hx
+            NS_interface_x, NS_interface_y = quadrature_mesh(
+                x=self.x, y=self.y_interface, quadrature=leg_points, axis=1
+            )
             NS_midpoint_x, NS_midpoint_y = np.meshgrid(self.x, self.y_interface)
             # evaluate v components normal to cell interfaces
             xx_center, yy_center = np.meshgrid(self.x, self.y)
             if isinstance(v, tuple):
-                self.a = v[0] * np.ones(EW_interface_y.shape)
-                self.a_midpoint = v[0] * np.ones(EW_midpoint_x.shape)
-                self.a_cell_centers = v[0] * np.ones(xx_center.shape)
+                vx = v[0]
+                self.a = vx * np.ones_like(EW_interface_y)
+                self.a_midpoint = vx * np.ones_like(EW_midpoint_x)
+                self.a_cell_centers = vx * np.ones_like(xx_center)
                 if len(v) == 1:
-                    self.b = v[0] * np.ones(NS_interface_x.shape)
-                    self.b_midpoint = v[0] * np.ones(NS_midpoint_y.shape)
-                    self.b_cell_centers = v[0] * np.ones(yy_center.shape)
+                    vy = v[0]
                 elif len(v) == 2:
-                    self.b = v[1] * np.ones(NS_interface_x.shape)
-                    self.b_midpoint = v[1] * np.ones(NS_midpoint_y.shape)
-                    self.b_cell_centers = v[1] * np.ones(yy_center.shape)
-            if callable(v):
+                    vy = v[1]
+                self.b = vy * np.ones_like(NS_interface_x)
+                self.b_midpoint = vy * np.ones_like(NS_midpoint_y)
+                self.b_cell_centers = vy * np.ones_like(yy_center)
+            elif callable(v):
                 self.a = v(EW_interface_x, EW_interface_y)[0]
                 self.b = v(NS_interface_x, NS_interface_y)[1]
                 self.a_midpoint = v(EW_midpoint_x, EW_midpoint_y)[0]
                 self.b_midpoint = v(NS_midpoint_x, NS_midpoint_y)[1]
                 self.a_cell_centers = v(xx_center, yy_center)[0]
                 self.b_cell_centers = v(xx_center, yy_center)[1]
-            if self.flux_strategy == "transverse":  # apply boundary for transverse flux
-                self.a = self.apply_bc(
-                    self.a, gw=[(0,), (self.transverse_width,), (0,)]
+            if self.flux_strategy == "transverse":
+                # extrapolate velocity in boundary
+                extended_x_values = pad_uniform_extrap(self.x, self.transverse_width)
+                extended_y_values = pad_uniform_extrap(self.y, self.transverse_width)
+                EW_interface_x, EW_interface_y = quadrature_mesh(
+                    x=self.x_interface,
+                    y=extended_y_values,
+                    quadrature=leg_points,
+                    axis=0,
                 )
-                self.b = self.apply_bc(
-                    self.b, gw=[(0,), (0,), (self.transverse_width,)]
+                NS_interface_x, NS_interface_y = quadrature_mesh(
+                    x=extended_x_values,
+                    y=self.y_interface,
+                    quadrature=leg_points,
+                    axis=1,
                 )
+                if isinstance(v, tuple):
+                    self.a = vx * np.ones_like(EW_interface_x)
+                    self.b = vy * np.ones_like(NS_interface_x)
+                elif callable(v):
+                    self.a = v(EW_interface_x, EW_interface_y)[0]
+                    self.b = v(NS_interface_x, NS_interface_y)[1]
 
         # fluxes
         if self.ndim == 1:
@@ -470,24 +487,20 @@ class AdvectionSolver(Integrator):
             self.f = np.zeros((ny, nx + 1))  # east/west fluxes
             self.g = np.zeros((ny + 1, nx))  # north/south fluxes
 
-        # dynamic function assignment
+        # function assignment
         self.riemann_solver = upwinding
-
         if self.ndim == 1:
             self.get_fluxes = self.get_fluxes_1d
             self.compute_alpha = compute_alpha_1d
-        if self.ndim == 2:
+        elif self.ndim == 2:
             self.get_fluxes = self.get_fluxes_2d
             self.compute_alpha = compute_alpha_2d
-
         if modify_time_step:
             self.looks_good = self.check_mpp
-
         if self.flux_strategy == "gauss-legendre":
             self.integrate_fluxes = self.gauss_legendre_integral
         elif self.flux_strategy == "transverse":
             self.integrate_fluxes = self.transverse_integral
-
         if self.aposteriori_limiting:
             if self.ndim == 1:
                 self.aposteriori_limiter = self.revise_fluxes_1d
@@ -496,9 +509,9 @@ class AdvectionSolver(Integrator):
 
     def get_dynamics(self) -> np.ndarray:
         """
-        advection equation:
-        dudt + dfdx + dgdy = 0
-        f and g are fluxes in x and y
+        dudt of advection equation dudt + dfdx + dgdy = 0 where f and g are fluxes
+        returns:
+            dudt:   (nx,) or (ny, nx)
         """
         dfdx = self.hx_recip * (self.f[..., 1:] - self.f[..., :-1])
         dgdy = self.hy_recip * (self.g[1:, ...] - self.g[:-1, ...])
@@ -507,11 +520,11 @@ class AdvectionSolver(Integrator):
     def udot(self, u: np.ndarray, t: float = None, dt: float = None) -> np.ndarray:
         """
         args:
-            u       (ny, nx)
-            t_i     time at which u is defined
-            dt      timestep size from t_i to t_i+1
+            u:      cell volume averages (nx,) or (ny, nx)
+            t:      time at which u is defined
+            dt:     timestep size by which to step forward
         returns:
-            dudt    (ny, nx) at t_i
+            dudt:   dynamics of cell volume averages (nx,) or (ny, nx)
         """
         self.udot_evaluation_count += 1
         if not (self.cause_trouble and self.aposteriori_limiting):
@@ -522,46 +535,34 @@ class AdvectionSolver(Integrator):
 
     def apply_bc(
         self,
-        u_without_ghost_cells: np.ndarray,
-        gw: {tuple, list, int},
+        arr: np.ndarray,
+        pad_width: {int, tuple, list},
         mode="u",
     ) -> np.ndarray:
         """
         args:
-            u_without_ghost_cells   (ny, nx)
-            gw  a: int
-                applies a ghost width of a around the entire array
-                (a, b): tuple
-                applies a left hand ghost width of a and a right hand ghost with of b
-                around the entire array
-                [(a, b), (c, d), (e, f), ...]: list of tuples for every dimension
-                tip:
-                use [(a,), (c,), (e,), ...] for symmetric boundaries
-            param   'u', 'trouble'
+            arr:        (nx,) or (ny, nx), array without padding
+            pad_width:  see documanetation for np.pad
+            mode:       name of variable to be np padded
         returns:
-            u with periodic ghost zones
+            arr with padding
         """
-        return np.pad(
-            u_without_ghost_cells,
-            pad_width=gw,
-            **self.bc_config,
-            **self.constant_bc_config[mode],
-        )
+        return np.pad(arr, pad_width=pad_width, **self.bc_config[mode])
 
     def get_fluxes_1d(self, u: np.ndarray):
         """
         args:
-            u   (nx,)
+            u:          (nx,)
         overwrites:
-            self.a  (nx + 1,)
+            self.f:     (nx + 1,)
         """
         # interpolate points from line averages
         points = convolve_batch2d(
-            arr=self.apply_bc(u, gw=self.conservative_width + 1).reshape(1, -1),
+            arr=self.apply_bc(u, pad_width=self.conservative_width + 1).reshape(1, -1),
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, 1, -1),
         )
         points = points[0, :, 0, :]  # (# of interpolated points, # cells x
-        fallback = self.apply_bc(u, gw=1)
+        fallback = self.apply_bc(u, pad_width=1)
 
         # initialize trivial theta and related terms
         theta = np.ones_like(fallback)
@@ -575,7 +576,7 @@ class AdvectionSolver(Integrator):
                 midpoints = self.compute_cell_center(u)
                 mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
             theta, M_i, m_i = mpp_limiter(
-                u=self.apply_bc(u, gw=2),
+                u=self.apply_bc(u, pad_width=2),
                 points=mpp_limiting_points,
                 ones=not self.apriori_limiting,
                 zeros=self.cause_trouble,
@@ -588,7 +589,9 @@ class AdvectionSolver(Integrator):
             )
 
             # smooth extrema detection
-            alpha = self.compute_alpha(self.apply_bc(u, gw=4), zeros=not self.SED)
+            alpha = self.compute_alpha(
+                self.apply_bc(u, pad_width=4), zeros=not self.SED
+            )
             not_smooth_extrema = alpha < 1
 
             # revise theta with PAD then SED
@@ -612,20 +615,20 @@ class AdvectionSolver(Integrator):
     def get_fluxes_2d(self, u: np.ndarray):
         """
         args:
-            u   (ny, nx)
+            u:          (ny, nx)
         overwrites:
-            self.a  (ny, nx + 1)
-            self.b  (ny + 1, nx)
+            self.f:     (ny, nx + 1)
+            self.g:     (ny + 1, nx)
         """
         # interpolate line averages from cell averages
         horizontal_lines = convolve_batch2d(
-            arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
+            arr=self.apply_bc(u, pad_width=self.conservative_width + self.riemann_gw)[
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, -1, 1),
         )
         vertical_lines = convolve_batch2d(
-            arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
+            arr=self.apply_bc(u, pad_width=self.conservative_width + self.riemann_gw)[
                 np.newaxis
             ],
             kernel=self.line_stencils.reshape(self.n_line_stencils, 1, -1),
@@ -640,7 +643,7 @@ class AdvectionSolver(Integrator):
             arr=vertical_lines[0],
             kernel=self.pointwise_stencils.reshape(self.n_pointwise_stencils, -1, 1),
         )
-        fallback = self.apply_bc(u, gw=self.riemann_gw)
+        fallback = self.apply_bc(u, pad_width=self.riemann_gw)
 
         # initialize trivial theta and related terms
         theta = np.ones_like(fallback)
@@ -658,7 +661,7 @@ class AdvectionSolver(Integrator):
                 midpoints = self.compute_cell_center(u)
                 mpp_limiting_points = np.concatenate((mpp_limiting_points, midpoints))
             theta, M_ij, m_ij = mpp_limiter(
-                u=self.apply_bc(u, gw=self.riemann_gw + 1),
+                u=self.apply_bc(u, pad_width=self.riemann_gw + 1),
                 points=mpp_limiting_points,
                 zeros=self.cause_trouble,
             )
@@ -671,7 +674,7 @@ class AdvectionSolver(Integrator):
 
             # smooth extrema detection
             alpha = self.compute_alpha(
-                self.apply_bc(u, gw=self.riemann_gw + 3), zeros=not self.SED
+                self.apply_bc(u, pad_width=self.riemann_gw + 3), zeros=not self.SED
             )
             not_smooth_extrema = alpha < 1
 
@@ -720,21 +723,22 @@ class AdvectionSolver(Integrator):
     def compute_cell_center(self, u: np.ndarray) -> np.ndarray:
         """
         args:
-            u       cell volume averages with padding (m + p,) or (m + p, n + q)
+            u:              cell volume averages with padding
+                            (nx + p,) or (ny + p, nx + q)
         returns:
-            out     cell midpoints  (m,) or (m, n)
+            midpoints:      cell midpoints  (nx,) or (ny, nx)
         """
         if self.ndim == 1:
             midpoints = convolve_batch2d(
-                arr=self.apply_bc(u, gw=self.conservative_width + 1)[np.newaxis],
+                arr=self.apply_bc(u, pad_width=self.conservative_width + 1)[np.newaxis],
                 kernel=self.cell_center_stencil.reshape(1, -1),
             )
             return midpoints[0, 0, ...]
         elif self.ndim == 2:
             horizontal_lines = convolve_batch2d(
-                arr=self.apply_bc(u, gw=self.conservative_width + self.riemann_gw)[
-                    np.newaxis
-                ],
+                arr=self.apply_bc(
+                    u, pad_width=self.conservative_width + self.riemann_gw
+                )[np.newaxis],
                 kernel=self.cell_center_stencil.reshape(1, -1, 1),
             )
             midpoints = convolve_batch2d(
@@ -746,15 +750,15 @@ class AdvectionSolver(Integrator):
     def find_trouble(self, u: np.ndarray, dt: float) -> np.ndarray:
         """
         args:
-            u           cell volume averages    (m,) or (m, n)
-            dt          time step size
+            u:          cell volume averages (nx,) or (ny, nx)
+            dt:         time step size
         returns:
-            trouble     boolean array           (m,) or (m, n)
+            trouble:    boolean array (nx,) or (ny, nx)
         """
         unew = u + dt * self.get_dynamics()
         trouble, M, m = find_trouble(
-            u=self.apply_bc(u, gw=1),
-            u_candidate=self.apply_bc(unew, gw=3),
+            u=self.apply_bc(u, pad_width=1),
+            u_candidate=self.apply_bc(unew, pad_width=3),
             NAD=self.NAD,
             PAD=self.approximated_maximum_principle,
             SED=self.SED,
@@ -769,14 +773,14 @@ class AdvectionSolver(Integrator):
     def revise_fluxes_1d(self, u: np.ndarray, dt: float):
         """
         args:
-            u           cell volume averages    (m,) or (m, n)
-            dt          time step size
+            u:          cell volume averages (nx,)
+            dt:         time step size
         overwrites:
-            self.f
+            self.f:     (nx + 1,)
         """
         # compute fallback fluxes
         left_fallback_face, right_fallback_face = compute_MUSCL_interpolations_1d(
-            u=self.apply_bc(u, gw=1),
+            u=self.apply_bc(u, pad_width=1),
             slope_limiter=self.fallback_limiter,
             fallback_to_1st_order=self.fallback_to_first_order,
             PAD=self.approximated_maximum_principle,
@@ -785,8 +789,8 @@ class AdvectionSolver(Integrator):
             h=self.hx,
             v_cell_centers=self.a_cell_centers,
         )
-        left_fallback_face = self.apply_bc(left_fallback_face, gw=1)
-        right_fallback_face = self.apply_bc(right_fallback_face, gw=1)
+        left_fallback_face = self.apply_bc(left_fallback_face, pad_width=1)
+        right_fallback_face = self.apply_bc(right_fallback_face, pad_width=1)
         fallback_fluxes = self.riemann_solver(
             v=self.a,
             left_value=right_fallback_face[:-1],
@@ -800,7 +804,7 @@ class AdvectionSolver(Integrator):
         else:
             troubled_interface_mask = (
                 broadcast_troubled_cells_to_faces_with_blending_1d(
-                    self.apply_bc(trouble, gw=2, mode="trouble")
+                    self.apply_bc(trouble, pad_width=2, mode="trouble")
                 )
             )
         self.f[...] = (
@@ -810,16 +814,16 @@ class AdvectionSolver(Integrator):
     def revise_fluxes_2d(self, u: np.ndarray, dt: float):
         """
         args:
-            u           cell volume averages    (m,) or (m, n)
-            dt          time step size
+            u:          cell volume averages (ny, nx)
+            dt:         time step size
         overwrites:
-            self.f
-            self.g
+            self.f:     (ny, nx + 1)
+            self.g:     (ny + 1, nx)
         """
         # compute fallback fluxes
         if self.fallback_limiter.__name__ in {"minmod", "moncen"}:
             fallback_faces = compute_MUSCL_interpolations_2d(
-                u=self.apply_bc(u, gw=1),
+                u=self.apply_bc(u, pad_width=1),
                 slope_limiter=self.fallback_limiter,
                 fallback_to_1st_order=self.fallback_to_first_order,
                 PAD=self.approximated_maximum_principle,
@@ -830,16 +834,16 @@ class AdvectionSolver(Integrator):
             )
         elif self.fallback_limiter.__name__ == "compute_PP2D_interpolations":
             fallback_faces = self.fallback_limiter(
-                u=self.apply_bc(u, gw=1),
+                u=self.apply_bc(u, pad_width=1),
                 hancock=self.hancock,
                 dt=self.dt,
                 h=(self.hx, self.hy),
                 v_cell_centers=(self.a_cell_centers, self.b_cell_centers),
             )
-        north_face = self.apply_bc(fallback_faces[1][1], gw=1)
-        south_face = self.apply_bc(fallback_faces[1][0], gw=1)
-        east_face = self.apply_bc(fallback_faces[0][1], gw=1)
-        west_face = self.apply_bc(fallback_faces[0][0], gw=1)
+        north_face = self.apply_bc(fallback_faces[1][1], pad_width=1)
+        south_face = self.apply_bc(fallback_faces[1][0], pad_width=1)
+        east_face = self.apply_bc(fallback_faces[0][1], pad_width=1)
+        west_face = self.apply_bc(fallback_faces[0][0], pad_width=1)
         fallback_fluxes_x = self.riemann_solver(
             v=self.a_midpoint,
             left_value=east_face[1:-1, :-1],
@@ -863,7 +867,7 @@ class AdvectionSolver(Integrator):
                 troubled_interface_mask_x,
                 troubled_interface_mask_y,
             ) = broadcast_troubled_cells_to_faces_with_blending_2d(
-                self.apply_bc(trouble, gw=2, mode="trouble")
+                self.apply_bc(trouble, pad_width=2, mode="trouble")
             )
         self.f[...] = (
             1 - troubled_interface_mask_x
@@ -872,22 +876,26 @@ class AdvectionSolver(Integrator):
             1 - troubled_interface_mask_y
         ) * self.g + troubled_interface_mask_y * fallback_fluxes_y
 
-    def gauss_legendre_integral(self, pointwise_fluxes: np.ndarray, axis: int):
+    def gauss_legendre_integral(
+        self, pointwise_fluxes: np.ndarray, axis: int
+    ) -> np.ndarray:
         """
         args:
-            pointwise_fluxes    (p, m, n)
+            pointwise_fluxes:   (p, m, n)
         returns:
-            out                 (1, 1, m, n)
+            out:                (1, 1, m, n)
         """
         na = np.newaxis
         return np.sum(pointwise_fluxes * self.leg_weights, axis=0)[na, na]
 
-    def transverse_integral(self, pointwise_fluxes: np.ndarray, axis: int):
+    def transverse_integral(
+        self, pointwise_fluxes: np.ndarray, axis: int
+    ) -> np.ndarray:
         """
         args:
-            pointwise_fluxes    (1, m + excess, n) or (1, m, n + excess)
+            pointwise_fluxes:   (1, m + excess, n) or (1, m, n + excess)
         returns:
-            out                 (1, 1, m, n)
+            out:                (1, 1, m, n)
         """
         kernel_shape = [1, 1, 1]
         kernel_shape[axis + 1] = len(self.transverse_stencil)
@@ -917,9 +925,9 @@ class AdvectionSolver(Integrator):
     def periodic_error(self, norm: str = "l1"):
         """
         args:
-            norm    'l1', 'l2', or 'linf'
+            norm:   'l1', 'l2', or 'linf'
         returns:
-            norm specified error    (ny, nx)
+            out:    norm specified error (nx,) or (ny, nx)
         """
         approx = self.snapshots[-1]["u"]
         truth = self.snapshots[0]["u"]
@@ -957,8 +965,7 @@ class AdvectionSolver(Integrator):
 
     def step_cleanup(self):
         """
-        self.t0 has been overwritten with t0 + dt
-        self.u0 has been overwritten with the state at t0 + dt
+        reset values of attributes which accumulate over substeps
         """
         # clear theta sum, troubled cell sum, and evaluation count
         self.theta[...] = 0.0

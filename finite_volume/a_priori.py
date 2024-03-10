@@ -1,3 +1,7 @@
+"""
+defines functions for computing the a priori slope limiting parameter, theta
+"""
+
 import numpy as np
 from finite_volume.utils import f_of_3_neighbors, f_of_5_neighbors, np_floor
 

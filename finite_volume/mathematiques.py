@@ -1,3 +1,7 @@
+"""
+verbose module which defines various useful functions and classes
+"""
+
 import numpy as np
 import dataclasses
 

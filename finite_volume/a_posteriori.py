@@ -1,3 +1,8 @@
+"""
+defines functions for predicting whether a finite volume cell is "toubled" and computing
+robust, fallback fluxes
+"""
+
 import numpy as np
 from typing import Tuple
 from finite_volume.sed import compute_alpha_1d, compute_alpha_2d

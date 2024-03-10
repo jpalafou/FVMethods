@@ -1,3 +1,7 @@
+"""
+defines riemann solver functions
+"""
+
 import numpy as np
 
 

@@ -1,3 +1,7 @@
+"""
+defines the Integrator class, used for forward-stepping schemes
+"""
+
 import dataclasses
 import numpy as np
 import abc

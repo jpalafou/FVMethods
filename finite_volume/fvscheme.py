@@ -1,3 +1,7 @@
+"""
+defines classes for computing interpolation polynomials as stencils
+"""
+
 from abc import abstractmethod
 import dataclasses
 import numpy as np

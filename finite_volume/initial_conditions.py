@@ -1,3 +1,8 @@
+"""
+defines commonly used initial conditions
+"""
+
+
 import numpy as np
 
 

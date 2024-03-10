@@ -1,3 +1,7 @@
+"""
+defines useful functions which I haven't bothered to categorize
+"""
+
 from itertools import product
 import numpy as np
 
@@ -177,6 +181,21 @@ def np_floor(x: np.ndarray, floor: float) -> np.ndarray:
     return np.where(x < floor, floor, x)
 
 
+def pad_uniform_extrap(x: np.ndarray, pad_width: int) -> np.ndarray:
+    """
+    args:
+        x:          1D array of uniformly spaced values (m,)
+        pad_width:  number of pad elements on either side
+    returns:
+        out:        1D array continuing the uniformly spaced array (m + 2 * pad_width,)
+    """
+    h = np.mean(x[1:] - x[:-1])
+    out = np.pad(x, pad_width)
+    out[slice(None, pad_width)] = h * np.arange(-pad_width, 0) + x[0]
+    out[slice(-pad_width, None)] = h * np.arange(1, pad_width + 1) + x[-1]
+    return out
+
+
 def rk4_dt_adjust(n: int, spatial_order: int) -> float:
     """
     args:
@@ -186,6 +205,33 @@ def rk4_dt_adjust(n: int, spatial_order: int) -> float:
         courant factor which makes rk4 have the same order of accuracy as spatial_order
     """
     return (1 / n) ** max((spatial_order - 4) / 4, 0)
+
+
+def quadrature_mesh(
+    x: np.ndarray, y: np.ndarray, quadrature: np.ndarray, axis: int
+) -> tuple:
+    """
+    args:
+        x:              1d array (n,)
+        y:              1d array (m,)
+        quadrature:     1d array (k,), values in [-0.5, 0.5]
+        axis:           0 or 1
+    returns:
+        xx:             xx spaced by quadratrue values along axis 0 if axis == 1
+                        3d array (k, m, n)
+        yy:             yy spaced by quadratrue values along axis 0 if axis == 0
+                        3d array (k, m, n)
+    """
+    hx, hy = np.mean(x[1:] - x[:-1]), np.mean(y[1:] - y[:-1])
+    xx, yy = np.meshgrid(x, y)
+    na = np.newaxis
+    xx = np.repeat(xx[na], len(quadrature), axis=0)
+    yy = np.repeat(yy[na], len(quadrature), axis=0)
+    if axis == 0:
+        yy += quadrature[:, na, na] * hy
+    elif axis == 1:
+        xx += quadrature[:, na, na] * hx
+    return xx, yy
 
 
 def transpose_in_other_direction(x: np.ndarray) -> np.ndarray:

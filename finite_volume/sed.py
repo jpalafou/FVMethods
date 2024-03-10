@@ -1,3 +1,8 @@
+"""
+defines functions for determining whether a cell is a "smooth extrema", where slope
+limiting should be turned off
+"""
+
 import numpy as np
 from finite_volume.utils import chopchop, avoid_0
 
