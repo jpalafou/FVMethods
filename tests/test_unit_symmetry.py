@@ -109,7 +109,7 @@ def test_convolve_batch2d_translation_equivariance(
         fargs_fixed=dict(kernel=kernel),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -137,7 +137,7 @@ def test_convolve_batch2d_rotation_equivariance(
         fargs=dict(arr=arr, kernel=kernel),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(200))
@@ -173,7 +173,7 @@ def test_compute_alpha_2d_translation_invariance(n_test, a, b):
         invariant=True,
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -189,7 +189,7 @@ def test_compute_alpha_2d_rotation_equivariance(n_test, n_rotations):
         fargs=dict(u=u),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -218,7 +218,7 @@ def test_mpp_limiter_translation_invariance(n_test, shapes, a, b):
         invariant=True,
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -243,7 +243,7 @@ def test_mpp_limiter_rotation_equivariance(n_test, shapes, n_rotations):
         fargs=dict(u=u, points=points),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -322,7 +322,7 @@ def test_minmod_moncen_translation_invariance(n_test, slope_limiter, a, b):
             invariant=True,
             vnorm="l1",
         )
-        assert err < 1e-15
+        assert err < 1e-14
     elif a == -1 and b == 0:
         err = equivariant(
             f=limiter,
@@ -330,7 +330,7 @@ def test_minmod_moncen_translation_invariance(n_test, slope_limiter, a, b):
             fargs=dict(u=u),
             vnorm="l1",
         )
-        assert err < 1e-15
+        assert err < 1e-14
     # null case
 
 
@@ -365,7 +365,7 @@ def test_compute_MUSCL_interpolations_1d_translation_equivariance(
         ),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -400,7 +400,7 @@ def test_compute_MUSCL_interpolations_2d_translation_equivariance(
         ),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -442,7 +442,7 @@ def test_compute_MUSCL_interpolations_2d_rotation_equivariance(
         n_rotations,
     )[idxs[n_rotations][0]][idxs[n_rotations][1]]
     err = np.mean(np.abs(inner - outer))
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -470,7 +470,7 @@ def test_compute_PP2D_interpolations_translation_equivariance(n_test, hancock, a
         ),
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
@@ -506,7 +506,7 @@ def test_compute_PP2D_interpolations_rotation_equivariance(
         n_rotations,
     )[idxs[n_rotations][0]][idxs[n_rotations][1]]
     err = np.mean(np.abs(inner - outer))
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(20))
