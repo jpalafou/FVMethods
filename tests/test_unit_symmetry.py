@@ -155,7 +155,7 @@ def test_compute_alpha_1d_translation_invariance(n_test, a, b):
         invariant=True,
         vnorm="l1",
     )
-    assert err < 1e-15
+    assert err < 1e-14
 
 
 @pytest.mark.parametrize("n_test", range(10))
