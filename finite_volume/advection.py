@@ -949,12 +949,15 @@ class AdvectionSolver(Integrator):
             arr=pointwise_fluxes, kernel=self.transverse_stencil.reshape(kernel_shape)
         )
 
-    def rkorder(self, ssp: bool = True):
+    def rkorder(self, ssp: bool = True, rk6: bool = False):
         """
         rk integrate to an order that matches the spatial order
         args:
             ssp:        whether to use strong-stability-preserving time integration
+            rk6:        whether to enable 6th order Runge-Kutta time integration
         """
+        if self.highest == 6 and not rk6:
+            raise BaseException("Set rk6=True or choose a different adjust_stepsize")
         if self.order == 1 or self.highest == 1:
             self.euler()
         elif self.order == 2 or self.highest == 2:
@@ -967,9 +970,9 @@ class AdvectionSolver(Integrator):
                 self.ssprk3()
             else:
                 self.rk3()
-        elif self.order == 4 or self.highest == 4:
+        elif self.order == 4 or self.highest == 4 or not rk6:
             self.rk4()
-        else:
+        elif rk6:
             self.rk6()
 
     def periodic_error(self, norm: str = "l1"):
