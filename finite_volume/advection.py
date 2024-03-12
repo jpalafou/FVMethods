@@ -1120,3 +1120,127 @@ class AdvectionSolver(Integrator):
             self.step_count + 1
         )
         return violations, stats
+
+    def _hide_small_violations(
+        self, i: int, spatial_slices: tuple, mode: str, tolerance: float
+    ) -> np.ndarray:
+        """
+        args:
+            i:                  snapshot index
+            spatial_slices:     tuple of slices
+            mode:               "theta"     ignore small abs(M_ij - u) & abs(m_ij - u)
+                                "trouble"   ignore small unew - M & m - unews
+            tolerance:          float
+                                -np.inf     return all violations
+        returns:
+            out:                theta or trouble where small violations are ignored
+        """
+        if len(spatial_slices) != self.ndim:
+            raise BaseException(f"Invalid array slicing for ndim={self.ndim}")
+        if mode == "theta":
+            ydata = self.snapshots[i]["theta"][spatial_slices]
+            hide_small_violations = np.logical_and(
+                self.snapshots[i]["abs(M_ij - u)"][spatial_slices] < tolerance,
+                self.snapshots[i]["abs(m_ij - u)"][spatial_slices] < tolerance,
+            )
+            out = np.where(hide_small_violations, 1, ydata)
+        elif mode == "trouble":
+            ydata = self.snapshots[i]["trouble"][spatial_slices]
+            hide_small_violations = np.logical_and(
+                self.snapshots[i]["unew - M"][spatial_slices] < tolerance,
+                self.snapshots[i]["m - unew"][spatial_slices] < tolerance,
+            )
+            out = np.where(hide_small_violations, 0, ydata)
+        return out
+
+    def plot_slice(
+        self,
+        ax,
+        i: int = -1,
+        x: float = None,
+        y: float = None,
+        mode: str = "u",
+        tolerance: float = 1e-5,
+        show_messages: bool = False,
+        **kwargs,
+    ):
+        """
+        args:
+            ax:             Axes instance from matplotlib
+            i:              snapshot index
+            x:              x-value to slice along. chooses closest.
+            y:              y-value to slice along. chooses closest.
+            mode:           variable to plot
+                                "u"
+                                "theta"     plots 1 - theta
+                                "trouble"
+            tolerance:      float       ignore small violations of theta or trouble
+                            -np.inf     plot all violations of theta or trouble
+            show_messages:  whether to print helpful messages
+            kwargs:         plt.plot(**kwargs)
+        returns:
+            see matplotlib.pyplot.plot()
+        """
+        if self.ndim == 1:
+            xdata = self.x
+            spatial_slices = (slice(None),)
+        elif self.ndim == 2:
+            if (x is None and y is None) or (x is not None and y is not None):
+                raise BaseException("Provide one value for x or y")
+            if x is None:
+                xdata = self.x
+                j = np.abs(self.y - y).argmin()
+                spatial_slices = (j, slice(None))
+                if show_messages:
+                    print(f"y={self.y[j]}")
+            elif y is None:
+                xdata = self.y
+                j = np.abs(self.x - x).argmin()
+                spatial_slices = (slice(None), j)
+                if show_messages:
+                    print(f"x={self.x[j]}")
+        if mode == "u":
+            ydata = self.snapshots[i][mode][spatial_slices]
+        elif mode in {"theta", "trouble"}:
+            ydata = self._hide_small_violations(
+                i=i, spatial_slices=spatial_slices, mode=mode, tolerance=tolerance
+            )
+        if mode == "theta":
+            ydata = 1 - ydata
+        return ax.plot(xdata, ydata, **kwargs)
+
+    def plot_map(
+        self, ax, i: int = -1, mode: str = "u", tolerance: float = 1e-5, **kwargs
+    ):
+        """
+        args:
+            ax:             Axes instance from matplotlib
+            i:              snapshot index
+            mode:           variable to plot
+                                "u"
+                                "theta"     plots 1 - theta
+                                "trouble"
+            tolerance:      float       ignore small violations of theta or trouble
+                            -np.inf     plot all violations of theta or trouble
+            kwargs:         plt.imshow(**kwargs)
+        returns:
+            see matplotlib.pyplot.imshow()
+        """
+        if self.ndim != 2:
+            raise BaseException("Map plot only defined for ndim=2")
+        if mode == "u":
+            zdata = self.snapshots[i][mode]
+            vmin, vmax = self.PAD
+        elif mode in {"theta", "trouble"}:
+            zdata = self._hide_small_violations(
+                i=i,
+                spatial_slices=(slice(None), slice(None)),
+                mode=mode,
+                tolerance=tolerance,
+            )
+            vmin, vmax = 0, 1
+        if mode == "theta":
+            zdata = 1 - zdata
+        limits = (self.x[0], self.x[-1], self.y[0], self.y[-1])
+        zdata = np.flipud(zdata)
+        return ax.imshow(zdata, extent=limits, **kwargs, vmin=vmin, vmax=vmax)
