@@ -57,10 +57,6 @@ class Integrator:
 
         # progress bar
         self.progress_bar = progress_bar
-        if self.progress_bar:
-            self.update_printout = self.update_progress_bar
-        else:
-            self.update_printout = lambda *args: None
 
     @abc.abstractmethod
     def udot(self, u: np.ndarray, t: float, dt: float) -> np.ndarray:
@@ -165,7 +161,8 @@ class Integrator:
                     move_on = True  # procees to next step
                     dt = self.dt  # reset dt
                     self.step_cleanup()
-                    self.update_printout(progress_bar)
+                    if self.progress_bar:
+                        self.update_progress_bar(progress_bar)
                 else:
                     dt = self.refine_timestep(dt)
                 # set timestep to dt_min if it is smaller
