@@ -125,9 +125,9 @@ class AdvectionSolver(Integrator):
         self.load = load
         u0_str = u0.__name__ if callable(u0) else str(u0)
         v_str = v.__name__ if callable(v) else str(v)
-        filename_components = [
+        filename_comps = [
             u0_str,
-            bc,
+            bc[0],  # use only first character
             const,
             n,
             x,
@@ -138,11 +138,11 @@ class AdvectionSolver(Integrator):
             v_str,
             courant,
             order,
-            flux_strategy,
+            flux_strategy[0],  # use only first character
             apriori_limiting,
             mpp_lite,
             aposteriori_limiting,
-            fallback_limiter,
+            fallback_limiter[:2],  # use only first two characters
             convex,
             hancock,
             fallback_to_first_order,
@@ -153,9 +153,10 @@ class AdvectionSolver(Integrator):
             adjust_time_step,
             modify_time_step,
             mpp_tolerance,
-            progress_bar,
         ]
-        self._filename = "_".join(str(component) for component in filename_components)
+        TF = {True: "T", False: "F"}
+        filename_comps = [TF[s] if isinstance(s, bool) else s for s in filename_comps]
+        self._filename = "_".join(str(s) for s in filename_comps)
         self._save_directory = save_directory
         self.save = save
 
