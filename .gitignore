@@ -1,5 +1,6 @@
 # directories
-data/
+bin/
+**/data/
 
 # Distribution / packaging
 develop-eggs/

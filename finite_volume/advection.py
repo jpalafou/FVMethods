@@ -31,7 +31,7 @@ from finite_volume.a_posteriori import (
 )
 from finite_volume.utils import (
     convolve_batch2d,
-    rk4_dt_adjust,
+    RK_dt_adjust,
     pad_uniform_extrap,
     quadrature_mesh,
 )
@@ -43,48 +43,81 @@ class AdvectionSolver(Integrator):
     """
     args:
         u0:                         initial condition, keywork or callable function
-        bc:                         "periodic" or "dirichlet"
-        const:                      for dirichlet bc
-                                    {"u": u_const, "trouble": trouble_const}
-        n:                          tuple of number of cells in x and y
+        bc:                         boundary condition type
+                                        "periodic"
+                                        "dirichlet"
+        const:                      constant boundary values for bc = "dirichlet"
+                                        None
+                                        {"u": u_const, "trouble": trouble_const}
+        n:                          number of finite volumes (cells)
+                                        float   (nx)        1D grid
+                                        tuple   (ny, nx)    2D grid
+                                                (nboth,)    square grid
         x:                          tuple of boundaries in x
-        y:                          tuple of boundaries in y, x is used if None
+                                        (xleft, xright)
+        y:                          tuple of boundaries in y
+                                        None                if 2D grid, x is used
+                                        (yleft, yright)
         t0:                         starting time
         snapshot_dt:                dt for snapshots
         num_snapshots:              number of times to evolve system by snapshot_dt
-        v:                          float v_1d for 1D solver
-                                    tuple (vx, vy) or (vxy_shared,) for 2D solver
-                                    callable v(xx, yy) for 2D solver
-        courant:                    stability condition
-        order:                      accuracy requirement for polynomial interpolation
-        flux_strategy:              'gauss-legendre' or 'transverse'
-    slope limiter settings - - - - -
-    a priori limiting ~
-        apriori_limiting:           whether to follow zhang and shu mpp limiting
-        mpp_lite:                   cell center is the only interior point
-    a posteriori limiting ~
-        aposteriori_limiting:       whether to call trouble detection and 2d fallback
-        fallback_limiter:           'moncen', 'minmod', or 'PP2D'
-        convex:                     a more mpp version of a posteriori limiting
-        hancock:                    predictor corrector scheme for fallback
-        fallback_to_first_order:    fallback again to first order in the fallback scheme
-        cause_trouble:              set all cells to be troubled, forcing 2d fallback
-    ~
-        SED:                        whether to enable smooth extrema detection
-        NAD:                        simulation NAD tolerance for a posteriori limiting
-                                        set to None or +inf to disable NAD
-        PAD:                        physical admissibility detection (lower, upper)
-                                        set to None or (-inf, +inf) to disable PAD
+        v:                          advection velocity
+                                        float       (v1d)       uniform 1D flow
+                                        tuple       (vx, vy)    uniform 2D flow
+                                                    (vboth,)
+                                        callable    v(xx, yy)   2D velocity field
+        courant:                    CFL factor
+        order:                      accuracy requirement for spatial discretization
+        flux_strategy:              quadrature for integrating fluxes
+                                        'gauss-legendre'
+                                        'transverse'        cheaper option for 2D grid
+        apriori_limiting:           whether to use Zhang and Shu MPP slope limiting
+        mpp_lite:                   whether to use a variation of apriori_limiting
+                                    where the cell center is the only interior point
+        aposteriori_limiting:       whether to detect troubled cells and revise fluxes
+                                    with a fallback scheme
+        fallback_limiter:           name of fallback slope limiter
+                                        'minmod'
+                                        'moncen'
+                                        'PP2D'      MPP option for 2D grid
+        convex:                     whether to smooth the troubled cell revision masks
+        hancock:                    whether to use a predictor corrector scheme when
+                                    computing fallback fluxes. if True, the fallback
+                                    scheme is MUSCL-Hancock.
+        fallback_to_first_order:    whether to fall back again to first-order fluxes in
+                                    the presence of PAD violations (see PAD).
+        cause_trouble:              all cells are always flagged as troubled
+        SED:                        whether to disable slope limiting in the presence
+                                    of smooth extrema detection
+        NAD:                        tolerance for numerical admissibility detection in
+                                    a posteriori limiting
+                                        float > 0       implement NAD tolerance
+                                        None or np.inf  disable NAD
+        PAD:                        physical admissibility detection
+                                        (lower_bound, upper_bound)  implement PAD
+                                        None or (-np.inf, np.inf)   disable PAD
     - - - - -
-        adjust_time_step:           whether to reduce timestep for order >4
-        modify_time_step:           whether to conditionally reduce dt by half
-        mpp_tolerance:              maximum principle tolerance for adaptive time step
+        adjust_stepsize:            highest-order time integration scheme used when the
+                                    time step size is adjusted to artificially increase
+                                    the order of accuracy of the solution to 'order'
+                                        None    do not adjust the time step size
+                                        int
+        adaptive_stepsize:          whether to use an adaptive time step size, halving
+                                    dt in the precense of an MPP violation. only use
+                                    this with an MPP scheme.
+        mpp_tolerance:              tolerance added to PAD to avoid triggering the
+                                    slope limiter in uniform regions
+                                        float
+                                        None or 0.0     0-tolerance
+                                        np.inf          disable PAD
         progress_bar:               whether to print a progress bar in the loop
-        load:                       whether to load precalculated solution
-        save:                       whether to overwrite saved instance
-        save_directory:             directory from which to read/write
+        load:                       whether to load precalculated solution at
+                                    save_directory/self._filename
+        save:                       whether to write freshly calculated solution to
+                                    save_directory/self._filename
+        save_directory:             directory from which to read/write self._filename
     returns:
-        self.snapshots:             [{t: t0, u: u0, ...}, ...]
+        self.snapshots:             list of snapshots [{t: t0, u: u0, ...}, ...]
     """
 
     def __init__(
@@ -105,7 +138,7 @@ class AdvectionSolver(Integrator):
         apriori_limiting: bool = False,
         mpp_lite: bool = False,
         aposteriori_limiting: bool = False,
-        fallback_limiter: str = "moncen",
+        fallback_limiter: str = "minmod",
         convex: bool = False,
         hancock: bool = False,
         fallback_to_first_order: bool = False,
@@ -113,8 +146,8 @@ class AdvectionSolver(Integrator):
         SED: bool = False,
         NAD: float = 1e-5,
         PAD: tuple = (0, 1),
-        adjust_time_step: bool = False,
-        modify_time_step: bool = False,
+        adjust_stepsize: int = None,
+        adaptive_stepsize: bool = False,
         mpp_tolerance: float = 1e-10,
         progress_bar: bool = True,
         load: bool = True,
@@ -150,8 +183,8 @@ class AdvectionSolver(Integrator):
             SED,
             NAD,
             PAD,
-            adjust_time_step,
-            modify_time_step,
+            adjust_stepsize,
+            adaptive_stepsize,
             mpp_tolerance,
         ]
         TF = {True: "T", False: "F"}
@@ -224,7 +257,7 @@ class AdvectionSolver(Integrator):
                 raise BaseException("Invalid velocity vector for 2-dimensional domain")
 
         # time discretization
-        self.adjust_time_step = adjust_time_step
+        self.adjust_stepsize = adjust_stepsize
         self.order = order
         self.p = order - 1
         v_over_h = vx_max / self.hx + vy_max / self.hy
@@ -232,9 +265,19 @@ class AdvectionSolver(Integrator):
             print("0 velocity case: setting v / h to 0.1")
             v_over_h = 0.1
         self.courant = courant
-        if adjust_time_step and order > 4:
-            adjusted_courant = min(rk4_dt_adjust(nx, order), rk4_dt_adjust(ny, order))
-            if adjusted_courant < courant:
+        self.highest = adjust_stepsize
+        if adjust_stepsize is not None:
+            available = np.array([1, 2, 3, 4, 6])
+            if self.highest not in available:
+                raise NotImplementedError(f"Order {self.highest} integrator")
+            available = available[available <= self.highest]
+            sufficient = available[available >= order]
+            temporder = max(available) if sufficient.size == 0 else min(sufficient)
+            adjusted_courant = courant * min(
+                RK_dt_adjust(h=self.hx, spatial_order=order, temporal_order=temporder),
+                RK_dt_adjust(h=self.hy, spatial_order=order, temporal_order=temporder),
+            )
+            if order > temporder and adjusted_courant < courant:
                 self.courant = adjusted_courant
                 print(f"Reassigned C={self.courant} for order {order}")
         dt = self.courant / v_over_h
@@ -331,7 +374,7 @@ class AdvectionSolver(Integrator):
         self.SED = SED
         self.NAD = np.inf if NAD is None else NAD
         self.PAD = (-np.inf, np.inf) if PAD is None else PAD
-        self.mpp_tolerance = np.inf if mpp_tolerance is None else mpp_tolerance
+        self.mpp_tolerance = 0.0 if mpp_tolerance is None else mpp_tolerance
         self.approximated_maximum_principle = (
             self.PAD[0] - self.mpp_tolerance,
             self.PAD[1] + self.mpp_tolerance,
@@ -499,7 +542,7 @@ class AdvectionSolver(Integrator):
         elif self.ndim == 2:
             self.get_fluxes = self.get_fluxes_2d
             self.compute_alpha = compute_alpha_2d
-        if modify_time_step:
+        if adaptive_stepsize:
             self.looks_good = self.check_mpp
         if self.flux_strategy == "gauss-legendre":
             self.integrate_fluxes = self.gauss_legendre_integral
@@ -909,21 +952,25 @@ class AdvectionSolver(Integrator):
     def rkorder(self, ssp: bool = True):
         """
         rk integrate to an order that matches the spatial order
+        args:
+            ssp:        whether to use strong-stability-preserving time integration
         """
-        if self.order < 2:
+        if self.order == 1 or self.highest == 1:
             self.euler()
-        elif self.order < 3:
+        elif self.order == 2 or self.highest == 2:
             if ssp:
                 self.ssprk2()
             else:
                 self.rk2()
-        elif self.order < 4:
+        elif self.order == 3 or self.highest == 3:
             if ssp:
                 self.ssprk3()
             else:
                 self.rk3()
-        else:
+        elif self.order == 4 or self.highest == 4:
             self.rk4()
+        else:
+            self.rk6()
 
     def periodic_error(self, norm: str = "l1"):
         """

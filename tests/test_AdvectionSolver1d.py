@@ -141,11 +141,11 @@ def test_mesh_convergence(order):
         dict(apriori_limiting=True, mpp_lite=True),
     ],
 )
-@pytest.mark.parametrize("modify_time_step", [False, True])
+@pytest.mark.parametrize("adaptive_stepsize", [False, True])
 @pytest.mark.parametrize("mpp_tolerance", [1e-15])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5, 6, 7, 8])
 @pytest.mark.parametrize("SED", [False, True])
-def test_a_priori_mpp_1d(limiter_config, modify_time_step, mpp_tolerance, order, SED):
+def test_a_priori_mpp_1d(limiter_config, adaptive_stepsize, mpp_tolerance, order, SED):
     solution = AdvectionSolver(
         u0="composite",
         bc="periodic",
@@ -155,8 +155,8 @@ def test_a_priori_mpp_1d(limiter_config, modify_time_step, mpp_tolerance, order,
         v=1,
         snapshot_dt=1,
         num_snapshots=1,
-        courant=C_for_mpp[order] if not modify_time_step else 0.8,
-        modify_time_step=modify_time_step,
+        courant=C_for_mpp[order] if not adaptive_stepsize else 0.8,
+        adaptive_stepsize=adaptive_stepsize,
         mpp_tolerance=mpp_tolerance,
         **limiter_config,
         SED=SED,

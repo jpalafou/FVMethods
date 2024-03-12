@@ -198,15 +198,18 @@ def pad_uniform_extrap(x: np.ndarray, pad_width: int) -> np.ndarray:
     return out
 
 
-def rk4_dt_adjust(n: int, spatial_order: int) -> float:
+def RK_dt_adjust(h: float, spatial_order: int, temporal_order: int = 4) -> float:
     """
     args:
-        n:              number of cells
-        spatial_order:  of accuracy
+        h:                  finite volume discretization size
+        spatial_order:      of accuracy
+        temporal_order:     of accuracy
     returns:
-        courant factor which makes rk4 have the same order of accuracy as spatial_order
+        cfl_ajustment:      courant factor multiplier which makes nth order RK have
+                            spatial_order order of accuracy
     """
-    return (1 / n) ** max((spatial_order - 4) / 4, 0)
+    cfl_ajustment = h ** max((spatial_order - temporal_order) / temporal_order, 0)
+    return cfl_ajustment
 
 
 def quadrature_mesh(
