@@ -9,7 +9,7 @@ where u are cell volume averages and f and g are fluxes in x and y, respectively
 import numpy as np
 import os
 import pickle
-from typing import Tuple, Union
+from typing import Tuple
 from finite_volume.a_priori import mpp_cfl, mpp_limiter
 from finite_volume.a_posteriori import (
     broadcast_troubled_cells_to_faces_1d,
@@ -195,7 +195,7 @@ class AdvectionSolver(Integrator):
         # dimensionality
         if isinstance(n, int):
             self.ndim = 1
-        elif isinstance(n, Union[tuple, list]) and len(n) in {1, 2}:
+        elif isinstance(n, (tuple, list)) and len(n) in {1, 2}:
             self.ndim = 2
         else:
             raise BaseException("n: expected int or tuple of length 1 or 2")
@@ -235,14 +235,14 @@ class AdvectionSolver(Integrator):
 
         # maximum expected advection velocities
         if self.ndim == 1:  # uniform 1d velocity
-            if isinstance(v, Union[int, float]):
+            if isinstance(v, (int, float)):
                 vx_max, vy_max = abs(v), 0
             else:
                 raise BaseException("Expected scalar velocity for 1-dimensional domain")
         if self.ndim == 2:
             if isinstance(v, int):
                 raise BaseException("Expected vector velocity for 2-dimensional domain")
-            elif isinstance(v, Union[tuple, list]):  # uniform 2d velocity
+            elif isinstance(v, (tuple, list)):  # uniform 2d velocity
                 if len(v) == 1:
                     vx_max, vy_max = abs(v[0]), abs(v[0])
                 elif len(v) == 2:
@@ -483,7 +483,7 @@ class AdvectionSolver(Integrator):
             NS_midpoint_x, NS_midpoint_y = np.meshgrid(self.x, self.y_interface)
             # evaluate v components normal to cell interfaces
             xx_center, yy_center = np.meshgrid(self.x, self.y)
-            if isinstance(v, Union[tuple, list]):
+            if isinstance(v, (tuple, list)):
                 vx = v[0]
                 self.a = vx * np.ones_like(EW_interface_y)
                 self.a_midpoint = vx * np.ones_like(EW_midpoint_x)
@@ -518,7 +518,7 @@ class AdvectionSolver(Integrator):
                     quadrature=leg_points,
                     axis=1,
                 )
-                if isinstance(v, Union[tuple, list]):
+                if isinstance(v, (tuple, list)):
                     self.a = vx * np.ones_like(EW_interface_x)
                     self.b = vy * np.ones_like(NS_interface_x)
                 elif callable(v):
