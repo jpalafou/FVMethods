@@ -171,9 +171,9 @@ def test_a_priori_mpp_1d(limiter_config, adaptive_stepsize, mpp_tolerance, order
 )
 @pytest.mark.parametrize("hancock", [False, True])
 @pytest.mark.parametrize("fallback_limiter", ["minmod", "moncen"])
-@pytest.mark.parametrize("fallback_to_first_order", [False, True])
+@pytest.mark.parametrize("fallback_to_1st_order", [False, True])
 @pytest.mark.parametrize("SED", [False, True])
-def test_MUSCL_mpp_1d(IC_PAD, hancock, fallback_limiter, fallback_to_first_order, SED):
+def test_MUSCL_mpp_1d(IC_PAD, hancock, fallback_limiter, fallback_to_1st_order, SED):
     IC, PAD = IC_PAD
     solution = AdvectionSolver(
         u0=IC,
@@ -190,7 +190,7 @@ def test_MUSCL_mpp_1d(IC_PAD, hancock, fallback_limiter, fallback_to_first_order
         aposteriori_limiting=True,
         hancock=hancock,
         fallback_limiter=fallback_limiter,
-        fallback_to_first_order=fallback_to_first_order,
+        fallback_to_1st_order=fallback_to_1st_order,
         cause_trouble=True,
         SED=SED,
         save_directory=test_directory,

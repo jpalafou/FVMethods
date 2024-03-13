@@ -40,83 +40,83 @@ from finite_volume.utils import (
 class AdvectionSolver(Integrator):
     """
     args:
-        u0:                         initial condition, keywork or callable function
-        bc:                         boundary condition type
-                                        "periodic"
-                                        "dirichlet"
-        const:                      constant boundary values for bc = "dirichlet"
-                                        None
-                                        {"u": u_const, "trouble": trouble_const}
-        n:                          number of finite volumes (cells)
-                                        float   (nx)        1D grid
-                                        tuple   (ny, nx)    2D grid
-                                                (nboth,)    square grid
-        x:                          tuple of boundaries in x
-                                        (xleft, xright)
-        y:                          tuple of boundaries in y
-                                        None                if 2D grid, x is used
-                                        (yleft, yright)
-        t0:                         starting time
-        snapshot_dt:                dt for snapshots
-        num_snapshots:              number of times to evolve system by snapshot_dt
-        v:                          advection velocity
-                                        float       (v1d)       uniform 1D flow
-                                        tuple       (vx, vy)    uniform 2D flow
-                                                    (vboth,)
-                                        callable    v(xx, yy)   2D velocity field
-        courant:                    CFL factor
-                                        float   maximum CFL factor used in the solver
-                                        'mpp'   assigns a_priori.mpp_cfl(order)
-        order:                      accuracy requirement for spatial discretization
-        flux_strategy:              quadrature for integrating fluxes
-                                        'gauss-legendre'
-                                        'transverse'        cheaper option for 2D grid
-        apriori_limiting:           whether to use Zhang and Shu MPP slope limiting
-        mpp_lite:                   whether to use a variation of apriori_limiting
-                                    where the cell center is the only interior point
-        aposteriori_limiting:       whether to detect troubled cells and revise fluxes
-                                    with a fallback scheme
-        fallback_limiter:           name of fallback slope limiter
-                                        'minmod'
-                                        'moncen'
-                                        'PP2D'      MPP option for 2D grid
-        convex:                     whether to smooth the troubled cell revision masks
-        hancock:                    whether to use a predictor corrector scheme when
-                                    computing fallback fluxes. if True, the fallback
-                                    scheme is MUSCL-Hancock.
-        fallback_to_first_order:    whether to fall back again to first-order fluxes in
-                                    the presence of PAD violations (see PAD).
-        cause_trouble:              all cells are always flagged as troubled
-        SED:                        whether to disable slope limiting in the presence
-                                    of smooth extrema detection
-        NAD:                        tolerance for numerical admissibility detection in
-                                    a posteriori limiting
-                                        float > 0       implement NAD tolerance
-                                        None or np.inf  disable NAD
-        PAD:                        physical admissibility detection
-                                        (lower_bound, upper_bound)  implement PAD
-                                        None or (-np.inf, np.inf)   disable PAD
-        adjust_stepsize:            highest-order time integration scheme used when the
-                                    time step size is adjusted to artificially increase
-                                    the order of accuracy of the solution to 'order'
-                                        None    do not adjust the time step size
-                                        int
-        adaptive_stepsize:          whether to use an adaptive time step size, halving
-                                    dt in the precense of an MPP violation. only use
-                                    this with an MPP scheme.
-        mpp_tolerance:              tolerance added to PAD to avoid triggering the
-                                    slope limiter in uniform regions
-                                        float
-                                        None or 0.0     0-tolerance
-                                        np.inf          disable PAD
-        progress_bar:               whether to print a progress bar in the loop
-        load:                       whether to load precalculated solution at
-                                    save_directory/self._filename
-        save:                       whether to write freshly calculated solution to
-                                    save_directory/self._filename
-        save_directory:             directory from which to read/write self._filename
+        u0:                     initial condition, keywork or callable function
+        bc:                     boundary condition type
+                                    "periodic"
+                                    "dirichlet"
+        const:                  constant boundary values for bc = "dirichlet"
+                                    None
+                                    {"u": u_const, "trouble": trouble_const}
+        n:                      number of finite volumes (cells)
+                                    float   (nx)        1D grid
+                                    tuple   (ny, nx)    2D grid
+                                            (nboth,)    square grid
+        x:                      tuple of boundaries in x
+                                    (xleft, xright)
+        y:                      tuple of boundaries in y
+                                    None                if 2D grid, x is used
+                                    (yleft, yright)
+        t0:                     starting time
+        snapshot_dt:            dt for snapshots
+        num_snapshots:          number of times to evolve system by snapshot_dt
+        v:                      advection velocity
+                                    float       (v1d)       uniform 1D flow
+                                    tuple       (vx, vy)    uniform 2D flow
+                                                (vboth,)
+                                    callable    v(xx, yy)   2D velocity field
+        courant:                CFL factor
+                                    float   maximum CFL factor used in the solver
+                                    'mpp'   assigns a_priori.mpp_cfl(order)
+        order:                  accuracy requirement for spatial discretization
+        flux_strategy:          quadrature for integrating fluxes
+                                    'gauss-legendre'
+                                    'transverse'        cheaper option for 2D grid
+        apriori_limiting:       whether to use Zhang and Shu MPP slope limiting
+        mpp_lite:               whether to use a variation of apriori_limiting where
+                                the cell center is the only interior point
+        aposteriori_limiting:   whether to detect troubled cells and revise fluxes with
+                                a fallback scheme
+        fallback_limiter:       name of fallback slope limiter
+                                    'minmod'
+                                    'moncen'
+                                    'PP2D'      MPP option for 2D grid
+        convex:                 whether to smooth the troubled cell revision masks
+        hancock:                whether to use a predictor corrector scheme when
+                                computing fallback fluxes. if True, the fallback scheme
+                                is MUSCL-Hancock.
+        fallback_to_1st_order:  whether to fall back again to first-order fluxes in the
+                                presence of PAD violations (see PAD).
+        cause_trouble:          all cells are always flagged as troubled
+        SED:                    whether to disable slope limiting in the presence of
+                                smooth extrema detection
+        NAD:                    tolerance for numerical admissibility detection in a
+                                posteriori limiting
+                                    float > 0       implement NAD tolerance
+                                    None or np.inf  disable NAD
+        PAD:                    physical admissibility detection
+                                    (lower_bound, upper_bound)  implement PAD
+                                    None or (-np.inf, np.inf)   disable PAD
+        adjust_stepsize:        highest-order time integration scheme used when the
+                                time step size is adjusted to artificially increase the
+                                order of accuracy of the solution to 'order'
+                                    None    do not adjust the time step size
+                                    int
+        adaptive_stepsize:      whether to use an adaptive time step size, halving dt
+                                in the precense of an MPP violation. only use this
+                                option with an MPP scheme.
+        mpp_tolerance:          tolerance added to PAD to avoid triggering the slope
+                                limiter in uniform regions
+                                    float
+                                    None or 0.0     0-tolerance
+                                    np.inf          disable PAD
+        progress_bar:           whether to print a progress bar in the loop
+        load:                   whether to load precalculated solution at
+                                save_directory/self._filename
+        save:                   whether to write freshly calculated solution to
+                                save_directory/self._filename
+        save_directory:         directory from which to read/write self._filename
     returns:
-        self.snapshots:             list of snapshots [{t: t0, u: u0, ...}, ...]
+        self.snapshots:         list of snapshots [{t: t0, u: u0, ...}, ...]
     """
 
     def __init__(
@@ -140,7 +140,7 @@ class AdvectionSolver(Integrator):
         fallback_limiter: str = "minmod",
         convex: bool = False,
         hancock: bool = False,
-        fallback_to_first_order: bool = False,
+        fallback_to_1st_order: bool = False,
         cause_trouble: bool = False,
         SED: bool = False,
         NAD: float = 1e-5,
@@ -177,7 +177,7 @@ class AdvectionSolver(Integrator):
             fallback_limiter[:2],  # use only first two characters
             convex,
             hancock,
-            fallback_to_first_order,
+            fallback_to_1st_order,
             cause_trouble,
             SED,
             NAD,
@@ -360,14 +360,14 @@ class AdvectionSolver(Integrator):
         elif fallback_limiter == "PP2D":
             if self.ndim != 2:
                 raise BaseException("PP2D limiting is not defined for a 1D solver.")
-            if fallback_to_first_order:
+            if fallback_to_1st_order:
                 raise BaseException("PP2D does not fall back to first order.")
             self.fallback_limiter = compute_PP2D_interpolations
         else:
             raise BaseException("Invalid slope limiter")
         self.convex = convex
         self.hancock = hancock
-        self.fallback_to_first_order = fallback_to_first_order
+        self.fallback_to_1st_order = fallback_to_1st_order
 
         # SED, NAD, PAD
         self.SED = SED
@@ -827,7 +827,7 @@ class AdvectionSolver(Integrator):
         left_fallback_face, right_fallback_face = compute_MUSCL_interpolations_1d(
             u=self.apply_bc(u, pad_width=1),
             slope_limiter=self.fallback_limiter,
-            fallback_to_1st_order=self.fallback_to_first_order,
+            fallback_to_1st_order=self.fallback_to_1st_order,
             PAD=self.approximated_maximum_principle,
             hancock=self.hancock,
             dt=dt,
@@ -870,7 +870,7 @@ class AdvectionSolver(Integrator):
             fallback_faces = compute_MUSCL_interpolations_2d(
                 u=self.apply_bc(u, pad_width=1),
                 slope_limiter=self.fallback_limiter,
-                fallback_to_1st_order=self.fallback_to_first_order,
+                fallback_to_1st_order=self.fallback_to_1st_order,
                 PAD=self.approximated_maximum_principle,
                 hancock=self.hancock,
                 dt=self.dt,

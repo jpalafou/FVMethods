@@ -137,7 +137,7 @@ def test_MUSCLHancock():
         order=2,
         aposteriori_limiting=True,
         fallback_limiter="moncen",
-        fallback_to_first_order=False,
+        fallback_to_1st_order=False,
         hancock=True,
         cause_trouble=True,
         load=False,
