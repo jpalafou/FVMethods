@@ -1,8 +1,8 @@
-import pytest
 import numpy as np
+import pytest
 from random import random
-from finite_volume.mathematiques import Fraction, Polynome
 from finite_volume.fvscheme import Kernel, ConservativeInterpolation
+from finite_volume.mathematiques import Fraction, Polynome
 
 
 n_tests = 5

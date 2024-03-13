@@ -4,7 +4,7 @@ limiting should be turned off
 """
 
 import numpy as np
-from finite_volume.utils import chopchop, avoid_0
+from finite_volume.utils import avoid_0, chopchop
 
 
 def detect_smooth_extrema(u: np.ndarray, h: float = 1.0, axis: int = 0):

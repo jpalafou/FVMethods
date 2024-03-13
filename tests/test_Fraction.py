@@ -1,6 +1,6 @@
 # test the Fraction module
-import pytest
 from numpy.random import randint
+import pytest
 from finite_volume.mathematiques import Fraction
 
 

@@ -1,7 +1,7 @@
 # compare with the code from Romain's notebook
 
-import pytest
 import numpy as np
+import pytest
 from finite_volume.advection import AdvectionSolver
 from tests.simple_advection_solver import solve_high_order
 

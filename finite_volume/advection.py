@@ -6,17 +6,11 @@ du/dt + df/dx + dg/dy = 0   (2D)
 where u are cell volume averages and f and g are fluxes in x and y, respectively
 """
 
-# advection solution schems
 import numpy as np
 import os
 import pickle
-from typing import Tuple, Dict
-from finite_volume.initial_conditions import generate_ic
-from finite_volume.integrate import Integrator
-from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
-from finite_volume.mathematiques import gauss_lobatto
-from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
-from finite_volume.a_priori import mpp_limiter
+from typing import Tuple, Union
+from finite_volume.a_priori import mpp_cfl, mpp_limiter
 from finite_volume.a_posteriori import (
     broadcast_troubled_cells_to_faces_1d,
     broadcast_troubled_cells_to_faces_2d,
@@ -29,16 +23,20 @@ from finite_volume.a_posteriori import (
     minmod,
     moncen,
 )
+from finite_volume.initial_conditions import generate_ic
+from finite_volume.integrate import Integrator
+from finite_volume.fvscheme import ConservativeInterpolation, TransverseIntegral
+from finite_volume.mathematiques import gauss_lobatto
+from finite_volume.riemann import upwinding
+from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
 from finite_volume.utils import (
     convolve_batch2d,
-    RK_dt_adjust,
     pad_uniform_extrap,
     quadrature_mesh,
+    RK_dt_adjust,
 )
-from finite_volume.riemann import upwinding
 
 
-# class definition
 class AdvectionSolver(Integrator):
     """
     args:
@@ -67,6 +65,8 @@ class AdvectionSolver(Integrator):
                                                     (vboth,)
                                         callable    v(xx, yy)   2D velocity field
         courant:                    CFL factor
+                                        float   maximum CFL factor used in the solver
+                                        'mpp'   assigns a_priori.mpp_cfl(order)
         order:                      accuracy requirement for spatial discretization
         flux_strategy:              quadrature for integrating fluxes
                                         'gauss-legendre'
@@ -96,7 +96,6 @@ class AdvectionSolver(Integrator):
         PAD:                        physical admissibility detection
                                         (lower_bound, upper_bound)  implement PAD
                                         None or (-np.inf, np.inf)   disable PAD
-    - - - - -
         adjust_stepsize:            highest-order time integration scheme used when the
                                     time step size is adjusted to artificially increase
                                     the order of accuracy of the solution to 'order'
@@ -196,7 +195,7 @@ class AdvectionSolver(Integrator):
         # dimensionality
         if isinstance(n, int):
             self.ndim = 1
-        elif isinstance(n, tuple) and len(n) in {1, 2}:
+        elif isinstance(n, Union[tuple, list]) and len(n) in {1, 2}:
             self.ndim = 2
         else:
             raise BaseException("n: expected int or tuple of length 1 or 2")
@@ -236,14 +235,14 @@ class AdvectionSolver(Integrator):
 
         # maximum expected advection velocities
         if self.ndim == 1:  # uniform 1d velocity
-            if isinstance(v, int):
+            if isinstance(v, Union[int, float]):
                 vx_max, vy_max = abs(v), 0
             else:
                 raise BaseException("Expected scalar velocity for 1-dimensional domain")
         if self.ndim == 2:
             if isinstance(v, int):
                 raise BaseException("Expected vector velocity for 2-dimensional domain")
-            elif isinstance(v, tuple):  # uniform 2d velocity
+            elif isinstance(v, Union[tuple, list]):  # uniform 2d velocity
                 if len(v) == 1:
                     vx_max, vy_max = abs(v[0]), abs(v[0])
                 elif len(v) == 2:
@@ -264,7 +263,7 @@ class AdvectionSolver(Integrator):
         if v_over_h == 0:
             print("0 velocity case: setting v / h to 0.1")
             v_over_h = 0.1
-        self.courant = courant
+        self.courant = mpp_cfl(order) if courant == "mpp" else courant
         self.highest = adjust_stepsize
         if adjust_stepsize is not None:
             available = np.array([1, 2, 3, 4, 6])
@@ -484,7 +483,7 @@ class AdvectionSolver(Integrator):
             NS_midpoint_x, NS_midpoint_y = np.meshgrid(self.x, self.y_interface)
             # evaluate v components normal to cell interfaces
             xx_center, yy_center = np.meshgrid(self.x, self.y)
-            if isinstance(v, tuple):
+            if isinstance(v, Union[tuple, list]):
                 vx = v[0]
                 self.a = vx * np.ones_like(EW_interface_y)
                 self.a_midpoint = vx * np.ones_like(EW_midpoint_x)
@@ -519,7 +518,7 @@ class AdvectionSolver(Integrator):
                     quadrature=leg_points,
                     axis=1,
                 )
-                if isinstance(v, tuple):
+                if isinstance(v, Union[tuple, list]):
                     self.a = vx * np.ones_like(EW_interface_x)
                     self.b = vy * np.ones_like(NS_interface_x)
                 elif callable(v):
@@ -1100,7 +1099,7 @@ class AdvectionSolver(Integrator):
         print("{:>14}{:14.5e}{:14.5e}{:>14}".format(*lower_values))
         print("{:>14}{:14.5e}{:14.5e}{:14.5e}\n".format(*total_values))
 
-    def compute_mpp_violations(self) -> Tuple[np.ndarray, Dict]:
+    def compute_mpp_violations(self) -> Tuple[np.ndarray, dict]:
         mins = np.array(self.min_history)
         maxs = np.array(self.max_history)
         lower_bound_violations = mins - self.PAD[0]

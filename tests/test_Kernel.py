@@ -1,5 +1,5 @@
-import pytest  # run > pytest -s -q -rA
 import numpy as np
+import pytest
 from finite_volume.fvscheme import Kernel
 
 n_tests = 5

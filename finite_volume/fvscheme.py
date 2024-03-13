@@ -3,9 +3,9 @@ defines classes for computing interpolation polynomials as stencils
 """
 
 from abc import abstractmethod
+import csv
 import dataclasses
 import numpy as np
-import csv
 import os.path
 from finite_volume.mathematiques import lcm, Fraction, LinearCombination, Polynome
 

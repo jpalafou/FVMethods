@@ -1,6 +1,5 @@
-# test Polynome class, which also tests the LinearCombination class
 import pytest
-from random import sample, randint, random
+from random import randint, random, sample
 from finite_volume.mathematiques import Polynome
 
 

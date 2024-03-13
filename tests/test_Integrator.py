@@ -1,6 +1,6 @@
-import pytest
-import numpy as np
 import math
+import numpy as np
+import pytest
 import random
 from finite_volume.integrate import Integrator
 

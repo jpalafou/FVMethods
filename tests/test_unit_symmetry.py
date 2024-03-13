@@ -1,18 +1,18 @@
-import pytest
 import numpy as np
-from finite_volume.utils import convolve_batch2d
+import pytest
 from finite_volume.a_priori import mpp_limiter
-from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
 from finite_volume.a_posteriori import (
-    find_trouble,
-    minmod,
-    moncen,
+    broadcast_troubled_cells_to_faces_2d,
+    broadcast_troubled_cells_to_faces_with_blending_2d,
     compute_MUSCL_interpolations_1d,
     compute_MUSCL_interpolations_2d,
     compute_PP2D_interpolations,
-    broadcast_troubled_cells_to_faces_2d,
-    broadcast_troubled_cells_to_faces_with_blending_2d,
+    find_trouble,
+    minmod,
+    moncen,
 )
+from finite_volume.sed import compute_alpha_1d, compute_alpha_2d
+from finite_volume.utils import convolve_batch2d
 
 
 def equivariant(

@@ -7,6 +7,30 @@ from typing import Tuple
 from finite_volume.utils import f_of_3_neighbors, f_of_5_neighbors, np_floor
 
 
+def mpp_cfl(order: int):
+    """
+    args:
+        order:  order of accuracy
+    returns:
+        cfl:    CFL factor that is maximum-principle-preserving in the Zhang and Shu
+                scheme
+    """
+    mpp_cfl_dict = {
+        1: 0.5,
+        2: 0.5,
+        3: 0.166,
+        4: 0.166,
+        5: 0.0833,
+        6: 0.0833,
+        7: 0.05,
+        8: 0.05,
+    }
+    cfl = mpp_cfl_dict.get(order, np.nan)
+    if cfl == np.nan:
+        raise NotImplementedError(f"Order {order} MPP CFL factor")
+    return cfl
+
+
 def mpp_limiter(
     u: np.ndarray, points: np.ndarray, zeros: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:

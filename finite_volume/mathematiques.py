@@ -2,8 +2,8 @@
 verbose module which defines various useful functions and classes
 """
 
-import numpy as np
 import dataclasses
+import numpy as np
 
 
 def gauss_lobatto(n: int):

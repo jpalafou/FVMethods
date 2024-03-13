@@ -2,12 +2,12 @@
 defines the Integrator class, used for forward-stepping schemes
 """
 
-import dataclasses
-import numpy as np
 import abc
-from tqdm import tqdm
-import time
+import dataclasses
 import inspect
+import numpy as np
+import time
+from tqdm import tqdm
 
 
 @dataclasses.dataclass

@@ -1,12 +1,11 @@
-import pytest
 import os
+import pytest
 from finite_volume.advection import AdvectionSolver
 
 test_directory = "data/test_solutions/"
 
 n_list = [16, 32, 64]
 order_list = [1, 2, 3, 4, 5]
-C_for_mpp = {1: 0.5, 2: 0.5, 3: 0.166, 4: 0.166, 5: 0.0833, 6: 0.0833, 7: 0.05, 8: 0.05}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -155,7 +154,7 @@ def test_a_priori_mpp_1d(limiter_config, adaptive_stepsize, mpp_tolerance, order
         v=1,
         snapshot_dt=1,
         num_snapshots=1,
-        courant=C_for_mpp[order] if not adaptive_stepsize else 0.8,
+        courant="mpp" if not adaptive_stepsize else 0.8,
         adaptive_stepsize=adaptive_stepsize,
         mpp_tolerance=mpp_tolerance,
         **limiter_config,
