@@ -127,7 +127,11 @@ class Integrator:
         overwrites:
             t, u
         """
-        solving_time = self.num_snapshots * self.snapshot_dt  # not to be used in loop
+        # save integrator name
+        self.integrator_name = method_name
+
+        # solving time used for printing and filename (not to be used in loop)
+        solving_time = self.num_snapshots * self.snapshot_dt
 
         # check whether to procede to numerical integration
         if not self.pre_integrate(method_name=f"{method_name}_{solving_time}"):

@@ -7,6 +7,7 @@ where u are cell volume averages and f and g are fluxes in x and y, respectively
 """
 
 import numpy as np
+import logging
 import os
 import pickle
 from typing import Tuple
@@ -1033,23 +1034,30 @@ class AdvectionSolver(Integrator):
         return dt / 2
 
     def pre_integrate(self, method_name):
+        """
+        Attempt to load solution from self.filepath. If self.filepath does not exist
+        or loading results in any error, compute a fresh solution.
+        """
         # find filepath where solution is/will be stored
         self._filename = self._filename + "_" + method_name + ".pkl"
         self.filepath = self._save_directory + self._filename
         # load the solution if it already exists
         if os.path.isfile(self.filepath) and self.load:
-            with open(self.filepath, "rb") as thisfile:
-                loaded_instance = pickle.load(thisfile)
-                attribute_names = [
-                    attr
-                    for attr in dir(loaded_instance)
-                    if not callable(getattr(loaded_instance, attr))
-                    and not attr.startswith("_")
-                ]
-                for attribute in attribute_names:
-                    value = getattr(loaded_instance, attribute)
-                    setattr(self, attribute, value)
-            return False
+            try:
+                with open(self.filepath, "rb") as thisfile:
+                    loaded_instance = pickle.load(thisfile)
+                    attribute_names = [
+                        attr
+                        for attr in dir(loaded_instance)
+                        if not callable(getattr(loaded_instance, attr))
+                        and not attr.startswith("_")
+                    ]
+                    for attribute in attribute_names:
+                        value = getattr(loaded_instance, attribute)
+                        setattr(self, attribute, value)
+                return False
+            except Exception as e:
+                logging.warning(f"Failed to load {self.filepath}: {e}")
         # otherwise proceed to integration
         try:
             os.makedirs(self._save_directory)
