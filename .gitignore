@@ -1,6 +1,7 @@
 # directories
 bin/
 **/data/
+**/images/
 
 # Distribution / packaging
 develop-eggs/
