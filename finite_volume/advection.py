@@ -6,8 +6,9 @@ du/dt + df/dx + dg/dy = 0   (2D)
 where u are cell volume averages and f and g are fluxes in x and y, respectively
 """
 
-import numpy as np
 import logging
+import matplotlib as mpl
+import numpy as np
 import os
 import pickle
 from typing import Tuple
@@ -339,10 +340,12 @@ class AdvectionSolver(Integrator):
                 raise BaseException(f"Invalid const: must have keys {variables}")
         if bc == "periodic":
             self.bc_config = {var: dict(mode="wrap") for var in variables}
-        if bc == "dirichlet":
+        elif bc == "dirichlet":
             self.bc_config = {
                 var: dict(constant_values=const[var]) for var in variables
             }
+        else:
+            ValueError(f"Invalid bc '{bc}'")
 
         # initialize slope limiting in general
         self.cause_trouble = cause_trouble
@@ -360,12 +363,12 @@ class AdvectionSolver(Integrator):
             self.fallback_limiter = moncen
         elif fallback_limiter == "PP2D":
             if self.ndim != 2:
-                raise BaseException("PP2D limiting is not defined for a 1D solver.")
+                raise TypeError("PP2D limiting is not defined for a 1D solver.")
             if fallback_to_1st_order:
-                raise BaseException("PP2D does not fall back to first order.")
+                raise TypeError("PP2D does not fall back to first order.")
             self.fallback_limiter = compute_PP2D_interpolations
         else:
-            raise BaseException("Invalid slope limiter")
+            raise ValueError("Invalid slope limiter")
         self.convex = convex
         self.hancock = hancock
         self.fallback_to_1st_order = fallback_to_1st_order
@@ -373,7 +376,7 @@ class AdvectionSolver(Integrator):
         # SED, NAD, PAD
         self.SED = SED
         self.NAD = np.inf if NAD is None else NAD
-        self.PAD = (-np.inf, np.inf) if PAD is None else PAD
+        self.PAD = (-np.inf, np.inf) if PAD is None else tuple(sorted(PAD))
         self.mpp_tolerance = 0.0 if mpp_tolerance is None else mpp_tolerance
         self.approximated_maximum_principle = (
             self.PAD[0] - self.mpp_tolerance,
@@ -381,7 +384,11 @@ class AdvectionSolver(Integrator):
         )
 
         # flux reconstruction
-        self.flux_strategy = flux_strategy if self.ndim > 1 else "gauss-legendre"
+        if flux_strategy not in {"gauss-legendre", "transverse"}:
+            raise ValueError(f"Invalid flux strategy '{flux_strategy}'")
+        if flux_strategy == "transverse" and self.ndim == 1:
+            raise TypeError("Transverse flux is not defined for a 1D solver")
+        self.flux_strategy = flux_strategy
         cons_left = ConservativeInterpolation.construct_from_order(
             self.p + 1, "left"
         ).nparray()
@@ -1254,3 +1261,65 @@ class AdvectionSolver(Integrator):
         limits = (self.x[0], self.x[-1], self.y[0], self.y[-1])
         zdata = np.flipud(zdata)
         return ax.imshow(zdata, extent=limits, **kwargs, vmin=vmin, vmax=vmax)
+
+    def plot_cubes(
+        self,
+        ax,
+        i: int = -1,
+        xlims: tuple = None,
+        ylims: tuple = None,
+        edgecolor: str = "black",
+        linewidth: float = 0.05,
+        azdeg: float = 45,
+        altdeg: float = 45,
+        raise_floor: bool = False,
+        zoom: float = 0.8,
+        **kwargs,
+    ):
+        """
+        args:
+            ax:             Axes instance from matplotlib
+            i:              snapshot index
+            xlims:          (lower, upper) constrains x-direction of plotting region
+            ylims:          (lower, upper) constrains y-direction of plotting region
+            edgecolor:      color of the edge of each cube
+            linewidth:      width of edges
+            azdeg:          the azimuth (0-360, degrees clockwise from +y-axis) of the
+                            light source
+            altdeg:         the altitude (0-90, degrees up from the x-y plane) of the
+                            light source
+            raise_floor:    avoid undershoots of the 3d projection floor
+            zoom:           zoom-out factor (choose 1 for no zoom-out)
+            kwargs:         ax.bar3d(**kwargs)
+        returns:
+            see matplotlib.pyplot.imshow()
+        """
+        if self.ndim == 1:
+            raise TypeError("Cannot generate cube plot for 1D solution")
+
+        # set up x and y
+        X, Y = np.meshgrid(self.x, self.y)
+        xlims = (-np.inf, np.inf) if xlims is None else xlims
+        ylims = (-np.inf, np.inf) if ylims is None else ylims
+        idxs = ((X >= xlims[0]) & (X <= xlims[1])) & ((Y >= ylims[0]) & (Y <= ylims[1]))
+        X, Y = X[idxs], Y[idxs]
+
+        # set up z
+        Z = self.snapshots[i]["u"][idxs]
+        floor = np.min(Z)
+
+        # set up lightsource and plot
+        lightsource = mpl.colors.LightSource(azdeg=azdeg, altdeg=altdeg)
+        ax.bar3d(
+            x=X,
+            y=Y,
+            z=floor if raise_floor else 0,
+            dx=self.hx,
+            dy=self.hy,
+            dz=Z - floor if raise_floor else Z,
+            lightsource=lightsource,
+            edgecolor=edgecolor,
+            linewidth=linewidth,
+            **kwargs,
+        )
+        ax.set_box_aspect(aspect=None, zoom=zoom)
