@@ -2,43 +2,24 @@ from itertools import product
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from configs import problem_configs, solver_config
+from configs import limiting_schemes_2d, problem_configs, solver_config
 from finite_volume.advection import AdvectionSolver
 
-limiter_configs = [
-    (
-        "GL apriori with SED",
-        dict(
-            courant=0.8,
-            flux_strategy="gauss-legendre",
-            apriori_limiting=True,
-            SED=True,
-        ),
-    ),
-    (
-        "transverse apriori with SED",
-        dict(
-            courant=0.8,
-            flux_strategy="transverse",
-            apriori_limiting=True,
-            SED=True,
-        ),
-    ),
-]
+limiting_schemes = limiting_schemes_2d
+
 
 data = []
-for n, p, (limiter_config_name, limiter_config) in product(
-    [32, 64, 128, 256, 512], range(8), limiter_configs
+for n, p, lckey in product(
+    [32, 64, 128, 256, 512], range(8), ["ZS2D-convergence", "ZS2D-T-convergence"]
 ):
     solver = AdvectionSolver(
         n=(n,),
         order=p + 1,
         cupy=256,
-        adjust_stepsize=6,
         snapshot_dt=1.0,
         num_snapshots=1,
         **problem_configs["sinus2d"],
-        **limiter_config,
+        **limiting_schemes[lckey],
         **solver_config,
     )
     solver.rkorder(rk6=True)
@@ -48,18 +29,26 @@ for n, p, (limiter_config_name, limiter_config) in product(
     l1 = np.mean(np.abs(err))
     l2 = np.mean(np.square(err))
     data.append(
-        dict(n=n, p=p, limiter_config=limiter_config_name, l1_err=l1, l2_err=l2)
+        dict(
+            n=n,
+            p=p,
+            scheme=lckey,
+            integrator=solver.integrator_name,
+            l1_err=l1,
+            l2_err=l2,
+            cupy=solver.cupy,
+        )
     )
     df = pd.DataFrame(data)
 
     # plotting
-    lc_grouped = df.groupby("limiter_config")
-    for lc_name, lc_group in lc_grouped:
+    scheme_grouped = df.groupby("scheme")
+    for scheme_name, scheme_group in scheme_grouped:
         fig, ax = plt.subplots()
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
 
-        p_grouped = lc_group.groupby("p")
+        p_grouped = scheme_group.groupby("p")
         for p_name, p_group in p_grouped:
             ax.plot(
                 p_group["n"],
@@ -73,4 +62,4 @@ for n, p, (limiter_config_name, limiter_config) in product(
         ax.legend()
         ax.set_xlabel("$n$")
         ax.set_ylabel(r"$\epsilon$")
-        plt.savefig(f"experiments/images/convergence_lc_{lc_name}.png", dpi=300)
+        plt.savefig(f"experiments/images/convergence_{scheme_name}.png", dpi=300)

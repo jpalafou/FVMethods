@@ -42,6 +42,114 @@ problem_configs = {
 }
 
 """
+Named schemes
+"""
+
+limiting_schemes_1d = {
+    "ZS": dict(apriori_limiting=True, courant="mpp", SED=True),
+    "ZS-M": dict(
+        apriori_limiting=True,
+        mpp_lite=True,
+        courant=0.8,
+        adaptive_stepsize=True,
+        SED=True,
+    ),
+    "MUSCL-Hancock": dict(
+        cause_trouble=True,
+        aposteriori_limiting=True,
+        courant=0.8,
+        hancock=True,
+        fallback_limiter="minmod",
+    ),
+    "FM-mon": dict(
+        aposteriori_limiting=True, courant=0.8, fallback_limiter="moncen", SED=True
+    ),
+    "FM-min-CB": dict(
+        aposteriori_limiting=True,
+        courant=0.8,
+        fallback_limiter="minmod",
+        convex=True,
+        SED=True,
+    ),
+}
+
+limiting_schemes_2d = {
+    "ZS2D": dict(
+        flux_strategy="gauss-legendre", apriori_limiting=True, courant="mpp", SED=True
+    ),
+    "ZS2D-T": dict(
+        flux_strategy="transverse",
+        apriori_limiting=True,
+        mpp_lite=True,
+        courant="mpp",
+        SED=True,
+    ),
+    "ZS2D-M": dict(
+        flux_strategy="gauss-legendre",
+        apriori_limiting=True,
+        mpp_lite=True,
+        courant=0.8,
+        adaptive_stepsize=True,
+        SED=True,
+    ),
+    "ZS2D-M-Fdt": dict(
+        flux_strategy="gauss-legendre",
+        apriori_limiting=True,
+        mpp_lite=True,
+        courant=0.8,
+        SED=True,
+    ),
+    "ZS2D-convergence": dict(
+        flux_strategy="gauss-legendre",
+        apriori_limiting=True,
+        courant=0.8,
+        adjust_stepsize=6,
+        SED=True,
+    ),
+    "ZS2D-T-convergence": dict(
+        flux_strategy="transverse",
+        apriori_limiting=True,
+        mpp_lite=True,
+        courant=0.8,
+        adjust_stepsize=6,
+        SED=True,
+    ),
+    "MUSCL-Hancock": dict(
+        cause_trouble=True,
+        aposteriori_limiting=True,
+        courant=0.8,
+        hancock=True,
+        fallback_limiter="PP2D",
+    ),
+    "FMH2D-min-CB": dict(
+        flux_strategy="gauss-legendre",
+        aposteriori_limiting=True,
+        hancock=True,
+        fallback_limiter="minmod",
+        convex=True,
+        courant=0.8,
+        SED=True,
+    ),
+    "FMH2D-min-CB-T": dict(
+        flux_strategy="transverse",
+        aposteriori_limiting=True,
+        hancock=True,
+        fallback_limiter="minmod",
+        convex=True,
+        courant=0.8,
+        SED=True,
+    ),
+    "FM2D-PP-T": dict(
+        flux_strategy="transverse",
+        aposteriori_limiting=True,
+        fallback_limiter="PP2D",
+        courant=0.8,
+        SED=True,
+    ),
+}
+
+
+"""
 solving up to 1 or 100 periods
 """
 
