@@ -10,14 +10,13 @@ limiting_schemes = limiting_schemes_2d
 
 data = []
 for n, p, lckey in product(
-    [32, 64, 128, 256, 512], range(8), ["ZS2D-convergence", "ZS2D-T-convergence"]
+    [32, 64, 128, 256, 512], range(8), ["aPrioriFixedDt", "aPrioriT"]
 ):
     solver = AdvectionSolver(
         n=(n,),
         order=p + 1,
         cupy=256,
-        snapshot_dt=1.0,
-        num_snapshots=1,
+        adjust_stepsize=6,
         **problem_configs["sinus2d"],
         **limiting_schemes[lckey],
         **solver_config,

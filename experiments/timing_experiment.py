@@ -18,7 +18,7 @@ gpu = args.gpu
 
 data = []
 
-for n, p, lckey in product(N, range(8), ["ZS2D-M-Fdt", "FM2D-PP-T"]):
+for n, p, lckey in product(N, range(8), ["aPrioriFixedDt", "aPosterioriB"]):
     solver = AdvectionSolver(
         n=(n,),
         order=p + 1,
@@ -26,7 +26,7 @@ for n, p, lckey in product(N, range(8), ["ZS2D-M-Fdt", "FM2D-PP-T"]):
         snapshot_dt=1.0,
         num_snapshots=1,
         **limiting_schemes[lckey],
-        **problem_configs["sinus2d"],
+        **problem_configs["square2d"],
         **timing_solver_config,
         load=True,
     )
